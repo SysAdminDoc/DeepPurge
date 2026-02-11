@@ -1,0 +1,15 @@
+<Application x:Class="DeepPurge.App.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             StartupUri="Views/MainWindow.xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- Index 0: Color theme (swapped at runtime by ThemeManager) -->
+                <ResourceDictionary Source="/Themes/Colors/Arctic.xaml"/>
+                <!-- Index 1: Base control styles (uses DynamicResource to follow colors) -->
+                <ResourceDictionary Source="/Themes/BaseStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>
