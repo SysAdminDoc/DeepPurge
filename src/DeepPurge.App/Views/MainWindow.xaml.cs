@@ -95,7 +95,7 @@ public partial class MainWindow : Window
         dgServices, dgTasks, dgRestore, panelLeftovers
     };
 
-    private async void NavButton_Checked(object sender, RoutedEventArgs e)
+    private void NavButton_Checked(object sender, RoutedEventArgs e)
     {
         if (sender is not RadioButton rb || dgPrograms == null) return;
         var tag = rb.Tag as string ?? "";
@@ -321,7 +321,7 @@ public partial class MainWindow : Window
         _vm.IsBusy = true;
         try
         {
-            var removed = await Task.Run(() => DeepPurge.Core.Privacy.EvidenceRemover.CleanCategories(selected));
+            var removed = await Task.Run(() => DeepPurge.Core.Privacy.EvidenceRemover.CleanTraces(selected));
             ShowToast($"Cleaned {removed} evidence traces");
             await _vm.ScanEvidenceAsync();
         }
@@ -329,7 +329,7 @@ public partial class MainWindow : Window
     }
 
     private async void ScanEmptyFolders_Click(object sender, RoutedEventArgs e) => await _vm.ScanEmptyFoldersAsync();
-    private async void DeleteEmptyFolders_Click(object sender, RoutedEventArgs e)
+    private void DeleteEmptyFolders_Click(object sender, RoutedEventArgs e)
     {
         var selected = _vm.EmptyFolders.Where(f => f.IsSelected).ToList();
         if (!selected.Any()) { _vm.StatusText = "Nothing selected"; return; }
@@ -344,7 +344,7 @@ public partial class MainWindow : Window
     }
 
     private async void ScanDisk_Click(object sender, RoutedEventArgs e) => await _vm.ScanDiskAsync();
-    private async void DeleteLargeFiles_Click(object sender, RoutedEventArgs e)
+    private void DeleteLargeFiles_Click(object sender, RoutedEventArgs e)
     {
         var selected = _vm.LargeFiles.Where(f => f.IsSelected).ToList();
         if (!selected.Any()) { _vm.StatusText = "Nothing selected"; return; }
