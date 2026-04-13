@@ -1,5 +1,7 @@
 # DeepPurge v0.3.0
 
+![Version](https://img.shields.io/badge/version-v0.3.0-blue) ![License](https://img.shields.io/badge/license-MIT-green) ![Platform](https://img.shields.io/badge/platform-C%23-lightgrey)
+
 A thorough, open-source Windows uninstaller that goes deep. Removes programs completely, hunts down every leftover, and cleans system cruft that other tools miss.
 
 ## Features
