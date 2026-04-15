@@ -7,3 +7,4 @@ obj/
 *.bak
 packages/
 *.nupkg
+CLAUDE.md
