@@ -1,31 +1,30 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Text;
 using global::Microsoft.Win32;
+using DeepPurge.Core.FileSystem;
 using DeepPurge.Core.Models;
 using DeepPurge.Core.Registry;
-using DeepPurge.Core.FileSystem;
 using DeepPurge.Core.Safety;
 
 namespace DeepPurge.Core.Uninstall;
 
+/// <summary>
+/// Orchestrates the full uninstall flow: pre-op backup → vendor uninstaller →
+/// registry leftover scan → file leftover scan → selective deletion.
+/// </summary>
 public class UninstallEngine
 {
     public event Action<string>? StatusChanged;
     public event Action<int>? ProgressChanged;
 
-    private readonly RegistryLeftoverScanner _registryScanner;
-    private readonly FileLeftoverScanner _fileScanner;
-    private readonly BackupManager _backupManager;
+    private readonly RegistryLeftoverScanner _registryScanner = new();
+    private readonly FileLeftoverScanner _fileScanner = new();
+    private readonly BackupManager _backupManager = new();
 
-    public UninstallEngine()
-    {
-        _registryScanner = new RegistryLeftoverScanner();
-        _fileScanner = new FileLeftoverScanner();
-        _backupManager = new BackupManager();
-    }
+    private static readonly HashSet<int> UninstallerSuccessCodes = new() { 0, 1641, 3010 };
+    private static readonly TimeSpan UninstallerTimeout = TimeSpan.FromMinutes(10);
 
-    /// <summary>
-    /// Runs the full 4-step uninstall pipeline
-    /// </summary>
     public async Task<UninstallResult> UninstallAsync(InstalledProgram program, ScanMode scanMode,
         bool createRestorePoint = true, bool runBuiltInUninstaller = true, bool silent = false,
         CancellationToken ct = default)
@@ -35,7 +34,6 @@ public class UninstallEngine
 
         try
         {
-            // Step 1: Create safety backups
             StatusChanged?.Invoke("Creating safety backups...");
             ProgressChanged?.Invoke(5);
 
@@ -48,24 +46,25 @@ public class UninstallEngine
             _backupManager.BackupRegistryKey(program.RegistryPath);
             ProgressChanged?.Invoke(15);
 
-            // Step 2: Run built-in uninstaller
             if (runBuiltInUninstaller && program.HasUninstaller)
             {
                 StatusChanged?.Invoke($"Running {program.DisplayName} uninstaller...");
                 ProgressChanged?.Invoke(20);
 
+                // Prefer the curated silent-switch DB over the raw scanner
+                // heuristic — it handles more installer families correctly.
                 var uninstallCmd = silent
-                    ? InstalledProgramScanner.GetSilentUninstallCommand(program)
+                    ? SilentSwitchDatabase.ResolveSilentCommand(program)
                     : program.UninstallString;
 
-                if (string.IsNullOrEmpty(uninstallCmd))
+                if (string.IsNullOrWhiteSpace(uninstallCmd))
                     uninstallCmd = program.UninstallString;
 
                 var (exitCode, output, error) = await RunUninstallerAsync(uninstallCmd, ct);
                 result.ExitCode = exitCode;
                 result.Output = output;
                 result.ErrorOutput = error;
-                result.Success = exitCode == 0 || exitCode == 1641 || exitCode == 3010; // 1641/3010 = reboot required
+                result.Success = UninstallerSuccessCodes.Contains(exitCode);
             }
             else
             {
@@ -74,7 +73,6 @@ public class UninstallEngine
             }
             ProgressChanged?.Invoke(50);
 
-            // Step 3: Scan for leftovers
             StatusChanged?.Invoke("Scanning for leftover registry entries...");
             var registryLeftovers = await Task.Run(() => _registryScanner.ScanForLeftovers(program, scanMode), ct);
             ProgressChanged?.Invoke(70);
@@ -90,10 +88,11 @@ public class UninstallEngine
                 FileLeftovers = fileLeftovers,
                 ScanTime = DateTime.Now,
                 Mode = scanMode,
-                ScanDuration = sw.Elapsed
+                ScanDuration = sw.Elapsed,
             };
 
-            StatusChanged?.Invoke($"Scan complete: {registryLeftovers.Count} registry + {fileLeftovers.Count} file leftovers found");
+            StatusChanged?.Invoke(
+                $"Scan complete: {registryLeftovers.Count} registry + {fileLeftovers.Count} file leftovers found");
             ProgressChanged?.Invoke(100);
         }
         catch (OperationCanceledException)
@@ -111,9 +110,6 @@ public class UninstallEngine
         return result;
     }
 
-    /// <summary>
-    /// Performs a leftover-only scan without running the built-in uninstaller (Forced Uninstall)
-    /// </summary>
     public async Task<ScanResult> ForcedScanAsync(string programName, string? installFolder, ScanMode scanMode,
         CancellationToken ct = default)
     {
@@ -139,20 +135,65 @@ public class UninstallEngine
     }
 
     /// <summary>
-    /// Deletes selected leftover items with backup
+    /// Backwards-compatible overload with the simple tuple return.
+    /// New callers should prefer the richer
+    /// <see cref="DeleteLeftoversAsync(IEnumerable{LeftoverItem}, IEnumerable{LeftoverItem}, DeleteOptions, IProgress{DeleteProgress}?, CancellationToken)"/>.
     /// </summary>
     public async Task<(int regDeleted, int fileDeleted)> DeleteLeftoversAsync(
         IEnumerable<LeftoverItem> registryItems, IEnumerable<LeftoverItem> fileItems,
         bool moveFilesToRecycleBin = true, CancellationToken ct = default)
     {
+        var options = new DeleteOptions(
+            DryRun: false,
+            SecureDelete: false,
+            UseRecycleBin: moveFilesToRecycleBin);
+        var (_, reg, file) = await DeleteLeftoversAsync(registryItems, fileItems, options, progress: null, ct)
+            .ConfigureAwait(false);
+        return (reg, file);
+    }
+
+    /// <summary>
+    /// Full-featured leftover deletion with dry-run, secure-delete, and
+    /// progress reporting. Returns a summary plus the (reg, file) counts
+    /// for compatibility with existing VM code.
+    /// </summary>
+    public async Task<(DeleteSummary summary, int regDeleted, int fileDeleted)> DeleteLeftoversAsync(
+        IEnumerable<LeftoverItem> registryItems,
+        IEnumerable<LeftoverItem> fileItems,
+        DeleteOptions options,
+        IProgress<DeleteProgress>? progress = null,
+        CancellationToken ct = default)
+    {
+        var regList = registryItems.Where(IsDeletable).ToList();
+        var fileList = fileItems.Where(IsDeletable).ToList();
+        var total = regList.Count + fileList.Count;
+
         return await Task.Run(() =>
         {
-            int regDeleted = 0, fileDeleted = 0;
+            int regDeleted = 0, fileDeleted = 0, skipped = 0;
+            long freed = 0;
+            int index = 0;
 
-            // Delete registry leftovers (backup first)
-            foreach (var item in registryItems.Where(i => i.IsSelected && i.Confidence != LeftoverConfidence.Risky))
+            foreach (var item in regList)
             {
                 ct.ThrowIfCancellationRequested();
+                index++;
+
+                if (!SafetyGuard.IsRegistryPathSafeToDelete(item.Path))
+                {
+                    StatusChanged?.Invoke($"Blocked by SafetyGuard (registry): {item.Path}");
+                    skipped++;
+                    progress?.Report(new DeleteProgress(index, total, freed, item.Path, Skipped: true));
+                    continue;
+                }
+
+                if (options.DryRun)
+                {
+                    regDeleted++;
+                    progress?.Report(new DeleteProgress(index, total, freed, item.Path, Skipped: false));
+                    continue;
+                }
+
                 try
                 {
                     _backupManager.BackupRegistryKey(item.Path);
@@ -161,146 +202,286 @@ public class UninstallEngine
                 }
                 catch (Exception ex)
                 {
+                    skipped++;
                     StatusChanged?.Invoke($"Failed to delete registry: {item.Path} - {ex.Message}");
                 }
+
+                progress?.Report(new DeleteProgress(index, total, freed, item.Path, Skipped: false));
             }
 
-            // Delete file leftovers
-            foreach (var item in fileItems.Where(i => i.IsSelected && i.Confidence != LeftoverConfidence.Risky))
+            foreach (var item in fileList)
             {
                 ct.ThrowIfCancellationRequested();
+                index++;
+
+                if (!SafetyGuard.IsPathSafeToDelete(item.Path))
+                {
+                    StatusChanged?.Invoke($"Blocked by SafetyGuard (file): {item.Path}");
+                    skipped++;
+                    progress?.Report(new DeleteProgress(index, total, freed, item.Path, Skipped: true));
+                    continue;
+                }
+
+                if (options.DryRun)
+                {
+                    fileDeleted++;
+                    freed += item.SizeBytes;
+                    progress?.Report(new DeleteProgress(index, total, freed, item.Path, Skipped: false));
+                    continue;
+                }
+
                 try
                 {
-                    if (moveFilesToRecycleBin)
-                        MoveToRecycleBin(item.Path, item.Type == LeftoverType.Folder);
+                    var isDir = item.Type == LeftoverType.Folder;
+                    if (options.SecureDelete)
+                    {
+                        if (isDir) SecureDelete.WipeDirectory(item.Path);
+                        else SecureDelete.Wipe(item.Path);
+                    }
+                    else if (options.UseRecycleBin)
+                    {
+                        MoveToRecycleBin(item.Path, isDir);
+                    }
                     else
+                    {
                         DeleteFileItem(item);
+                    }
+
                     fileDeleted++;
+                    freed += item.SizeBytes;
                 }
                 catch (Exception ex)
                 {
+                    skipped++;
                     StatusChanged?.Invoke($"Failed to delete: {item.Path} - {ex.Message}");
                 }
+
+                progress?.Report(new DeleteProgress(index, total, freed, item.Path, Skipped: false));
             }
 
-            StatusChanged?.Invoke($"Deleted {regDeleted} registry entries and {fileDeleted} files/folders");
-            return (regDeleted, fileDeleted);
-        }, ct);
+            var verb = options.DryRun ? "Would delete" : "Deleted";
+            StatusChanged?.Invoke($"{verb} {regDeleted} registry entries and {fileDeleted} files/folders");
+
+            return (
+                new DeleteSummary(regDeleted + fileDeleted, skipped, freed, options.DryRun),
+                regDeleted,
+                fileDeleted);
+        }, ct).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Sequentially uninstalls a batch of programs — the BCUninstaller bulk
+    /// queue pattern, simplified. Emits a <paramref name="progress"/> event
+    /// after each item and returns one UninstallResult per input.
+    /// Uses the silent-switch database so unattended bulk runs don't block
+    /// on GUI prompts.
+    /// </summary>
+    public async Task<List<UninstallResult>> UninstallBatchAsync(
+        IReadOnlyList<InstalledProgram> programs,
+        ScanMode scanMode,
+        bool createRestorePoint = true,
+        IProgress<DeleteProgress>? progress = null,
+        CancellationToken ct = default)
+    {
+        var results = new List<UninstallResult>(programs.Count);
+        bool firstRestorePoint = createRestorePoint;
+
+        for (int i = 0; i < programs.Count; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+            var program = programs[i];
+
+            StatusChanged?.Invoke($"[{i + 1}/{programs.Count}] Uninstalling {program.DisplayName}...");
+
+            // Create a single restore point at the start of the batch rather
+            // than one per program — otherwise Windows throttles SRSetRestorePoint.
+            var thisRunRestorePoint = firstRestorePoint;
+            firstRestorePoint = false;
+
+            // Always run silent in a batch; otherwise the user has to click
+            // through every installer.
+            var result = await UninstallAsync(
+                program,
+                scanMode,
+                createRestorePoint: thisRunRestorePoint,
+                runBuiltInUninstaller: true,
+                silent: true,
+                ct: ct).ConfigureAwait(false);
+
+            results.Add(result);
+            progress?.Report(new DeleteProgress(
+                i + 1,
+                programs.Count,
+                0,
+                program.DisplayName,
+                Skipped: !result.Success));
+        }
+
+        return results;
+    }
+
+    private static bool IsDeletable(LeftoverItem item)
+        => item.IsSelected && item.Confidence != LeftoverConfidence.Risky;
+
+    // ═══════════════════════════════════════════════════════
+    //  Uninstaller process orchestration
+    // ═══════════════════════════════════════════════════════
 
     private async Task<(int exitCode, string output, string error)> RunUninstallerAsync(
         string uninstallCommand, CancellationToken ct)
     {
-        var (exe, args) = ParseCommand(uninstallCommand);
-
-        var psi = new ProcessStartInfo
-        {
-            FileName = exe,
-            Arguments = args,
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = false,
-        };
-
-        // MSI commands need special handling
-        if (exe.Contains("msiexec", StringComparison.OrdinalIgnoreCase))
-        {
-            psi.FileName = "msiexec.exe";
-            psi.Arguments = uninstallCommand.Replace("msiexec.exe", "").Replace("MsiExec.exe", "").Trim();
-        }
+        var psi = BuildUninstallerStartInfo(uninstallCommand);
 
         using var process = new Process { StartInfo = psi };
-        var output = new System.Text.StringBuilder();
-        var error = new System.Text.StringBuilder();
+        var output = new StringBuilder();
+        var error = new StringBuilder();
 
         process.OutputDataReceived += (_, e) => { if (e.Data != null) output.AppendLine(e.Data); };
         process.ErrorDataReceived += (_, e) => { if (e.Data != null) error.AppendLine(e.Data); };
 
-        process.Start();
-        process.BeginOutputReadLine();
-        process.BeginErrorReadLine();
+        try
+        {
+            process.Start();
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+        }
+        catch (Exception ex)
+        {
+            return (-1, output.ToString(), $"Failed to launch uninstaller: {ex.Message}");
+        }
 
-        // Wait up to 10 minutes for the uninstaller
-        var timeout = TimeSpan.FromMinutes(10);
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(timeout);
+        cts.CancelAfter(UninstallerTimeout);
 
-        try { await process.WaitForExitAsync(cts.Token); }
+        try
+        {
+            await process.WaitForExitAsync(cts.Token);
+        }
         catch (OperationCanceledException)
         {
-            try { process.Kill(true); } catch { }
+            try { process.Kill(entireProcessTree: true); } catch { /* process may have already exited */ }
             return (-1, output.ToString(), "Uninstaller timed out or was cancelled");
         }
 
         return (process.ExitCode, output.ToString(), error.ToString());
     }
 
-    private static (string exe, string args) ParseCommand(string command)
+    /// <summary>
+    /// Turn an arbitrary uninstall string into a concrete ProcessStartInfo.
+    /// Handles:
+    ///   - Quoted paths: `"C:\foo\unins.exe" /S`
+    ///   - MsiExec special-case (/I→/X rewrite happens in GetSilentUninstallCommand)
+    ///   - Unquoted paths with spaces: routed through `cmd /c` for shell parsing
+    /// The old implementation incorrectly returned the whole unquoted command as
+    /// the exe, which prevented launch for NSIS/InnoSetup uninstallers with spaces
+    /// in their install path.
+    /// </summary>
+    internal static ProcessStartInfo BuildUninstallerStartInfo(string uninstallCommand)
     {
-        command = command.Trim();
-        if (command.StartsWith('"'))
+        var trimmed = uninstallCommand.Trim();
+
+        // MSI special case — always route through msiexec.exe so we can trust the path.
+        if (trimmed.StartsWith("MsiExec", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Contains("msiexec.exe", StringComparison.OrdinalIgnoreCase))
         {
-            var end = command.IndexOf('"', 1);
-            if (end > 0)
-                return (command[1..end], command[(end + 1)..].Trim());
+            var args = System.Text.RegularExpressions.Regex.Replace(
+                trimmed, @"(?i)msiexec(\.exe)?\s*", "", System.Text.RegularExpressions.RegexOptions.None).Trim();
+            return new ProcessStartInfo
+            {
+                FileName = "msiexec.exe",
+                Arguments = args,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = false,
+            };
         }
 
-        var spaceIdx = command.IndexOf(' ');
-        if (spaceIdx > 0 && !command[..spaceIdx].Contains('\\'))
-            return (command, "");
+        // Quoted path: `"C:\foo\unins.exe" /S`
+        if (trimmed.StartsWith('"'))
+        {
+            var end = trimmed.IndexOf('"', 1);
+            if (end > 0)
+            {
+                var exe = trimmed[1..end];
+                var args = trimmed[(end + 1)..].Trim();
+                return new ProcessStartInfo
+                {
+                    FileName = exe,
+                    Arguments = args,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = false,
+                };
+            }
+        }
 
-        if (spaceIdx > 0)
-            return (command[..spaceIdx], command[(spaceIdx + 1)..].Trim());
+        // Unquoted. If it clearly has no args (single token), run directly.
+        if (!trimmed.Contains(' '))
+        {
+            return new ProcessStartInfo
+            {
+                FileName = trimmed,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = false,
+            };
+        }
 
-        return (command, "");
+        // Unquoted path with spaces — ambiguous (could be `C:\Program Files\...\exe /S`
+        // or `unins.exe /S` where the path has spaces). Let cmd.exe parse it.
+        // /c closes cmd after the command finishes; we quote the whole thing so
+        // internal quotes propagate correctly.
+        return new ProcessStartInfo
+        {
+            FileName = "cmd.exe",
+            Arguments = $"/c \"{trimmed}\"",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = false,
+        };
     }
 
-    private void DeleteRegistryItem(LeftoverItem item)
+    // ═══════════════════════════════════════════════════════
+    //  Deletion primitives
+    // ═══════════════════════════════════════════════════════
+
+    private static void DeleteRegistryItem(LeftoverItem item)
     {
         var path = item.Path;
-        // Parse hive and subpath
-        RegistryKey? hive = null;
+        RegistryKey? hive;
         string subPath;
 
         if (path.StartsWith("HKLM\\", StringComparison.OrdinalIgnoreCase))
-        {
-            hive = global::Microsoft.Win32.Registry.LocalMachine;
-            subPath = path[5..];
-        }
+        { hive = global::Microsoft.Win32.Registry.LocalMachine; subPath = path[5..]; }
         else if (path.StartsWith("HKCU\\", StringComparison.OrdinalIgnoreCase))
-        {
-            hive = global::Microsoft.Win32.Registry.CurrentUser;
-            subPath = path[5..];
-        }
+        { hive = global::Microsoft.Win32.Registry.CurrentUser; subPath = path[5..]; }
         else if (path.StartsWith("HKCR\\", StringComparison.OrdinalIgnoreCase))
-        {
-            hive = global::Microsoft.Win32.Registry.ClassesRoot;
-            subPath = path[5..];
-        }
+        { hive = global::Microsoft.Win32.Registry.ClassesRoot; subPath = path[5..]; }
         else return;
 
         if (item.Type == LeftoverType.RegistryValue)
         {
-            // Delete a specific value
             var lastBackslash = subPath.LastIndexOf('\\');
             if (lastBackslash < 0) return;
             var keyPath = subPath[..lastBackslash];
             var valueName = subPath[(lastBackslash + 1)..];
-            using var key = hive.OpenSubKey(keyPath, true);
-            key?.DeleteValue(valueName, false);
+            using var key = hive.OpenSubKey(keyPath, writable: true);
+            key?.DeleteValue(valueName, throwOnMissingValue: false);
         }
         else
         {
-            // Delete entire key tree
-            hive.DeleteSubKeyTree(subPath, false);
+            hive.DeleteSubKeyTree(subPath, throwOnMissingSubKey: false);
         }
     }
 
-    private void DeleteFileItem(LeftoverItem item)
+    private static void DeleteFileItem(LeftoverItem item)
     {
         if (item.Type == LeftoverType.Folder && Directory.Exists(item.Path))
-            Directory.Delete(item.Path, true);
+            Directory.Delete(item.Path, recursive: true);
         else if (File.Exists(item.Path))
             File.Delete(item.Path);
     }
@@ -314,20 +495,17 @@ public class UninstallEngine
                 wFunc = NativeMethods.FO_DELETE,
                 pFrom = path + '\0' + '\0',
                 fFlags = NativeMethods.FOF_ALLOWUNDO | NativeMethods.FOF_NOCONFIRMATION |
-                         NativeMethods.FOF_NOERRORUI | NativeMethods.FOF_SILENT
+                         NativeMethods.FOF_NOERRORUI | NativeMethods.FOF_SILENT,
             };
-            int result = NativeMethods.SHFileOperation(ref fileOp);
-            if (result == 0) return;
+            if (NativeMethods.SHFileOperation(ref fileOp) == 0) return;
         }
-        catch { }
+        catch { /* fall through */ }
 
-        // Fallback to permanent delete
+        // Fallback to permanent delete.
         try
         {
-            if (isDirectory && Directory.Exists(path))
-                Directory.Delete(path, true);
-            else if (File.Exists(path))
-                File.Delete(path);
+            if (isDirectory && Directory.Exists(path)) Directory.Delete(path, recursive: true);
+            else if (File.Exists(path)) File.Delete(path);
         }
         catch (Exception ex)
         {
@@ -344,23 +522,19 @@ internal static class NativeMethods
     public const ushort FOF_NOERRORUI = 0x0400;
     public const ushort FOF_SILENT = 0x0004;
 
-    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     public struct SHFILEOPSTRUCT
     {
         public IntPtr hwnd;
         public int wFunc;
-        [System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.LPWStr)]
-        public string pFrom;
-        [System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.LPWStr)]
-        public string? pTo;
+        [MarshalAs(UnmanagedType.LPWStr)] public string pFrom;
+        [MarshalAs(UnmanagedType.LPWStr)] public string? pTo;
         public ushort fFlags;
-        [System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
-        public bool fAnyOperationsAborted;
+        [MarshalAs(UnmanagedType.Bool)] public bool fAnyOperationsAborted;
         public IntPtr hNameMappings;
-        [System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.LPWStr)]
-        public string? lpszProgressTitle;
+        [MarshalAs(UnmanagedType.LPWStr)] public string? lpszProgressTitle;
     }
 
-    [System.Runtime.InteropServices.DllImport("shell32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     public static extern int SHFileOperation(ref SHFILEOPSTRUCT FileOp);
 }

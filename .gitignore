@@ -5,6 +5,8 @@ obj/
 *.suo
 *.cache
 *.bak
-packages/
+/packages/
 *.nupkg
 CLAUDE.md
+build/
+

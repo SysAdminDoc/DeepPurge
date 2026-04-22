@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    DeepPurge Build Script v0.6.0
+    DeepPurge Build Script v0.8.0
     Compiles the project into a single portable .exe
 
 .DESCRIPTION
@@ -29,7 +29,7 @@ $AppProject = Join-Path $ProjectRoot "src\DeepPurge.App\DeepPurge.App.csproj"
 
 Write-Host ""
 Write-Host "  ============================================" -ForegroundColor Cyan
-Write-Host "    DeepPurge Build Script v0.6.0" -ForegroundColor Cyan
+Write-Host "    DeepPurge Build Script v0.8.0" -ForegroundColor Cyan
 Write-Host "  ============================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -55,7 +55,7 @@ function Find-DotNet {
     return $null
 }
 
-function Ensure-DotNetSDK {
+function Confirm-DotNetSDK {
     $dotnetPath = Find-DotNet
     if ($dotnetPath) {
         try {
@@ -103,7 +103,7 @@ function Ensure-DotNetSDK {
 }
 
 $script:DotNetExe = "dotnet"
-Ensure-DotNetSDK
+Confirm-DotNetSDK
 
 # Ensure DOTNET_ROOT is set for the SDK to find its runtime packs
 $dotnetDir = Split-Path $script:DotNetExe -Parent
@@ -144,7 +144,7 @@ if (-not $SkipClean) {
 
     # Also run dotnet clean to clear MSBuild caches
     try {
-        $cleanOutput = & $script:DotNetExe clean $SolutionFile --nologo 2>&1 | Out-String
+        & $script:DotNetExe clean $SolutionFile --nologo 2>&1 | Out-Null
     } catch { }
     Write-Host "  [OK] Clean complete" -ForegroundColor Green
 }

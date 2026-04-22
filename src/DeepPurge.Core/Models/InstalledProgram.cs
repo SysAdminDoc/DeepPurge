@@ -25,6 +25,14 @@ public class InstalledProgram : INotifyPropertyChanged
     public string ParentKeyName { get; set; } = string.Empty;
     public RegistrySource Source { get; set; }
 
+    /// <summary>
+    /// Non-empty when a package manager (winget, scoop, chocolatey) also
+    /// tracks this program. Populated by <c>PackageManagerScanner.EnrichAsync</c>.
+    /// </summary>
+    public string PackageManager { get; set; } = string.Empty;
+    public string PackageId { get; set; } = string.Empty;
+    public string UpgradeAvailable { get; set; } = string.Empty;
+
     public ImageSource? Icon
     {
         get => _icon;
@@ -66,13 +74,24 @@ public class InstalledProgram : INotifyPropertyChanged
     public bool HasUninstaller => !string.IsNullOrEmpty(UninstallString);
     public bool HasQuietUninstaller => !string.IsNullOrEmpty(QuietUninstallString);
 
-    public string SourceDisplay => Source switch
+    public string SourceDisplay
     {
-        RegistrySource.HKLM_Uninstall => "System",
-        RegistrySource.HKLM_WOW64_Uninstall => "32-bit",
-        RegistrySource.HKCU_Uninstall => "User",
-        _ => ""
-    };
+        get
+        {
+            if (!string.IsNullOrEmpty(PackageManager))
+                return !string.IsNullOrEmpty(UpgradeAvailable)
+                    ? $"{PackageManager} ↑"
+                    : PackageManager;
+
+            return Source switch
+            {
+                RegistrySource.HKLM_Uninstall => "System",
+                RegistrySource.HKLM_WOW64_Uninstall => "32-bit",
+                RegistrySource.HKCU_Uninstall => "User",
+                _ => "",
+            };
+        }
+    }
 
     public event PropertyChangedEventHandler? PropertyChanged;
     protected void OnPropertyChanged([CallerMemberName] string? name = null)
@@ -83,5 +102,5 @@ public enum RegistrySource
 {
     HKLM_Uninstall,
     HKLM_WOW64_Uninstall,
-    HKCU_Uninstall
+    HKCU_Uninstall,
 }

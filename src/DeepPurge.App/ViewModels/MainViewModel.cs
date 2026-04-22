@@ -1,21 +1,22 @@
 using System.Collections.ObjectModel;
-using System.Windows.Media;
+using System.Diagnostics;
+using System.Windows;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
-using DeepPurge.Core.Models;
-using DeepPurge.Core.Registry;
-using DeepPurge.Core.FileSystem;
-using DeepPurge.Core.Uninstall;
-using DeepPurge.Core.Startup;
 using DeepPurge.Core.Browsers;
-using DeepPurge.Core.Icons;
-using DeepPurge.Core.Privacy;
-using DeepPurge.Core.Shell;
-using DeepPurge.Core.Services;
-using DeepPurge.Core.Tasks;
-using DeepPurge.Core.Safety;
 using DeepPurge.Core.Export;
+using DeepPurge.Core.FileSystem;
+using DeepPurge.Core.Icons;
+using DeepPurge.Core.Models;
+using DeepPurge.Core.Packages;
+using DeepPurge.Core.Privacy;
+using DeepPurge.Core.Registry;
+using DeepPurge.Core.Safety;
+using DeepPurge.Core.Services;
+using DeepPurge.Core.Shell;
+using DeepPurge.Core.Startup;
+using DeepPurge.Core.Tasks;
+using DeepPurge.Core.Uninstall;
 
 namespace DeepPurge.App.ViewModels;
 
@@ -23,7 +24,12 @@ public partial class MainViewModel : ObservableObject
 {
     private readonly UninstallEngine _engine = new();
     private readonly Dispatcher _dispatcher;
+
+    /// <summary>Cancellation for long-running operations (initial scan, uninstall).</summary>
     private CancellationTokenSource? _cts;
+
+    /// <summary>Separate cancellation for the fire-and-forget icon backfill.</summary>
+    private CancellationTokenSource? _iconCts;
 
     // ═══════════════════════════════════════════════════════
     //  OBSERVABLE STATE
@@ -58,6 +64,16 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private double _junkScanProgress;
     [ObservableProperty] private double _tasksScanProgress;
 
+    // Destructive-action options. Bound to status-bar toggles so the user
+    // can flip dry-run or secure-delete before any cleanup call.
+    [ObservableProperty] private bool _dryRunEnabled;
+    [ObservableProperty] private bool _secureDeleteEnabled;
+
+    // Live progress bar for the current long-running delete.
+    [ObservableProperty] private double _operationProgress;
+    [ObservableProperty] private string _operationProgressText = "";
+    [ObservableProperty] private bool _operationProgressVisible;
+
     // ═══════════════════════════════════════════════════════
     //  DATA COLLECTIONS
     // ═══════════════════════════════════════════════════════
@@ -91,28 +107,43 @@ public partial class MainViewModel : ObservableObject
     private string _searchFilter = "";
     private long _totalJunkBytes;
 
+    /// <summary>Exposed for the view to reuse the same engine instance.</summary>
+    public UninstallEngine Engine => _engine;
+
     // ═══════════════════════════════════════════════════════
-    //  CONSTRUCTOR + AUTO-SCAN
+    //  CONSTRUCTOR
     // ═══════════════════════════════════════════════════════
 
     public MainViewModel()
     {
-        _dispatcher = Dispatcher.CurrentDispatcher;
+        // Use Application.Current.Dispatcher so this VM works even if constructed
+        // off the UI thread (e.g. in a designer/test harness). Falls back to the
+        // current dispatcher as a last resort.
+        _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
+
         _engine.StatusChanged += s => _dispatcher.BeginInvoke(() => StatusText = s);
         _engine.ProgressChanged += p => _dispatcher.BeginInvoke(() => OverlayScanProgress = p);
     }
 
+    // ═══════════════════════════════════════════════════════
+    //  INITIAL SCAN
+    // ═══════════════════════════════════════════════════════
+
     public async Task RunInitialScanAsync()
     {
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
         IsInitialScanRunning = true;
         ScanOverlayText = "DeepPurge is analyzing your system...";
 
         try
         {
-            // ── Phase 1: Programs (most critical) ──
             ScanOverlayText = "Scanning installed programs...";
             ProgramsScanProgress = 0;
-            var programs = await Task.Run(() => InstalledProgramScanner.GetAllInstalledPrograms());
+            var programs = await Task.Run(() => InstalledProgramScanner.GetAllInstalledPrograms(), ct);
+            ct.ThrowIfCancellationRequested();
+
             _dispatcher.Invoke(() =>
             {
                 Programs.Clear(); FilteredPrograms.Clear();
@@ -123,17 +154,9 @@ public partial class MainViewModel : ObservableObject
                 _loadedPanels.Add("Programs");
             });
 
-            // Fire-and-forget icon loading
-            _ = Task.Run(() =>
-            {
-                foreach (var prog in programs)
-                {
-                    var icon = IconExtractor.GetProgramIcon(prog.DisplayIconPath, prog.UninstallString, prog.InstallLocation);
-                    if (icon != null) _dispatcher.BeginInvoke(() => prog.Icon = icon);
-                }
-            });
+            StartIconBackfill(programs);
+            StartPackageEnrichment(programs);
 
-            // ── Phase 2: All panels in parallel ──
             ScanOverlayText = "Scanning junk, tasks, autorun, extensions...";
 
             var junkTask = Task.Run(() =>
@@ -142,7 +165,7 @@ public partial class MainViewModel : ObservableObject
                 var result = JunkFilesCleaner.ScanForJunk();
                 _dispatcher.BeginInvoke(() => JunkScanProgress = 100);
                 return result;
-            });
+            }, ct);
 
             var tasksTask = Task.Run(() =>
             {
@@ -150,99 +173,40 @@ public partial class MainViewModel : ObservableObject
                 var result = ScheduledTaskScanner.GetAllTasks();
                 _dispatcher.BeginInvoke(() => TasksScanProgress = 100);
                 return result;
-            });
+            }, ct);
 
-            var autorunTask = Task.Run(() => AutorunScanner.GetAllAutoruns());
-            var extTask = Task.Run(() => BrowserExtensionScanner.GetAllExtensions());
+            var autorunTask = Task.Run(() => AutorunScanner.GetAllAutoruns(), ct);
+            var extTask = Task.Run(() => BrowserExtensionScanner.GetAllExtensions(), ct);
             var appsTask = WindowsAppManager.GetInstalledAppsAsync();
-            var evidenceTask = Task.Run(() => EvidenceRemover.ScanAllTraces());
-            var emptyTask = Task.Run(() => EmptyFolderScanner.ScanCommonLocations());
-            var ctxTask = Task.Run(() => ContextMenuCleaner.ScanContextMenuEntries());
-            var svcTask = Task.Run(() => ServiceScanner.GetAllServices());
-            var restoreTask = Task.Run(() => SystemRestoreManager.GetRestorePoints());
+            var evidenceTask = Task.Run(() => EvidenceRemover.ScanAllTraces(), ct);
+            var emptyTask = Task.Run(() => EmptyFolderScanner.ScanCommonLocations(), ct);
+            var ctxTask = Task.Run(() => ContextMenuCleaner.ScanContextMenuEntries(), ct);
+            var svcTask = Task.Run(() => ServiceScanner.GetAllServices(), ct);
+            var restoreTask = Task.Run(() => SystemRestoreManager.GetRestorePoints(), ct);
 
             await Task.WhenAll(junkTask, tasksTask, autorunTask, extTask, appsTask,
                                evidenceTask, emptyTask, ctxTask, svcTask, restoreTask);
 
             _dispatcher.Invoke(() =>
             {
-                // Junk
-                var junkCategories = junkTask.Result;
-                JunkCategories.Clear();
-                foreach (var c in junkCategories) JunkCategories.Add(c);
-                _totalJunkBytes = junkCategories.Sum(c => c.TotalSize);
-                JunkBadge = FormatSize(_totalJunkBytes);
-                TotalJunkDisplay = $"Junk: {FormatSize(_totalJunkBytes)}";
-                _loadedPanels.Add("Junk");
-
-                // Tasks
-                var tasks = tasksTask.Result;
-                ScheduledTasks.Clear();
-                foreach (var t in tasks) ScheduledTasks.Add(t);
-                var orphanedTasks = tasks.Count(t => t.IsOrphaned);
-                TasksBadge = orphanedTasks > 0 ? $"{orphanedTasks} orphaned" : $"{tasks.Count}";
-                _loadedPanels.Add("Tasks");
-
-                // Autorun
-                var autoruns = autorunTask.Result;
-                Autoruns.Clear();
-                foreach (var a in autoruns) Autoruns.Add(a);
-                AutorunBadge = autoruns.Count.ToString();
-                _loadedPanels.Add("Autorun");
-
-                // Browser Extensions
-                var exts = extTask.Result;
-                BrowserExtensions.Clear();
-                foreach (var ex in exts) BrowserExtensions.Add(ex);
-                BrowserExtBadge = exts.Count.ToString();
-                _loadedPanels.Add("BrowserExt");
-
-                // Windows Apps
-                var apps = appsTask.Result;
-                WindowsApps.Clear();
-                foreach (var a in apps) WindowsApps.Add(a);
-                WindowsAppsBadge = apps.Count.ToString();
-                _loadedPanels.Add("WindowsApps");
-
-                // Evidence
-                var traces = evidenceTask.Result;
-                TraceCategories.Clear();
-                foreach (var t in traces) TraceCategories.Add(t);
-                EvidenceBadge = traces.Sum(t => t.ItemCount) > 0 ? $"{traces.Sum(t => t.ItemCount)}" : "";
-                _loadedPanels.Add("Evidence");
-
-                // Empty Folders
-                var empty = emptyTask.Result;
-                EmptyFolders.Clear();
-                foreach (var f in empty) EmptyFolders.Add(f);
-                EmptyFoldersBadge = empty.Count > 0 ? empty.Count.ToString() : "";
-                _loadedPanels.Add("EmptyFolders");
-
-                // Context Menu
-                var ctx = ctxTask.Result;
-                ContextMenuEntries.Clear();
-                foreach (var c in ctx) ContextMenuEntries.Add(c);
-                var orphanedCtx = ctx.Count(c => c.IsOrphaned);
-                ContextMenuBadge = orphanedCtx > 0 ? $"{orphanedCtx} orphaned" : $"{ctx.Count}";
-                _loadedPanels.Add("ContextMenu");
-
-                // Services
-                var svcs = svcTask.Result;
-                Services.Clear();
-                foreach (var s in svcs) Services.Add(s);
-                var orphanedSvc = svcs.Count(s => s.IsOrphaned);
-                ServicesBadge = orphanedSvc > 0 ? $"{orphanedSvc} orphaned" : $"{svcs.Count}";
-                _loadedPanels.Add("Services");
-
-                // Restore Points
-                var pts = restoreTask.Result;
-                RestorePoints.Clear();
-                foreach (var p in pts) RestorePoints.Add(p);
-                _loadedPanels.Add("Restore");
+                ApplyJunkResults(junkTask.Result);
+                ApplyTaskResults(tasksTask.Result);
+                ApplyAutorunResults(autorunTask.Result);
+                ApplyExtensionResults(extTask.Result);
+                ApplyWindowsAppResults(appsTask.Result);
+                ApplyEvidenceResults(evidenceTask.Result);
+                ApplyEmptyFolderResults(emptyTask.Result);
+                ApplyContextMenuResults(ctxTask.Result);
+                ApplyServiceResults(svcTask.Result);
+                ApplyRestoreResults(restoreTask.Result);
             });
 
             ScanOverlayText = "Scan complete!";
             StatusText = $"Loaded {programs.Count} programs | {FormatSize(_totalJunkBytes)} junk | All panels ready";
+        }
+        catch (OperationCanceledException)
+        {
+            StatusText = "Initial scan cancelled";
         }
         catch (Exception ex)
         {
@@ -250,13 +214,15 @@ public partial class MainViewModel : ObservableObject
         }
         finally
         {
-            await Task.Delay(600);
+            await Task.Delay(400);
             IsInitialScanRunning = false;
+            _cts?.Dispose();
+            _cts = null;
         }
     }
 
     // ═══════════════════════════════════════════════════════
-    //  LAZY PANEL LOADING (kept for fallback)
+    //  LAZY PANEL LOADING (fallback when initial scan skipped)
     // ═══════════════════════════════════════════════════════
 
     public async Task EnsurePanelLoadedAsync(string panel)
@@ -269,44 +235,32 @@ public partial class MainViewModel : ObservableObject
             case "Autorun":
                 IsBusy = true; StatusText = "Loading autorun entries...";
                 var entries = await Task.Run(() => AutorunScanner.GetAllAutoruns());
-                _dispatcher.Invoke(() =>
-                {
-                    Autoruns.Clear(); foreach (var e in entries) Autoruns.Add(e);
-                    AutorunBadge = entries.Count.ToString();
-                    StatusText = $"Loaded {entries.Count} autorun entries";
-                });
+                _dispatcher.Invoke(() => ApplyAutorunResults(entries));
+                StatusText = $"Loaded {entries.Count} autorun entries";
                 IsBusy = false;
                 break;
+
             case "BrowserExt":
                 IsBusy = true; StatusText = "Scanning browser extensions...";
                 var exts = await Task.Run(() => BrowserExtensionScanner.GetAllExtensions());
-                _dispatcher.Invoke(() =>
-                {
-                    BrowserExtensions.Clear(); foreach (var e in exts) BrowserExtensions.Add(e);
-                    BrowserExtBadge = exts.Count.ToString();
-                    StatusText = $"Found {exts.Count} browser extensions";
-                });
+                _dispatcher.Invoke(() => ApplyExtensionResults(exts));
+                StatusText = $"Found {exts.Count} browser extensions";
                 IsBusy = false;
                 break;
+
             case "WindowsApps":
                 IsBusy = true; StatusText = "Loading Windows apps...";
                 var apps = await WindowsAppManager.GetInstalledAppsAsync();
-                _dispatcher.Invoke(() =>
-                {
-                    WindowsApps.Clear(); foreach (var a in apps) WindowsApps.Add(a);
-                    WindowsAppsBadge = apps.Count.ToString();
-                    StatusText = $"Found {apps.Count} Windows apps";
-                });
+                _dispatcher.Invoke(() => ApplyWindowsAppResults(apps));
+                StatusText = $"Found {apps.Count} Windows apps";
                 IsBusy = false;
                 break;
+
             case "Restore":
                 IsBusy = true; StatusText = "Loading restore points...";
                 var pts = await Task.Run(() => SystemRestoreManager.GetRestorePoints());
-                _dispatcher.Invoke(() =>
-                {
-                    RestorePoints.Clear(); foreach (var p in pts) RestorePoints.Add(p);
-                    StatusText = $"Found {pts.Count} restore points";
-                });
+                _dispatcher.Invoke(() => ApplyRestoreResults(pts));
+                StatusText = $"Found {pts.Count} restore points";
                 IsBusy = false;
                 break;
         }
@@ -318,13 +272,29 @@ public partial class MainViewModel : ObservableObject
 
     public void ApplyFilter(string filter)
     {
-        _searchFilter = filter;
+        _searchFilter = filter ?? "";
         FilteredPrograms.Clear();
-        var source = string.IsNullOrWhiteSpace(filter) ? Programs :
-            new ObservableCollection<InstalledProgram>(Programs.Where(p =>
-                p.DisplayName.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
-                p.Publisher.Contains(filter, StringComparison.OrdinalIgnoreCase)));
-        foreach (var p in source) FilteredPrograms.Add(p);
+
+        if (string.IsNullOrWhiteSpace(_searchFilter))
+        {
+            foreach (var p in Programs) FilteredPrograms.Add(p);
+            return;
+        }
+
+        foreach (var p in Programs)
+        {
+            if (p.DisplayName.Contains(_searchFilter, StringComparison.OrdinalIgnoreCase) ||
+                p.Publisher.Contains(_searchFilter, StringComparison.OrdinalIgnoreCase))
+            {
+                FilteredPrograms.Add(p);
+            }
+        }
+    }
+
+    public string SearchFilter
+    {
+        get => _searchFilter;
+        set { _searchFilter = value ?? ""; ApplyFilter(_searchFilter); }
     }
 
     // ═══════════════════════════════════════════════════════
@@ -336,12 +306,8 @@ public partial class MainViewModel : ObservableObject
         IsBusy = true; StatusText = "Scanning for junk files...";
         try
         {
-            var cats = await Task.Run(() => JunkFilesCleaner.ScanForJunk());
-            JunkCategories.Clear();
-            foreach (var c in cats) JunkCategories.Add(c);
-            _totalJunkBytes = cats.Sum(c => c.TotalSize);
-            JunkBadge = FormatSize(_totalJunkBytes);
-            TotalJunkDisplay = $"Junk: {FormatSize(_totalJunkBytes)}";
+            var cats = await Task.Run(JunkFilesCleaner.ScanForJunk);
+            ApplyJunkResults(cats);
             StatusText = $"Found {cats.Sum(c => c.Files.Count)} junk items, {FormatSize(_totalJunkBytes)}";
         }
         finally { IsBusy = false; }
@@ -349,14 +315,30 @@ public partial class MainViewModel : ObservableObject
 
     public async Task CleanJunkAsync(IEnumerable<JunkCategory> selected)
     {
-        IsBusy = true; StatusText = "Cleaning junk files...";
+        var list = selected.ToList();
+        IsBusy = true;
+        ShowOperationProgress(DryRunEnabled ? "Previewing junk cleanup..." : "Cleaning junk files...");
+
+        var progress = new Progress<DeleteProgress>(p => UpdateOperationProgress(p,
+            verb: DryRunEnabled ? "Would clean" : "Cleaning"));
+
         try
         {
-            var freed = await Task.Run(() => JunkFilesCleaner.DeleteJunk(selected));
-            StatusText = $"Freed {FormatSize(freed)} of disk space";
-            await ScanJunkAsync();
+            var options = CurrentDeleteOptions();
+            var ct = (_cts ??= new CancellationTokenSource()).Token;
+            var summary = await Task.Run(() =>
+                JunkFilesCleaner.DeleteJunkSafe(list, options, progress, ct), ct);
+
+            var verb = summary.DryRun ? "Would free" : "Freed";
+            var skip = summary.ItemsSkipped > 0 ? $", {summary.ItemsSkipped} skipped" : "";
+            StatusText = $"{verb} {FormatSize(summary.BytesFreed)} of disk space ({summary.ItemsDeleted} items{skip})";
+            if (!summary.DryRun) await ScanJunkAsync();
         }
-        finally { IsBusy = false; }
+        finally
+        {
+            IsBusy = false;
+            HideOperationProgress();
+        }
     }
 
     public async Task ScanEvidenceAsync()
@@ -364,10 +346,8 @@ public partial class MainViewModel : ObservableObject
         IsBusy = true; StatusText = "Scanning for traces...";
         try
         {
-            var cats = await Task.Run(() => EvidenceRemover.ScanAllTraces());
-            TraceCategories.Clear();
-            foreach (var c in cats) TraceCategories.Add(c);
-            EvidenceBadge = cats.Sum(c => c.ItemCount) > 0 ? $"{cats.Sum(c => c.ItemCount)}" : "";
+            var cats = await Task.Run(EvidenceRemover.ScanAllTraces);
+            ApplyEvidenceResults(cats);
             StatusText = $"Found {cats.Sum(c => c.ItemCount)} trace items across {cats.Count} categories";
         }
         finally { IsBusy = false; }
@@ -375,14 +355,29 @@ public partial class MainViewModel : ObservableObject
 
     public async Task CleanEvidenceAsync(IEnumerable<TraceCategory> selected)
     {
-        IsBusy = true; StatusText = "Cleaning traces...";
+        var list = selected.ToList();
+        IsBusy = true;
+        ShowOperationProgress(DryRunEnabled ? "Previewing trace cleanup..." : "Cleaning traces...");
+
+        var progress = new Progress<DeleteProgress>(p => UpdateOperationProgress(p,
+            verb: DryRunEnabled ? "Would clean" : "Cleaning"));
+
         try
         {
-            var freed = await Task.Run(() => EvidenceRemover.CleanTraces(selected));
-            StatusText = $"Cleaned traces, freed {FormatSize(freed)}";
-            await ScanEvidenceAsync();
+            var options = CurrentDeleteOptions();
+            var ct = (_cts ??= new CancellationTokenSource()).Token;
+            var summary = await Task.Run(() =>
+                EvidenceRemover.CleanTracesSafe(list, options, progress, ct), ct);
+
+            var verb = summary.DryRun ? "Would clean" : "Cleaned";
+            StatusText = $"{verb} {summary.ItemsDeleted} trace items, {FormatSize(summary.BytesFreed)}";
+            if (!summary.DryRun) await ScanEvidenceAsync();
         }
-        finally { IsBusy = false; }
+        finally
+        {
+            IsBusy = false;
+            HideOperationProgress();
+        }
     }
 
     public async Task ScanEmptyFoldersAsync()
@@ -390,10 +385,8 @@ public partial class MainViewModel : ObservableObject
         IsBusy = true; StatusText = "Scanning for empty folders...";
         try
         {
-            var folders = await Task.Run(() => EmptyFolderScanner.ScanCommonLocations());
-            EmptyFolders.Clear();
-            foreach (var f in folders) EmptyFolders.Add(f);
-            EmptyFoldersBadge = folders.Count > 0 ? folders.Count.ToString() : "";
+            var folders = await Task.Run(EmptyFolderScanner.ScanCommonLocations);
+            ApplyEmptyFolderResults(folders);
             StatusText = $"Found {folders.Count} empty folders";
         }
         finally { IsBusy = false; }
@@ -401,14 +394,14 @@ public partial class MainViewModel : ObservableObject
 
     public async Task DeleteEmptyFoldersAsync(IEnumerable<EmptyFolderInfo> selected)
     {
+        var list = selected.ToList();
         IsBusy = true; StatusText = "Deleting empty folders...";
         try
         {
-            var list = selected.ToList();
             var deleted = await Task.Run(() => EmptyFolderScanner.DeleteEmptyFolders(list));
-            StatusText = $"Deleted {deleted} empty folders";
             foreach (var f in list) EmptyFolders.Remove(f);
             EmptyFoldersBadge = EmptyFolders.Count > 0 ? EmptyFolders.Count.ToString() : "";
+            StatusText = $"Deleted {deleted} empty folders";
         }
         finally { IsBusy = false; }
     }
@@ -419,12 +412,16 @@ public partial class MainViewModel : ObservableObject
         try
         {
             var folders = await Task.Run(() => DiskSpaceAnalyzer.AnalyzeFolder(@"C:\", 1));
+            var large = await Task.Run(() => DiskSpaceAnalyzer.FindLargeFiles(@"C:\", 50 * 1024 * 1024, 200));
+
             DiskFolders.Clear();
             foreach (var f in folders) DiskFolders.Add(f);
-            var large = await Task.Run(() => DiskSpaceAnalyzer.FindLargeFiles(@"C:\", 50 * 1024 * 1024, 200));
+
             LargeFiles.Clear();
             foreach (var f in large) LargeFiles.Add(f);
-            StatusText = $"Found {folders.Count} top-level folders, {large.Count} large files ({FormatSize(large.Sum(f => f.SizeBytes))})";
+
+            StatusText = $"Found {folders.Count} top-level folders, {large.Count} large files " +
+                         $"({FormatSize(large.Sum(f => f.SizeBytes))})";
         }
         finally { IsBusy = false; }
     }
@@ -434,11 +431,9 @@ public partial class MainViewModel : ObservableObject
         IsBusy = true; StatusText = "Scanning context menu entries...";
         try
         {
-            var entries = await Task.Run(() => ContextMenuCleaner.ScanContextMenuEntries());
-            ContextMenuEntries.Clear();
-            foreach (var e in entries) ContextMenuEntries.Add(e);
+            var entries = await Task.Run(ContextMenuCleaner.ScanContextMenuEntries);
+            ApplyContextMenuResults(entries);
             var orphaned = entries.Count(e => e.IsOrphaned);
-            ContextMenuBadge = orphaned > 0 ? $"{orphaned} orphaned" : $"{entries.Count}";
             StatusText = $"Found {entries.Count} entries, {orphaned} orphaned";
         }
         finally { IsBusy = false; }
@@ -450,10 +445,8 @@ public partial class MainViewModel : ObservableObject
         try
         {
             var services = await Task.Run(() => ServiceScanner.GetAllServices());
-            Services.Clear();
-            foreach (var s in services) Services.Add(s);
+            ApplyServiceResults(services);
             var orphaned = services.Count(s => s.IsOrphaned);
-            ServicesBadge = orphaned > 0 ? $"{orphaned} orphaned" : $"{services.Count}";
             StatusText = $"Found {services.Count} services, {orphaned} orphaned";
         }
         finally { IsBusy = false; }
@@ -464,11 +457,9 @@ public partial class MainViewModel : ObservableObject
         IsBusy = true; StatusText = "Scanning scheduled tasks...";
         try
         {
-            var tasks = await Task.Run(() => ScheduledTaskScanner.GetAllTasks());
-            ScheduledTasks.Clear();
-            foreach (var t in tasks) ScheduledTasks.Add(t);
+            var tasks = await Task.Run(ScheduledTaskScanner.GetAllTasks);
+            ApplyTaskResults(tasks);
             var orphaned = tasks.Count(t => t.IsOrphaned);
-            TasksBadge = orphaned > 0 ? $"{orphaned} orphaned" : $"{tasks.Count}";
             StatusText = $"Found {tasks.Count} tasks, {orphaned} orphaned";
         }
         finally { IsBusy = false; }
@@ -482,8 +473,12 @@ public partial class MainViewModel : ObservableObject
     {
         _cts = new CancellationTokenSource();
         IsBusy = true; StatusText = $"Uninstalling {program.DisplayName}...";
-        try { return await _engine.UninstallAsync(program, mode, createRestorePoint: true, runBuiltInUninstaller: true, ct: _cts.Token); }
-        finally { IsBusy = false; _cts = null; }
+        try
+        {
+            return await _engine.UninstallAsync(
+                program, mode, createRestorePoint: true, runBuiltInUninstaller: true, ct: _cts.Token);
+        }
+        finally { IsBusy = false; _cts?.Dispose(); _cts = null; }
     }
 
     public async Task<ScanResult> ScanLeftoversAsync(InstalledProgram program, ScanMode mode)
@@ -496,9 +491,16 @@ public partial class MainViewModel : ObservableObject
             var fileScanner = new FileLeftoverScanner();
             var regLeftovers = await Task.Run(() => regScanner.ScanForLeftovers(program, mode), _cts.Token);
             var fileLeftovers = await Task.Run(() => fileScanner.ScanForLeftovers(program, mode), _cts.Token);
-            return new ScanResult { Program = program, RegistryLeftovers = regLeftovers, FileLeftovers = fileLeftovers, ScanTime = DateTime.Now, Mode = mode };
+            return new ScanResult
+            {
+                Program = program,
+                RegistryLeftovers = regLeftovers,
+                FileLeftovers = fileLeftovers,
+                ScanTime = DateTime.Now,
+                Mode = mode,
+            };
         }
-        finally { IsBusy = false; _cts = null; }
+        finally { IsBusy = false; _cts?.Dispose(); _cts = null; }
     }
 
     public async Task<ScanResult> ForcedScanAsync(string name, string? folder, ScanMode mode)
@@ -506,23 +508,50 @@ public partial class MainViewModel : ObservableObject
         _cts = new CancellationTokenSource();
         IsBusy = true; StatusText = $"Forced scan: {name}...";
         try { return await _engine.ForcedScanAsync(name, folder, mode, _cts.Token); }
-        finally { IsBusy = false; _cts = null; }
+        finally { IsBusy = false; _cts?.Dispose(); _cts = null; }
     }
 
     public async Task<(int regDel, int fileDel)> DeleteLeftoversAsync()
     {
         if (CurrentScanResult == null) return (0, 0);
-        IsBusy = true; StatusText = "Deleting leftovers...";
+
+        IsBusy = true;
+        ShowOperationProgress(DryRunEnabled ? "Previewing leftover deletion..." : "Deleting leftovers...");
+
+        var progress = new Progress<DeleteProgress>(p => UpdateOperationProgress(p,
+            verb: DryRunEnabled ? "Would delete" : "Deleting"));
+
         try
         {
-            var (regDel, fileDel) = await _engine.DeleteLeftoversAsync(CurrentScanResult.RegistryLeftovers, CurrentScanResult.FileLeftovers, true);
-            CurrentScanResult.RegistryLeftovers.RemoveAll(i => i.IsSelected);
-            CurrentScanResult.FileLeftovers.RemoveAll(i => i.IsSelected);
-            RefreshLeftoverCollections();
-            StatusText = $"Deleted {regDel} registry + {fileDel} file items";
+            var options = CurrentDeleteOptions();
+            _cts ??= new CancellationTokenSource();
+
+            var (summary, regDel, fileDel) = await _engine.DeleteLeftoversAsync(
+                CurrentScanResult.RegistryLeftovers,
+                CurrentScanResult.FileLeftovers,
+                options,
+                progress,
+                _cts.Token);
+
+            if (!summary.DryRun)
+            {
+                CurrentScanResult.RegistryLeftovers.RemoveAll(
+                    i => i.IsSelected && i.Confidence != LeftoverConfidence.Risky);
+                CurrentScanResult.FileLeftovers.RemoveAll(
+                    i => i.IsSelected && i.Confidence != LeftoverConfidence.Risky);
+                RefreshLeftoverCollections();
+                UpdateLeftoverStats();
+            }
+
+            var verb = summary.DryRun ? "Would delete" : "Deleted";
+            StatusText = $"{verb} {regDel} registry + {fileDel} file items ({FormatSize(summary.BytesFreed)})";
             return (regDel, fileDel);
         }
-        finally { IsBusy = false; }
+        finally
+        {
+            IsBusy = false;
+            HideOperationProgress();
+        }
     }
 
     public void ShowLeftoverResults(ScanResult result)
@@ -546,7 +575,7 @@ public partial class MainViewModel : ObservableObject
 
     public void UpdateLeftoverStats()
     {
-        if (CurrentScanResult == null) return;
+        if (CurrentScanResult == null) { LeftoverStats = ""; return; }
         var regSel = CurrentScanResult.RegistryLeftovers.Count(i => i.IsSelected);
         var fileSel = CurrentScanResult.FileLeftovers.Count(i => i.IsSelected);
         var sizeBytes = CurrentScanResult.FileLeftovers.Where(i => i.IsSelected).Sum(i => i.SizeBytes);
@@ -557,9 +586,11 @@ public partial class MainViewModel : ObservableObject
     public void SelectAllSafe()
     {
         if (CurrentScanResult == null) return;
-        foreach (var i in CurrentScanResult.RegistryLeftovers.Where(x => x.Confidence == LeftoverConfidence.Safe)) i.IsSelected = true;
-        foreach (var i in CurrentScanResult.FileLeftovers.Where(x => x.Confidence == LeftoverConfidence.Safe)) i.IsSelected = true;
-        RefreshLeftoverCollections(); UpdateLeftoverStats();
+        foreach (var i in CurrentScanResult.RegistryLeftovers)
+            i.IsSelected = i.Confidence == LeftoverConfidence.Safe;
+        foreach (var i in CurrentScanResult.FileLeftovers)
+            i.IsSelected = i.Confidence == LeftoverConfidence.Safe;
+        UpdateLeftoverStats();
     }
 
     public void DeselectAll()
@@ -567,7 +598,7 @@ public partial class MainViewModel : ObservableObject
         if (CurrentScanResult == null) return;
         foreach (var i in CurrentScanResult.RegistryLeftovers) i.IsSelected = false;
         foreach (var i in CurrentScanResult.FileLeftovers) i.IsSelected = false;
-        RefreshLeftoverCollections(); UpdateLeftoverStats();
+        UpdateLeftoverStats();
     }
 
     // ═══════════════════════════════════════════════════════
@@ -578,69 +609,364 @@ public partial class MainViewModel : ObservableObject
     {
         IconExtractor.ClearCache();
         _loadedPanels.Clear();
-        IsBusy = true; StatusText = "Refreshing...";
+        IsBusy = true; StatusText = "Refreshing programs...";
         try
         {
             var programs = await Task.Run(() => InstalledProgramScanner.GetAllInstalledPrograms());
             Programs.Clear(); FilteredPrograms.Clear();
-            foreach (var p in programs) { Programs.Add(p); FilteredPrograms.Add(p); }
+            foreach (var p in programs)
+            {
+                Programs.Add(p);
+                if (string.IsNullOrWhiteSpace(_searchFilter) ||
+                    p.DisplayName.Contains(_searchFilter, StringComparison.OrdinalIgnoreCase) ||
+                    p.Publisher.Contains(_searchFilter, StringComparison.OrdinalIgnoreCase))
+                {
+                    FilteredPrograms.Add(p);
+                }
+            }
             ProgramCountText = $"{programs.Count} programs";
             ProgramsBadge = programs.Count.ToString();
             _loadedPanels.Add("Programs");
             StatusText = $"Refreshed {programs.Count} programs";
-            _ = Task.Run(() =>
-            {
-                foreach (var prog in programs)
-                {
-                    var icon = IconExtractor.GetProgramIcon(prog.DisplayIconPath, prog.UninstallString, prog.InstallLocation);
-                    if (icon != null) _dispatcher.BeginInvoke(() => prog.Icon = icon);
-                }
-            });
+
+            StartIconBackfill(programs);
+            StartPackageEnrichment(programs);
         }
         finally { IsBusy = false; }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  BULK UNINSTALL (BCUninstaller-inspired)
+    // ═══════════════════════════════════════════════════════
+
+    public async Task<List<UninstallResult>?> UninstallSelectedAsync(ScanMode mode)
+    {
+        var selected = Programs.Where(p => p.IsSelected).ToList();
+        if (selected.Count == 0) return null;
+
+        _cts = new CancellationTokenSource();
+        IsBusy = true;
+        ShowOperationProgress($"Uninstalling {selected.Count} programs...");
+
+        var progress = new Progress<DeleteProgress>(p =>
+            UpdateOperationProgress(p, verb: "Uninstalling"));
+
+        try
+        {
+            var results = await _engine.UninstallBatchAsync(
+                selected, mode, createRestorePoint: true, progress, _cts.Token);
+
+            // Remove successfully-uninstalled programs from the list.
+            for (int i = 0; i < selected.Count; i++)
+            {
+                if (results[i].Success)
+                {
+                    Programs.Remove(selected[i]);
+                    FilteredPrograms.Remove(selected[i]);
+                }
+                else
+                {
+                    selected[i].IsSelected = false;
+                }
+            }
+            ProgramCountText = $"{Programs.Count} programs";
+            ProgramsBadge = Programs.Count.ToString();
+
+            var ok = results.Count(r => r.Success);
+            StatusText = $"Uninstalled {ok}/{results.Count} programs";
+            return results;
+        }
+        finally
+        {
+            IsBusy = false;
+            HideOperationProgress();
+            _cts?.Dispose();
+            _cts = null;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  PACKAGE-MANAGER ENRICHMENT (winget + scoop)
+    // ═══════════════════════════════════════════════════════
+
+    private CancellationTokenSource? _enrichCts;
+
+    private void StartPackageEnrichment(IReadOnlyList<InstalledProgram> programs)
+    {
+        _enrichCts?.Cancel();
+        _enrichCts?.Dispose();
+        _enrichCts = new CancellationTokenSource();
+        var ct = _enrichCts.Token;
+        var list = programs.ToList();
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await PackageManagerScanner.EnrichAsync(list, ct).ConfigureAwait(false);
+
+                // Add any new synthetic scoop entries back to the VM lists.
+                var existingNames = new HashSet<string>(Programs.Select(p => p.DisplayName),
+                    StringComparer.OrdinalIgnoreCase);
+                var newcomers = list.Where(p => !existingNames.Contains(p.DisplayName)).ToList();
+                if (newcomers.Count > 0)
+                {
+                    _ = _dispatcher.BeginInvoke(() =>
+                    {
+                        foreach (var n in newcomers)
+                        {
+                            Programs.Add(n);
+                            FilteredPrograms.Add(n);
+                        }
+                        ProgramCountText = $"{Programs.Count} programs";
+                        ProgramsBadge = Programs.Count.ToString();
+                    });
+                }
+
+                _ = _dispatcher.BeginInvoke(() =>
+                {
+                    var upgradeable = Programs.Count(p => !string.IsNullOrEmpty(p.UpgradeAvailable));
+                    if (upgradeable > 0)
+                        StatusText = $"{upgradeable} programs have winget upgrades available";
+                });
+            }
+            catch { /* non-fatal */ }
+        }, ct);
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  REGISTRY HUNTER (Revo-style trace search)
+    // ═══════════════════════════════════════════════════════
+
+    public ObservableCollection<RegistryHit> RegistryHits { get; } = new();
+
+    public async Task<int> HuntRegistryAsync(string needle)
+    {
+        RegistryHits.Clear();
+        if (string.IsNullOrWhiteSpace(needle) || needle.Length < 3)
+        {
+            StatusText = "Enter at least 3 characters to search the registry";
+            return 0;
+        }
+
+        _cts = new CancellationTokenSource();
+        IsBusy = true;
+        StatusText = $"Searching registry for '{needle}'...";
+        try
+        {
+            var hits = await Task.Run(() => RegistryHunter.Search(needle, ct: _cts.Token), _cts.Token);
+            foreach (var h in hits) RegistryHits.Add(h);
+            StatusText = hits.Count >= 500
+                ? $"Registry hunter: found 500+ matches for '{needle}' (capped)"
+                : $"Registry hunter: {hits.Count} matches for '{needle}'";
+            return hits.Count;
+        }
+        finally
+        {
+            IsBusy = false;
+            _cts?.Dispose();
+            _cts = null;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  DELETE-OPTIONS plumbing
+    // ═══════════════════════════════════════════════════════
+
+    public DeleteOptions CurrentDeleteOptions() => new(
+        DryRun: DryRunEnabled,
+        SecureDelete: SecureDeleteEnabled,
+        UseRecycleBin: !SecureDeleteEnabled);
+
+    private void ShowOperationProgress(string initialText)
+    {
+        OperationProgress = 0;
+        OperationProgressText = initialText;
+        OperationProgressVisible = true;
+    }
+
+    private void HideOperationProgress()
+    {
+        OperationProgressVisible = false;
+        OperationProgress = 0;
+        OperationProgressText = "";
+    }
+
+    private void UpdateOperationProgress(DeleteProgress p, string verb)
+    {
+        _dispatcher.BeginInvoke(() =>
+        {
+            OperationProgress = p.Percent;
+            var short_ = string.IsNullOrEmpty(p.CurrentItem)
+                ? ""
+                : p.CurrentItem.Length > 60 ? "…" + p.CurrentItem[^60..] : p.CurrentItem;
+            OperationProgressText = $"{verb} {p.ItemsProcessed}/{p.ItemsTotal} · {short_}";
+        });
+    }
+
+    public void OpenBackupFolder()
+    {
+        var dir = new Core.Safety.BackupManager().BackupDirectory;
+        try { Directory.CreateDirectory(dir); } catch { }
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = dir,
+                UseShellExecute = true,
+            });
+        }
+        catch { /* best-effort */ }
     }
 
     // ═══════════════════════════════════════════════════════
     //  HELPERS
     // ═══════════════════════════════════════════════════════
 
-    public string SearchFilter
-    {
-        get => _searchFilter;
-        set { _searchFilter = value; ApplyFilter(value); }
-    }
-
     public void UpdateSelectedCount()
     {
-        int count = 0;
-        try
+        int count = CurrentPanel switch
         {
-            switch (CurrentPanel)
-            {
-                case "Programs": count = FilteredPrograms.Count(p => p.IsSelected); break;
-                case "Junk": count = JunkCategories.Count(c => c.IsSelected); break;
-                case "Evidence": count = TraceCategories.Count(c => c.IsSelected); break;
-                case "EmptyFolders": count = EmptyFolders.Count(f => f.IsSelected); break;
-                case "ContextMenu": count = ContextMenuEntries.Count(c => c.IsSelected); break;
-                case "Services": count = Services.Count(s => s.IsSelected); break;
-                case "Tasks": count = ScheduledTasks.Count(t => t.IsSelected); break;
-            }
-        }
-        catch { }
+            "Programs"      => FilteredPrograms.Count(p => p.IsSelected),
+            "Junk"          => JunkCategories.Count(c => c.IsSelected),
+            "Evidence"      => TraceCategories.Count(c => c.IsSelected),
+            "EmptyFolders"  => EmptyFolders.Count(f => f.IsSelected),
+            "ContextMenu"   => ContextMenuEntries.Count(c => c.IsSelected),
+            "Services"      => Services.Count(s => s.IsSelected),
+            "Tasks"         => ScheduledTasks.Count(t => t.IsSelected),
+            _ => 0,
+        };
         SelectedCountBadge = count > 0 ? $"{count} selected" : "";
     }
 
     public static string FormatSize(long bytes)
     {
         if (bytes <= 0) return "0 B";
+        if (bytes < 1024) return $"{bytes} B";
         double kb = bytes / 1024.0;
-        if (kb < 1) return $"{bytes} B";
+        if (kb < 1024) return $"{kb:F0} KB";
         double mb = kb / 1024.0;
-        if (mb < 1) return $"{kb:F0} KB";
-        double gb = mb / 1024.0;
-        if (gb < 1) return $"{mb:F1} MB";
-        return $"{gb:F2} GB";
+        if (mb < 1024) return $"{mb:F1} MB";
+        return $"{mb / 1024.0:F2} GB";
     }
 
-    public void CancelOperation() => _cts?.Cancel();
+    public void CancelOperation()
+    {
+        try { _cts?.Cancel(); } catch { /* already disposed */ }
+        try { _iconCts?.Cancel(); } catch { /* already disposed */ }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  INTERNAL: apply result sets
+    // ═══════════════════════════════════════════════════════
+
+    private void StartIconBackfill(IReadOnlyList<InstalledProgram> programs)
+    {
+        _iconCts?.Cancel();
+        _iconCts?.Dispose();
+        _iconCts = new CancellationTokenSource();
+        var ct = _iconCts.Token;
+
+        _ = Task.Run(() =>
+        {
+            foreach (var prog in programs)
+            {
+                if (ct.IsCancellationRequested) return;
+                try
+                {
+                    var icon = IconExtractor.GetProgramIcon(
+                        prog.DisplayIconPath, prog.UninstallString, prog.InstallLocation);
+                    if (icon != null)
+                        _dispatcher.BeginInvoke(() => prog.Icon = icon);
+                }
+                catch { /* icon extraction should never crash the app */ }
+            }
+        }, ct);
+    }
+
+    private void ApplyJunkResults(List<JunkCategory> cats)
+    {
+        JunkCategories.Clear();
+        foreach (var c in cats) JunkCategories.Add(c);
+        _totalJunkBytes = cats.Sum(c => c.TotalSize);
+        JunkBadge = FormatSize(_totalJunkBytes);
+        TotalJunkDisplay = $"Junk: {FormatSize(_totalJunkBytes)}";
+        _loadedPanels.Add("Junk");
+    }
+
+    private void ApplyTaskResults(List<ScheduledTaskInfo> tasks)
+    {
+        ScheduledTasks.Clear();
+        foreach (var t in tasks) ScheduledTasks.Add(t);
+        var orphaned = tasks.Count(t => t.IsOrphaned);
+        TasksBadge = orphaned > 0 ? $"{orphaned} orphaned" : $"{tasks.Count}";
+        _loadedPanels.Add("Tasks");
+    }
+
+    private void ApplyAutorunResults(List<AutorunEntry> autoruns)
+    {
+        Autoruns.Clear();
+        foreach (var a in autoruns) Autoruns.Add(a);
+        AutorunBadge = autoruns.Count.ToString();
+        _loadedPanels.Add("Autorun");
+    }
+
+    private void ApplyExtensionResults(List<BrowserExtension> exts)
+    {
+        BrowserExtensions.Clear();
+        foreach (var e in exts) BrowserExtensions.Add(e);
+        BrowserExtBadge = exts.Count.ToString();
+        _loadedPanels.Add("BrowserExt");
+    }
+
+    private void ApplyWindowsAppResults(List<WindowsApp> apps)
+    {
+        WindowsApps.Clear();
+        foreach (var a in apps) WindowsApps.Add(a);
+        WindowsAppsBadge = apps.Count.ToString();
+        _loadedPanels.Add("WindowsApps");
+    }
+
+    private void ApplyEvidenceResults(List<TraceCategory> traces)
+    {
+        TraceCategories.Clear();
+        foreach (var t in traces) TraceCategories.Add(t);
+        var total = traces.Sum(t => t.ItemCount);
+        EvidenceBadge = total > 0 ? total.ToString() : "";
+        _loadedPanels.Add("Evidence");
+    }
+
+    private void ApplyEmptyFolderResults(List<EmptyFolderInfo> empty)
+    {
+        EmptyFolders.Clear();
+        foreach (var f in empty) EmptyFolders.Add(f);
+        EmptyFoldersBadge = empty.Count > 0 ? empty.Count.ToString() : "";
+        _loadedPanels.Add("EmptyFolders");
+    }
+
+    private void ApplyContextMenuResults(List<ContextMenuEntry> ctx)
+    {
+        ContextMenuEntries.Clear();
+        foreach (var c in ctx) ContextMenuEntries.Add(c);
+        var orphaned = ctx.Count(c => c.IsOrphaned);
+        ContextMenuBadge = orphaned > 0 ? $"{orphaned} orphaned" : $"{ctx.Count}";
+        _loadedPanels.Add("ContextMenu");
+    }
+
+    private void ApplyServiceResults(List<ServiceEntry> svcs)
+    {
+        Services.Clear();
+        foreach (var s in svcs) Services.Add(s);
+        var orphaned = svcs.Count(s => s.IsOrphaned);
+        ServicesBadge = orphaned > 0 ? $"{orphaned} orphaned" : $"{svcs.Count}";
+        _loadedPanels.Add("Services");
+    }
+
+    private void ApplyRestoreResults(List<RestorePointInfo> pts)
+    {
+        RestorePoints.Clear();
+        foreach (var p in pts) RestorePoints.Add(p);
+        _loadedPanels.Add("Restore");
+    }
 }

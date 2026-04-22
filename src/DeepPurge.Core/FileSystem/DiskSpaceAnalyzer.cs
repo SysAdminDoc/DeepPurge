@@ -1,3 +1,6 @@
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
+
 namespace DeepPurge.Core.FileSystem;
 
 public class DiskFolderInfo
@@ -8,32 +11,39 @@ public class DiskFolderInfo
     public int FileCount { get; set; }
     public int FolderCount { get; set; }
     public double Percentage { get; set; }
-    public string SizeDisplay => FormatSize(SizeBytes);
+    public string SizeDisplay => SizeFormat.Format(SizeBytes);
     public string PercentageDisplay => $"{Percentage:F1}%";
-
-    private static string FormatSize(long b)
-    {
-        if (b < 1024) return $"{b} B";
-        double k = b / 1024.0;
-        if (k < 1024) return $"{k:F0} KB";
-        double m = k / 1024.0;
-        return m < 1024 ? $"{m:F1} MB" : $"{m / 1024.0:F2} GB";
-    }
 }
 
-public class LargeFileInfo
+public class LargeFileInfo : INotifyPropertyChanged
 {
+    private bool _isSelected;
+
     public string Path { get; set; } = "";
     public string Name { get; set; } = "";
     public string Extension { get; set; } = "";
     public long SizeBytes { get; set; }
     public DateTime LastModified { get; set; }
-    public bool IsSelected { get; set; }
-    public string SizeDisplay => FormatSize(SizeBytes);
+
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set { _isSelected = value; OnPropertyChanged(); }
+    }
+
+    public string SizeDisplay => SizeFormat.Format(SizeBytes);
     public string LastModifiedDisplay => LastModified.ToString("yyyy-MM-dd");
 
-    private static string FormatSize(long b)
+    public event PropertyChangedEventHandler? PropertyChanged;
+    private void OnPropertyChanged([CallerMemberName] string? name = null)
+        => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+}
+
+internal static class SizeFormat
+{
+    public static string Format(long b)
     {
+        if (b < 0) b = 0;
         if (b < 1024) return $"{b} B";
         double k = b / 1024.0;
         if (k < 1024) return $"{k:F0} KB";
