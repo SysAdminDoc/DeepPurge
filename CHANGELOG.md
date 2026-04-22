@@ -2,6 +2,16 @@
 
 All notable changes to DeepPurge will be documented in this file.
 
+## [v0.8.1] — UX polish + WizTree-speed disk analyzer
+
+### Added
+- **Startup shows a real percentage** — the spinning circle on the loading screen is replaced by a big live "N%" readout plus a determinate progress bar. Each of the 11 scan phases ticks the bar as it finishes so the user can see what's happening instead of just a looping animation.
+- **Disk Analyzer now uses WizTree's MFT technique** — new `FastDiskAnalyzer` reads the raw NTFS `$MFT` via `FSCTL_ENUM_USN_DATA` in one sequential sweep, then pulls sizes in a single `FSCTL_GET_NTFS_FILE_RECORD` pass. One warm volume handle replaces millions of random-seek `FindFirstFile` calls. Non-NTFS volumes fall back to a parallel `FindFirstFileExW` walk with the `FIND_FIRST_EX_LARGE_FETCH` hint and `FindExInfoBasic` (skips the 8.3 short-name lookup) — still materially faster than `Directory.EnumerateFiles`. Scan time appears in the status bar.
+- **Registry Hunter rewritten along NirSoft RegScanner / Eric Zimmerman lines** — now scans HKLM, HKLM\\WOW6432Node, HKCU, and HKCR in parallel; adds a scope filter (Keys / Value names / Value data); adds optional compiled regex for pattern matching; streams a live hit counter to the UI every 32 matches. Same hit / depth / time caps as before so unbounded searches can't melt the process.
+
+### Fixed
+- **Uninstalled programs now disappear from the list immediately** after a successful uninstall. No need to hit Refresh to see the row go away; the underlying engine still honours the registry on rescan so broken-uninstaller cases don't pretend to succeed.
+
 ## [v0.8.0] — Competitive feature pass
 
 Research-driven feature pass inspired by BCUninstaller, Revo Uninstaller, BleachBit, PrivaZer, and Sysinternals Autoruns.

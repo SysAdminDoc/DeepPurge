@@ -7,7 +7,7 @@ namespace DeepPurge.App;
 
 public partial class App : Application
 {
-    private const string Version = "0.8.0";
+    private const string Version = "0.8.1";
     private static readonly string CrashLogDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "DeepPurge", "Logs");

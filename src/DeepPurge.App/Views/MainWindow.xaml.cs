@@ -224,6 +224,12 @@ public partial class MainWindow : Window
         try
         {
             var result = await _vm.UninstallAsync(program, GetScanMode());
+            var ok = result?.Success == true;
+
+            // Drop the row immediately on success so the user sees the
+            // uninstall take effect without waiting for a full re-scan.
+            if (ok) _vm.RemoveProgramFromList(program);
+
             if (result?.LeftoverScan != null)
             {
                 _vm.ShowLeftoverResults(result.LeftoverScan);
@@ -231,7 +237,7 @@ public partial class MainWindow : Window
                 panelLeftovers.Visibility = Visibility.Visible;
                 btnDeleteLeftovers.IsEnabled = true;
             }
-            var ok = result?.Success == true;
+
             ShowToast(
                 ok ? $"Uninstalled {program.DisplayName}" : $"Uninstall may have issues for {program.DisplayName}",
                 isWarning: !ok);
