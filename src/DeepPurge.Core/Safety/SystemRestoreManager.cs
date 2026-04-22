@@ -3,13 +3,26 @@ using System.Management;
 
 namespace DeepPurge.Core.Safety;
 
-public class RestorePointInfo
+public class RestorePointInfo : System.ComponentModel.INotifyPropertyChanged
 {
+    private bool _isSelected;
+
     public int SequenceNumber { get; set; }
     public string Description { get; set; } = "";
     public DateTime CreationTime { get; set; }
     public string Type { get; set; } = "";
-    public bool IsSelected { get; set; }
+
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set
+        {
+            _isSelected = value;
+            PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(IsSelected)));
+        }
+    }
+
+    public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
     public string CreationTimeDisplay => CreationTime.ToString("yyyy-MM-dd HH:mm");
     public string AgeDisplay
     {
