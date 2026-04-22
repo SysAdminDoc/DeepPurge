@@ -1,36 +1,64 @@
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
+
 namespace DeepPurge.Core.Shell;
 
-public class ContextMenuEntry
+public class ContextMenuEntry : INotifyPropertyChanged
 {
+    private bool _isSelected;
+
     public string Name { get; set; } = "";
     public string Command { get; set; } = "";
     public string RegistryPath { get; set; } = "";
     public string Location { get; set; } = "";
     public bool IsOrphaned { get; set; }
-    public bool IsSelected { get; set; }
     public string Status => IsOrphaned ? "Orphaned" : "Valid";
+
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set { _isSelected = value; OnPropertyChanged(); }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+    private void OnPropertyChanged([CallerMemberName] string? name = null)
+        => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
 
 public static class ContextMenuCleaner
 {
+    private static readonly string[] ShellLocations =
+    {
+        @"*\shell",                                             // All files (verbs)
+        @"*\shellex\ContextMenuHandlers",                       // All files (handlers)
+        @"Directory\shell",                                     // Folders
+        @"Directory\shellex\ContextMenuHandlers",               // Folders (handlers)
+        @"Directory\Background\shell",                          // Folder background
+        @"Directory\Background\shellex\ContextMenuHandlers",    // Folder background (handlers)
+        @"Drive\shell",                                         // Drives
+        @"DesktopBackground\shell",                             // Desktop
+        @"DesktopBackground\shellex\ContextMenuHandlers",       // Desktop (handlers)
+    };
+
+    /// <summary>
+    /// Commands that always resolve through a system executable — we don't
+    /// treat these as orphaned even if File.Exists can't resolve them.
+    /// </summary>
+    private static readonly string[] SystemCommandMarkers =
+    {
+        "rundll32", "cmd.exe", "powershell", "pwsh",
+        "explorer.exe", "msiexec", "mmc.exe", "%systemroot%",
+    };
+
     public static List<ContextMenuEntry> ScanContextMenuEntries()
     {
         var entries = new List<ContextMenuEntry>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        // Scan shell extensions from multiple locations
-        ScanShellKey(entries, @"*\shell", "All Files");
-        ScanShellKey(entries, @"*\shellex\ContextMenuHandlers", "All Files (Handlers)");
-        ScanShellKey(entries, @"Directory\shell", "Folders");
-        ScanShellKey(entries, @"Directory\shellex\ContextMenuHandlers", "Folders (Handlers)");
-        ScanShellKey(entries, @"Directory\Background\shell", "Folder Background");
-        ScanShellKey(entries, @"Directory\Background\shellex\ContextMenuHandlers", "Folder Background (Handlers)");
-        ScanShellKey(entries, @"Drive\shell", "Drives");
-        ScanShellKey(entries, @"DesktopBackground\shell", "Desktop");
-        ScanShellKey(entries, @"DesktopBackground\shellex\ContextMenuHandlers", "Desktop (Handlers)");
+        foreach (var path in ShellLocations)
+            ScanShellKey(entries, seen, path, FriendlyLocation(path));
 
-        // File type associations
-        ScanFileTypeShellEntries(entries);
-
+        ScanFileTypeShellEntries(entries, seen);
         return entries;
     }
 
@@ -41,21 +69,25 @@ public static class ContextMenuCleaner
         {
             try
             {
-                using var key = global::Microsoft.Win32.Registry.ClassesRoot.OpenSubKey(
-                    GetParentPath(entry.RegistryPath), true);
-                if (key != null)
-                {
-                    var subName = Path.GetFileName(entry.RegistryPath);
-                    key.DeleteSubKeyTree(subName, false);
-                    removed++;
-                }
+                var parent = GetParentPath(entry.RegistryPath);
+                if (string.IsNullOrEmpty(parent)) continue;
+
+                using var key = global::Microsoft.Win32.Registry.ClassesRoot.OpenSubKey(parent, writable: true);
+                if (key == null) continue;
+
+                var subName = Path.GetFileName(entry.RegistryPath);
+                key.DeleteSubKeyTree(subName, throwOnMissingSubKey: false);
+                removed++;
             }
-            catch { }
+            catch { /* skip unreachable entries */ }
         }
         return removed;
     }
 
-    private static void ScanShellKey(List<ContextMenuEntry> entries, string subPath, string location)
+    // ═══════════════════════════════════════════════════════
+
+    private static void ScanShellKey(List<ContextMenuEntry> entries, HashSet<string> seen,
+        string subPath, string location)
     {
         try
         {
@@ -70,10 +102,9 @@ public static class ContextMenuCleaner
                     if (sub == null) continue;
 
                     var displayName = sub.GetValue(null)?.ToString() ?? name;
-                    var command = "";
-                    bool isOrphaned = false;
+                    string command;
+                    bool isOrphaned;
 
-                    // Check for command subkey
                     using var cmdKey = sub.OpenSubKey("command");
                     if (cmdKey != null)
                     {
@@ -82,39 +113,40 @@ public static class ContextMenuCleaner
                     }
                     else
                     {
-                        // Shell extension handler - check CLSID
+                        // Shell-extension handler - the default value should be a CLSID.
                         var clsid = sub.GetValue(null)?.ToString() ?? "";
-                        if (clsid.StartsWith("{"))
-                        {
-                            isOrphaned = !ClsidExists(clsid);
-                            command = $"CLSID: {clsid}";
-                        }
+                        if (!clsid.StartsWith("{")) continue;
+                        isOrphaned = !ClsidExists(clsid);
+                        command = $"CLSID: {clsid}";
                     }
+
+                    var regPath = $"{subPath}\\{name}";
+                    if (!seen.Add(regPath)) continue;
 
                     entries.Add(new ContextMenuEntry
                     {
                         Name = displayName,
                         Command = command,
-                        RegistryPath = $"{subPath}\\{name}",
+                        RegistryPath = regPath,
                         Location = location,
                         IsOrphaned = isOrphaned,
-                        IsSelected = isOrphaned,
+                        IsSelected = false,
                     });
                 }
-                catch { }
+                catch { /* skip unreadable child */ }
             }
         }
-        catch { }
+        catch { /* skip unreachable root */ }
     }
 
-    private static void ScanFileTypeShellEntries(List<ContextMenuEntry> entries)
+    private static void ScanFileTypeShellEntries(List<ContextMenuEntry> entries, HashSet<string> seen)
     {
         try
         {
             using var root = global::Microsoft.Win32.Registry.ClassesRoot;
             foreach (var name in root.GetSubKeyNames())
             {
-                if (!name.StartsWith(".")) continue;
+                if (!name.StartsWith('.')) continue;
                 try
                 {
                     using var extKey = root.OpenSubKey(name);
@@ -133,34 +165,41 @@ public static class ContextMenuCleaner
                             var cmd = cmdKey?.GetValue(null)?.ToString() ?? "";
                             if (string.IsNullOrEmpty(cmd)) continue;
 
-                            var isOrphaned = !CommandTargetExists(cmd);
-                            if (!isOrphaned) continue; // Only show orphaned for file types
+                            if (!IsCommandOrphaned(cmd)) continue; // Only show orphaned file-type verbs.
+
+                            var regPath = $"{progId}\\shell\\{shellName}";
+                            if (!seen.Add(regPath)) continue;
 
                             entries.Add(new ContextMenuEntry
                             {
                                 Name = shellSub?.GetValue(null)?.ToString() ?? shellName,
                                 Command = cmd,
-                                RegistryPath = $"{progId}\\shell\\{shellName}",
+                                RegistryPath = regPath,
                                 Location = $"File Type ({name})",
                                 IsOrphaned = true,
-                                IsSelected = true,
+                                IsSelected = false,
                             });
                         }
-                        catch { }
+                        catch { /* skip */ }
                     }
                 }
-                catch { }
+                catch { /* skip */ }
             }
         }
-        catch { }
+        catch { /* skip */ }
     }
+
+    // ═══════════════════════════════════════════════════════
+    //  Orphan detection
+    // ═══════════════════════════════════════════════════════
+
+    private static bool IsCommandOrphaned(string command) => !CommandTargetExists(command);
 
     private static bool CommandTargetExists(string command)
     {
         if (string.IsNullOrEmpty(command)) return false;
-        var path = command.Trim();
 
-        // Extract path from quoted or unquoted command
+        var path = command.Trim();
         if (path.StartsWith('"'))
         {
             var end = path.IndexOf('"', 1);
@@ -172,16 +211,14 @@ public static class ContextMenuCleaner
             if (space > 0) path = path[..space];
         }
 
-        // Expand environment variables
-        path = Environment.ExpandEnvironmentVariables(path);
+        if (string.IsNullOrEmpty(path)) return false;
 
-        // Ignore system built-ins
-        if (path.Contains("rundll32", StringComparison.OrdinalIgnoreCase) ||
-            path.Contains("cmd.exe", StringComparison.OrdinalIgnoreCase) ||
-            path.Contains("powershell", StringComparison.OrdinalIgnoreCase) ||
-            path.Contains("explorer.exe", StringComparison.OrdinalIgnoreCase) ||
-            path.Contains("msiexec", StringComparison.OrdinalIgnoreCase))
-            return true;
+        path = Environment.ExpandEnvironmentVariables(path);
+        var lower = path.ToLowerInvariant();
+
+        // System launchers - always consider valid.
+        foreach (var marker in SystemCommandMarkers)
+            if (lower.Contains(marker)) return true;
 
         return File.Exists(path);
     }
@@ -190,19 +227,35 @@ public static class ContextMenuCleaner
     {
         try
         {
-            using var key = global::Microsoft.Win32.Registry.ClassesRoot.OpenSubKey($"CLSID\\{clsid}\\InprocServer32");
-            if (key == null)
-            {
-                using var key64 = global::Microsoft.Win32.Registry.ClassesRoot.OpenSubKey($"WOW6432Node\\CLSID\\{clsid}\\InprocServer32");
-                if (key64 == null) return false;
-                var dll64 = key64.GetValue(null)?.ToString() ?? "";
-                return !string.IsNullOrEmpty(dll64) && File.Exists(Environment.ExpandEnvironmentVariables(dll64));
-            }
+            var relative = $"CLSID\\{clsid}\\InprocServer32";
+            using var key = global::Microsoft.Win32.Registry.ClassesRoot.OpenSubKey(relative)
+                         ?? global::Microsoft.Win32.Registry.ClassesRoot.OpenSubKey($"WOW6432Node\\{relative}");
+            if (key == null) return false;
+
             var dll = key.GetValue(null)?.ToString() ?? "";
-            return !string.IsNullOrEmpty(dll) && File.Exists(Environment.ExpandEnvironmentVariables(dll));
+            if (string.IsNullOrEmpty(dll)) return true; // Registered CLSID without path info — assume valid.
+            return File.Exists(Environment.ExpandEnvironmentVariables(dll));
         }
-        catch { return true; } // Assume valid if we can't check
+        catch { return true; } // Err on safe side: treat ambiguous as valid.
     }
+
+    // ═══════════════════════════════════════════════════════
+    //  Helpers
+    // ═══════════════════════════════════════════════════════
+
+    private static string FriendlyLocation(string path) => path switch
+    {
+        @"*\shell" => "All Files",
+        @"*\shellex\ContextMenuHandlers" => "All Files (Handlers)",
+        @"Directory\shell" => "Folders",
+        @"Directory\shellex\ContextMenuHandlers" => "Folders (Handlers)",
+        @"Directory\Background\shell" => "Folder Background",
+        @"Directory\Background\shellex\ContextMenuHandlers" => "Folder Background (Handlers)",
+        @"Drive\shell" => "Drives",
+        @"DesktopBackground\shell" => "Desktop",
+        @"DesktopBackground\shellex\ContextMenuHandlers" => "Desktop (Handlers)",
+        _ => path,
+    };
 
     private static string GetParentPath(string path)
     {

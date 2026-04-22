@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 
 namespace DeepPurge.Core.Safety;
 
@@ -9,27 +10,33 @@ public class BackupManager
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "DeepPurge", "Backups");
 
+    // Allow the subset of chars Windows registry keys actually permit in paths.
+    // Anything else is rejected rather than sanitized — if we saw a weird key,
+    // something upstream is wrong and we shouldn't be blindly issuing reg.exe.
+    private static readonly Regex SafeRegistryPath =
+        new(@"^(HKLM|HKCU|HKCR|HKU|HKEY_[A-Z_]+)(\\[^""<>|*?\r\n]*)?$", RegexOptions.Compiled);
+
     public BackupManager()
     {
-        Directory.CreateDirectory(BackupRoot);
+        try { Directory.CreateDirectory(BackupRoot); } catch { /* fallbacks to "" on failure */ }
     }
+
+    public string BackupDirectory => BackupRoot;
 
     public string BackupRegistryKey(string registryPath)
     {
         if (string.IsNullOrEmpty(registryPath)) return "";
 
+        var fullRegPath = NormalizeRegistryPath(registryPath);
+        if (!SafeRegistryPath.IsMatch(fullRegPath)) return "";
+
         var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-        var safeName = registryPath.Replace("\\", "_").Replace("/", "_");
+        var safeName = SanitizeForFileName(registryPath);
         if (safeName.Length > 100) safeName = safeName[..100];
         var backupFile = Path.Combine(BackupRoot, $"reg_{timestamp}_{safeName}.reg");
 
         try
         {
-            var fullRegPath = registryPath
-                .Replace("HKLM\\", "HKEY_LOCAL_MACHINE\\")
-                .Replace("HKCU\\", "HKEY_CURRENT_USER\\")
-                .Replace("HKCR\\", "HKEY_CLASSES_ROOT\\");
-
             var psi = new ProcessStartInfo
             {
                 FileName = "reg.exe",
@@ -49,7 +56,7 @@ public class BackupManager
 
     public bool RestoreRegistryBackup(string backupFile)
     {
-        if (!File.Exists(backupFile)) return false;
+        if (string.IsNullOrEmpty(backupFile) || !File.Exists(backupFile)) return false;
         try
         {
             var psi = new ProcessStartInfo
@@ -63,8 +70,9 @@ public class BackupManager
             };
 
             using var process = Process.Start(psi);
-            process?.WaitForExit(30000);
-            return process?.ExitCode == 0;
+            if (process == null) return false;
+            process.WaitForExit(30000);
+            return process.ExitCode == 0;
         }
         catch { return false; }
     }
@@ -74,7 +82,7 @@ public class BackupManager
         try
         {
             return Directory.GetFiles(BackupRoot, "*.reg")
-                .OrderByDescending(f => File.GetCreationTime(f))
+                .OrderByDescending(File.GetCreationTime)
                 .ToList();
         }
         catch { return new List<string>(); }
@@ -87,14 +95,26 @@ public class BackupManager
             var cutoff = DateTime.Now.AddDays(-keepDays);
             foreach (var file in Directory.GetFiles(BackupRoot, "*.reg"))
             {
-                if (File.GetCreationTime(file) < cutoff)
-                    File.Delete(file);
+                try { if (File.GetCreationTime(file) < cutoff) File.Delete(file); }
+                catch { /* best-effort */ }
             }
         }
-        catch { }
+        catch { /* best-effort */ }
     }
 
-    public string BackupDirectory => BackupRoot;
+    private static string NormalizeRegistryPath(string path) => path
+        .Replace("HKLM\\", "HKEY_LOCAL_MACHINE\\", StringComparison.OrdinalIgnoreCase)
+        .Replace("HKCU\\", "HKEY_CURRENT_USER\\", StringComparison.OrdinalIgnoreCase)
+        .Replace("HKCR\\", "HKEY_CLASSES_ROOT\\", StringComparison.OrdinalIgnoreCase)
+        .Replace("HKU\\",  "HKEY_USERS\\",        StringComparison.OrdinalIgnoreCase);
+
+    private static string SanitizeForFileName(string name)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        var cleaned = new string(name.Select(c =>
+            invalid.Contains(c) || c is '\\' or '/' or ':' ? '_' : c).ToArray());
+        return cleaned.Trim('_');
+    }
 }
 
 public static class RestorePointManager
@@ -126,6 +146,9 @@ public static class RestorePointManager
 
     public static bool CreateRestorePoint(string description)
     {
+        if (string.IsNullOrWhiteSpace(description)) description = "DeepPurge Checkpoint";
+        if (description.Length > 255) description = description[..255];
+
         try
         {
             var rpInfo = new RESTOREPOINTINFO
@@ -133,30 +156,33 @@ public static class RestorePointManager
                 dwEventType = BEGIN_SYSTEM_CHANGE,
                 dwRestorePtType = APPLICATION_UNINSTALL,
                 llSequenceNumber = 0,
-                szDescription = description.Length > 255 ? description[..255] : description,
+                szDescription = description,
             };
 
-            var success = SRSetRestorePointW(ref rpInfo, out var status);
-            if (success && status.nStatus == 0)
+            if (SRSetRestorePointW(ref rpInfo, out var status) && status.nStatus == 0)
                 return true;
         }
-        catch { }
+        catch { /* fall through to PowerShell */ }
 
-        // Fallback: PowerShell
         try
         {
-            var escapedDesc = description.Replace("'", "''");
+            // Escape single quotes for PowerShell single-quoted literal.
+            var escaped = description.Replace("'", "''");
             var psi = new ProcessStartInfo
             {
                 FileName = "powershell.exe",
-                Arguments = $"-NoProfile -Command \"Checkpoint-Computer -Description '{escapedDesc}' -RestorePointType 'APPLICATION_UNINSTALL'\"",
+                Arguments = "-NoProfile -Command \"" +
+                    $"Checkpoint-Computer -Description '{escaped}' " +
+                    "-RestorePointType 'APPLICATION_UNINSTALL'\"",
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardError = true,
+                RedirectStandardOutput = true,
             };
             using var p = Process.Start(psi);
-            p?.WaitForExit(60000);
-            return p?.ExitCode == 0;
+            if (p == null) return false;
+            p.WaitForExit(60000);
+            return p.ExitCode == 0;
         }
         catch { return false; }
     }
