@@ -8,7 +8,7 @@
     <Nullable>enable</Nullable>
     <RootNamespace>DeepPurge.App</RootNamespace>
     <AssemblyName>DeepPurge</AssemblyName>
-    <Version>0.8.0</Version>
+    <Version>0.8.1</Version>
     <Authors>SysAdminDoc</Authors>
     <Description>DeepPurge - Open source program uninstaller for Windows</Description>
     <ApplicationIcon>..\..\icon.ico</ApplicationIcon>

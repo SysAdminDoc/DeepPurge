@@ -8,9 +8,9 @@
 </p>
 <!-- codex-branding:end -->
 
-# DeepPurge v0.8.0
+# DeepPurge v0.8.1
 
-![Version](https://img.shields.io/badge/version-v0.8.0-blue) ![License](https://img.shields.io/badge/license-MIT-green) ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey)
+![Version](https://img.shields.io/badge/version-v0.8.1-blue) ![License](https://img.shields.io/badge/license-MIT-green) ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey)
 
 A thorough, open-source Windows uninstaller that goes deep. Removes programs completely, hunts down every leftover, and cleans system cruft that other tools miss.
 
@@ -31,7 +31,7 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 - **Junk Cleaner** - Browser caches, temp files, crash dumps, prefetch, installer cache, Windows Update leftovers
 - **Evidence Remover** - Recent documents, jump lists, thumbnail cache, clipboard, DNS cache, Explorer history, Windows logs, crash reports, error reports, font cache, delivery optimization cache
 - **Empty Folders** - Scan common locations for empty directory trees and remove them
-- **Disk Analyzer** - Folder size breakdown and large file finder (50MB+) with delete capability
+- **Disk Analyzer** - Folder size breakdown and large file finder (50MB+) with delete capability. Uses WizTree's raw-MFT technique (`FSCTL_ENUM_USN_DATA` + `FSCTL_GET_NTFS_FILE_RECORD`) on NTFS volumes; parallel `FindFirstFileExW(FIND_FIRST_EX_LARGE_FETCH)` fallback on ReFS/FAT32. Typical full-drive scan in seconds.
 - **Dry-run / Preview mode** - Every destructive pipeline can be previewed: enumerate and size items without touching them *(inspired by BleachBit)*
 - **Secure Delete** - Privacy-grade wipe (single-pass cryptographic random + opaque rename + delete — multi-pass DoD wipes are obsolete on SSDs and deliberately omitted) *(inspired by BleachBit/PrivaZer)*
 - **Live progress bars** - Every long-running delete reports item / total / bytes-freed / current path in the status bar
@@ -43,7 +43,7 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 - **Context Menu Cleaner** - Find and remove orphaned shell context menu entries with broken executables or CLSIDs
 - **Services Manager** - View all Windows services, identify orphaned services pointing to deleted executables, disable or delete
 - **Scheduled Tasks** - Full task inventory with orphan detection, disable and delete capabilities
-- **Registry Hunter** - Arbitrary-substring search across HKLM / HKCU / HKCR with depth, hit, and time caps *(inspired by Revo's trace scanner)*
+- **Registry Hunter** - Parallel substring or regex search across HKLM, HKLM\\WOW6432Node, HKCU, and HKCR with scope filters (keys / names / data), live hit counter, and depth / hit / time caps *(inspired by NirSoft RegScanner and Eric Zimmerman's Registry Explorer)*
 
 ### Safety
 - **System Restore Points** - View, create, and manage restore points

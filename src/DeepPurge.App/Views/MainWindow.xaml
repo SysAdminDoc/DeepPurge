@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:DeepPurge.App.ViewModels"
         xmlns:conv="clr-namespace:DeepPurge.App.Converters"
-        Title="DeepPurge v0.8.0" Width="1380" Height="900"
+        Title="DeepPurge v0.8.1" Width="1380" Height="900"
         MinWidth="1060" MinHeight="700" WindowStartupLocation="CenterScreen"
         Style="{DynamicResource MainWindowStyle}">
 
@@ -202,23 +202,9 @@
             </StackPanel>
         </DataTemplate>
 
-        <!-- ══ LOADING OVERLAY STORYBOARDS ══ -->
         <CubicEase x:Key="EaseOut" EasingMode="EaseOut"/>
 
-        <!-- Spinner rotation -->
-        <Storyboard x:Key="SpinnerRotation" RepeatBehavior="Forever">
-            <DoubleAnimation Storyboard.TargetName="SpinnerRotateTransform"
-                             Storyboard.TargetProperty="Angle"
-                             From="0" To="360" Duration="0:0:1.2"/>
-        </Storyboard>
-
     </Window.Resources>
-
-    <Window.Triggers>
-        <EventTrigger RoutedEvent="Window.Loaded">
-            <BeginStoryboard Storyboard="{StaticResource SpinnerRotation}"/>
-        </EventTrigger>
-    </Window.Triggers>
 
     <!-- ════════════════════════════════════════════════════════════════ -->
     <!-- ROOT GRID -->
@@ -283,7 +269,7 @@
                                 <StackPanel VerticalAlignment="Center">
                                     <TextBlock Text="DeepPurge" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource TextBrush}"/>
                                     <TextBlock FontSize="10.5" Foreground="{DynamicResource Subtext0Brush}" Margin="0,1,0,0">
-                                        <Run Text="v0.8.0"/>
+                                        <Run Text="v0.8.1"/>
                                     </TextBlock>
                                 </StackPanel>
                             </StackPanel>
@@ -904,27 +890,56 @@
                         </DataGrid.Columns>
                     </DataGrid>
 
-                    <!-- REGISTRY HUNTER -->
+                    <!-- REGISTRY HUNTER (parallel across HKLM/HKCU/HKCR roots) -->
                     <Grid x:Name="panelHunter" Visibility="Collapsed">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
-                        <Border Grid.Row="0" Padding="24,16,24,16">
+
+                        <!-- Query row -->
+                        <Border Grid.Row="0" Padding="24,16,24,8">
                             <DockPanel>
                                 <Button DockPanel.Dock="Right" Content="Search" Click="RegistryHunt_Click"
                                         Style="{DynamicResource AccentButton}" Margin="10,0,0,0" Padding="22,8"/>
                                 <TextBox x:Name="txtHunter" KeyDown="HunterInput_KeyDown"
-                                         ToolTip="Search all of HKLM / HKCU / HKCR for a substring (3+ chars)"/>
+                                         ToolTip="Search all of HKLM / HKCU / HKCR / WOW6432Node in parallel (3+ chars)"/>
                             </DockPanel>
                         </Border>
-                        <DataGrid Grid.Row="1" x:Name="dgHunter" AutoGenerateColumns="False"
+
+                        <!-- Scope + regex toggles -->
+                        <Border Grid.Row="1" Padding="24,4,24,14">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Match in:" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource Subtext0Brush}" FontSize="11"
+                                           Margin="0,0,10,0"/>
+                                <CheckBox IsChecked="{Binding HunterSearchKeys}" VerticalAlignment="Center" Margin="0,0,14,0">
+                                    <TextBlock Text="Keys" Margin="6,0,0,0" FontSize="11"/>
+                                </CheckBox>
+                                <CheckBox IsChecked="{Binding HunterSearchNames}" VerticalAlignment="Center" Margin="0,0,14,0">
+                                    <TextBlock Text="Value names" Margin="6,0,0,0" FontSize="11"/>
+                                </CheckBox>
+                                <CheckBox IsChecked="{Binding HunterSearchData}" VerticalAlignment="Center" Margin="0,0,24,0">
+                                    <TextBlock Text="Value data" Margin="6,0,0,0" FontSize="11"/>
+                                </CheckBox>
+                                <CheckBox IsChecked="{Binding HunterUseRegex}" VerticalAlignment="Center" Margin="0,0,24,0">
+                                    <TextBlock Text="Regex" Margin="6,0,0,0" FontSize="11"
+                                               Foreground="{DynamicResource MauveBrush}"/>
+                                </CheckBox>
+                                <TextBlock Text="{Binding HunterLiveCount, StringFormat={}{0} hits}"
+                                           VerticalAlignment="Center" FontSize="11" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource AccentBrush}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <DataGrid Grid.Row="2" x:Name="dgHunter" AutoGenerateColumns="False"
                                   ItemsSource="{Binding RegistryHits}">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Binding="{Binding Path}" Header="PATH" Width="*"/>
                                 <DataGridTextColumn Binding="{Binding ValueName}" Header="VALUE" Width="180"/>
                                 <DataGridTextColumn Binding="{Binding ValueData}" Header="DATA" Width="300"/>
-                                <DataGridTextColumn Binding="{Binding Match}" Header="MATCH" Width="80"/>
+                                <DataGridTextColumn Binding="{Binding Match}" Header="MATCH" Width="95"/>
                             </DataGrid.Columns>
                         </DataGrid>
                     </Grid>
@@ -1141,28 +1156,25 @@
                     <!-- App name -->
                     <TextBlock Text="DeepPurge" FontSize="28" FontWeight="Bold"
                                Foreground="{DynamicResource TextBrush}" HorizontalAlignment="Center" Margin="0,0,0,6"/>
-                    <TextBlock Text="v0.8.0" FontSize="11" FontWeight="Medium"
+                    <TextBlock Text="v0.8.1" FontSize="11" FontWeight="Medium"
                                Foreground="{DynamicResource Subtext0Brush}" HorizontalAlignment="Center" Margin="0,0,0,28"
                                Opacity="0.5"/>
 
                     <!-- Status text -->
                     <TextBlock Text="{Binding ScanOverlayText}" FontSize="14" FontWeight="Medium"
-                               Foreground="{DynamicResource SubtextBrush}" HorizontalAlignment="Center" Margin="0,0,0,18"/>
+                               Foreground="{DynamicResource SubtextBrush}" HorizontalAlignment="Center" Margin="0,0,0,16"/>
 
-                    <!-- Animated spinner ring -->
-                    <Canvas Width="56" Height="56" HorizontalAlignment="Center" Margin="0,0,0,20">
-                        <Ellipse Width="56" Height="56" Stroke="{DynamicResource Surface1Brush}" StrokeThickness="2.5" Fill="Transparent"/>
-                        <Path Data="M28,0 A28,28 0 0 1 56,28" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2.5"
-                              StrokeStartLineCap="Round" StrokeEndLineCap="Round" RenderTransformOrigin="0.5,0.5">
-                            <Path.RenderTransform>
-                                <RotateTransform x:Name="SpinnerRotateTransform" Angle="0" CenterX="28" CenterY="28"/>
-                            </Path.RenderTransform>
-                        </Path>
-                    </Canvas>
+                    <!-- Big percentage readout -->
+                    <TextBlock Text="{Binding OverlayScanProgress, StringFormat={}{0:F0}%}"
+                               FontSize="42" FontWeight="Bold"
+                               Foreground="{DynamicResource AccentBrush}"
+                               HorizontalAlignment="Center" Margin="0,0,0,10"/>
 
-                    <!-- Subtle progress bar -->
-                    <ProgressBar Width="280" Height="2" IsIndeterminate="True"
-                                 Foreground="{DynamicResource AccentBrush}" Background="{DynamicResource Surface0Brush}"/>
+                    <!-- Determinate progress bar, driven by the scan's step counter. -->
+                    <ProgressBar Width="320" Height="6"
+                                 Value="{Binding OverlayScanProgress}" Maximum="100"
+                                 Foreground="{DynamicResource AccentBrush}"
+                                 Background="{DynamicResource Surface0Brush}"/>
                 </StackPanel>
             </Grid>
         </Border>

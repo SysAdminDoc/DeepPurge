@@ -136,6 +136,22 @@ public partial class MainViewModel : ObservableObject
 
         IsInitialScanRunning = true;
         ScanOverlayText = "DeepPurge is analyzing your system...";
+        OverlayScanProgress = 0;
+
+        // 11 phases: programs + 10 parallel scanners. Each tick moves the
+        // overlay progress a fixed fraction so the user sees real movement
+        // instead of a perpetually-spinning circle.
+        const int totalSteps = 11;
+        int completedSteps = 0;
+        void Tick(string? stepLabel = null)
+        {
+            var done = Interlocked.Increment(ref completedSteps);
+            _dispatcher.BeginInvoke(() =>
+            {
+                OverlayScanProgress = 100.0 * done / totalSteps;
+                if (!string.IsNullOrEmpty(stepLabel)) ScanOverlayText = stepLabel;
+            });
+        }
 
         try
         {
@@ -153,17 +169,19 @@ public partial class MainViewModel : ObservableObject
                 ProgramsScanProgress = 100;
                 _loadedPanels.Add("Programs");
             });
+            Tick($"Loaded {programs.Count} programs — scanning the rest...");
 
             StartIconBackfill(programs);
             StartPackageEnrichment(programs);
 
-            ScanOverlayText = "Scanning junk, tasks, autorun, extensions...";
-
+            // Each parallel task calls Tick() on completion so the progress
+            // bar advances as individual scanners finish, not just at the end.
             var junkTask = Task.Run(() =>
             {
                 _dispatcher.BeginInvoke(() => JunkScanProgress = 10);
                 var result = JunkFilesCleaner.ScanForJunk();
                 _dispatcher.BeginInvoke(() => JunkScanProgress = 100);
+                Tick("Junk categories discovered...");
                 return result;
             }, ct);
 
@@ -172,17 +190,18 @@ public partial class MainViewModel : ObservableObject
                 _dispatcher.BeginInvoke(() => TasksScanProgress = 10);
                 var result = ScheduledTaskScanner.GetAllTasks();
                 _dispatcher.BeginInvoke(() => TasksScanProgress = 100);
+                Tick("Scheduled tasks enumerated...");
                 return result;
             }, ct);
 
-            var autorunTask = Task.Run(() => AutorunScanner.GetAllAutoruns(), ct);
-            var extTask = Task.Run(() => BrowserExtensionScanner.GetAllExtensions(), ct);
-            var appsTask = WindowsAppManager.GetInstalledAppsAsync();
-            var evidenceTask = Task.Run(() => EvidenceRemover.ScanAllTraces(), ct);
-            var emptyTask = Task.Run(() => EmptyFolderScanner.ScanCommonLocations(), ct);
-            var ctxTask = Task.Run(() => ContextMenuCleaner.ScanContextMenuEntries(), ct);
-            var svcTask = Task.Run(() => ServiceScanner.GetAllServices(), ct);
-            var restoreTask = Task.Run(() => SystemRestoreManager.GetRestorePoints(), ct);
+            var autorunTask = Task.Run(() => { var r = AutorunScanner.GetAllAutoruns(); Tick("Autoruns + signatures checked..."); return r; }, ct);
+            var extTask     = Task.Run(() => { var r = BrowserExtensionScanner.GetAllExtensions(); Tick("Browser extensions scanned..."); return r; }, ct);
+            var appsTask    = WindowsAppManager.GetInstalledAppsAsync().ContinueWith(t => { Tick("Windows Apps enumerated..."); return t.Result; }, ct);
+            var evidenceTask= Task.Run(() => { var r = EvidenceRemover.ScanAllTraces(); Tick("Privacy traces scanned..."); return r; }, ct);
+            var emptyTask   = Task.Run(() => { var r = EmptyFolderScanner.ScanCommonLocations(); Tick("Empty folders scanned..."); return r; }, ct);
+            var ctxTask     = Task.Run(() => { var r = ContextMenuCleaner.ScanContextMenuEntries(); Tick("Shell context menu scanned..."); return r; }, ct);
+            var svcTask     = Task.Run(() => { var r = ServiceScanner.GetAllServices(); Tick("Services + signatures checked..."); return r; }, ct);
+            var restoreTask = Task.Run(() => { var r = SystemRestoreManager.GetRestorePoints(); Tick("Restore points loaded..."); return r; }, ct);
 
             await Task.WhenAll(junkTask, tasksTask, autorunTask, extTask, appsTask,
                                evidenceTask, emptyTask, ctxTask, svcTask, restoreTask);
@@ -199,6 +218,7 @@ public partial class MainViewModel : ObservableObject
                 ApplyContextMenuResults(ctxTask.Result);
                 ApplyServiceResults(svcTask.Result);
                 ApplyRestoreResults(restoreTask.Result);
+                OverlayScanProgress = 100;
             });
 
             ScanOverlayText = "Scan complete!";
@@ -408,11 +428,18 @@ public partial class MainViewModel : ObservableObject
 
     public async Task ScanDiskAsync()
     {
-        IsBusy = true; StatusText = "Analyzing disk space...";
+        IsBusy = true;
+        StatusText = "Analyzing disk space (WizTree-style MFT scan)...";
+
+        var sw = Stopwatch.StartNew();
         try
         {
-            var folders = await Task.Run(() => DiskSpaceAnalyzer.AnalyzeFolder(@"C:\", 1));
-            var large = await Task.Run(() => DiskSpaceAnalyzer.FindLargeFiles(@"C:\", 50 * 1024 * 1024, 200));
+            // FastDiskAnalyzer tries a raw NTFS MFT scan first (single sequential
+            // read per volume) and falls back to FindFirstFileExW with the
+            // large-fetch flag — both substantially faster than the old
+            // Directory.EnumerateFiles path.
+            var folders = await Task.Run(() => FastDiskAnalyzer.AnalyzeDrive(@"C:\"));
+            var large = await Task.Run(() => FastDiskAnalyzer.FindLargeFiles(@"C:\", 50 * 1024 * 1024, 200));
 
             DiskFolders.Clear();
             foreach (var f in folders) DiskFolders.Add(f);
@@ -420,8 +447,9 @@ public partial class MainViewModel : ObservableObject
             LargeFiles.Clear();
             foreach (var f in large) LargeFiles.Add(f);
 
+            sw.Stop();
             StatusText = $"Found {folders.Count} top-level folders, {large.Count} large files " +
-                         $"({FormatSize(large.Sum(f => f.SizeBytes))})";
+                         $"({FormatSize(large.Sum(f => f.SizeBytes))}) in {sw.Elapsed.TotalSeconds:F1}s";
         }
         finally { IsBusy = false; }
     }
@@ -740,25 +768,60 @@ public partial class MainViewModel : ObservableObject
 
     public ObservableCollection<RegistryHit> RegistryHits { get; } = new();
 
+    [ObservableProperty] private bool _hunterUseRegex;
+    [ObservableProperty] private bool _hunterSearchKeys = true;
+    [ObservableProperty] private bool _hunterSearchNames = true;
+    [ObservableProperty] private bool _hunterSearchData = true;
+    [ObservableProperty] private int _hunterLiveCount;
+
     public async Task<int> HuntRegistryAsync(string needle)
     {
         RegistryHits.Clear();
+        HunterLiveCount = 0;
+
         if (string.IsNullOrWhiteSpace(needle) || needle.Length < 3)
         {
             StatusText = "Enter at least 3 characters to search the registry";
             return 0;
         }
 
+        var scope = RegistrySearchScope.All;
+        scope = (HunterSearchKeys ? scope : scope & ~RegistrySearchScope.Keys);
+        scope = (HunterSearchNames ? scope : scope & ~RegistrySearchScope.Names);
+        scope = (HunterSearchData ? scope : scope & ~RegistrySearchScope.Data);
+
+        if (scope == 0)
+        {
+            StatusText = "Pick at least one search target (keys / names / data)";
+            return 0;
+        }
+
+        var options = new RegistryHuntOptions(
+            Scope: scope,
+            UseRegex: HunterUseRegex,
+            MaxHits: 500);
+
         _cts = new CancellationTokenSource();
         IsBusy = true;
         StatusText = $"Searching registry for '{needle}'...";
+        var sw = Stopwatch.StartNew();
+
         try
         {
-            var hits = await Task.Run(() => RegistryHunter.Search(needle, ct: _cts.Token), _cts.Token);
+            var progress = new Progress<int>(count =>
+                _dispatcher.BeginInvoke(() => HunterLiveCount = count));
+
+            var hits = await Task.Run(
+                () => RegistryHunter.Search(needle, options, progress, _cts.Token),
+                _cts.Token);
+
             foreach (var h in hits) RegistryHits.Add(h);
-            StatusText = hits.Count >= 500
-                ? $"Registry hunter: found 500+ matches for '{needle}' (capped)"
-                : $"Registry hunter: {hits.Count} matches for '{needle}'";
+            HunterLiveCount = hits.Count;
+
+            sw.Stop();
+            StatusText = hits.Count >= options.MaxHits
+                ? $"Registry hunter: {options.MaxHits}+ matches for '{needle}' (capped) in {sw.Elapsed.TotalSeconds:F1}s"
+                : $"Registry hunter: {hits.Count} matches for '{needle}' in {sw.Elapsed.TotalSeconds:F1}s";
             return hits.Count;
         }
         finally
@@ -802,6 +865,21 @@ public partial class MainViewModel : ObservableObject
                 : p.CurrentItem.Length > 60 ? "…" + p.CurrentItem[^60..] : p.CurrentItem;
             OperationProgressText = $"{verb} {p.ItemsProcessed}/{p.ItemsTotal} · {short_}";
         });
+    }
+
+    /// <summary>
+    /// Remove a program from the visible lists without re-scanning the entire
+    /// registry. Called by the view after a successful uninstall so the user
+    /// sees the program disappear immediately instead of staring at a stale
+    /// row. A full <see cref="RefreshAsync"/> is still available behind the
+    /// Refresh button if the uninstaller lied about success.
+    /// </summary>
+    public void RemoveProgramFromList(InstalledProgram program)
+    {
+        Programs.Remove(program);
+        FilteredPrograms.Remove(program);
+        ProgramCountText = $"{Programs.Count} programs";
+        ProgramsBadge = Programs.Count.ToString();
     }
 
     public void OpenBackupFolder()
