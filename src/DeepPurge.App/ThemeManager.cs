@@ -1,47 +1,119 @@
+using System.IO;
 using System.Windows;
 
 namespace DeepPurge.App;
 
+/// <summary>
+/// Runtime theme swapper. The first merged dictionary in Application.Resources
+/// is always the active color theme; BaseStyles.xaml follows with DynamicResource
+/// references so every control updates instantly on swap.
+/// </summary>
 public static class ThemeManager
 {
     public record ThemeInfo(string Name, string FileName, string Category);
 
+    // Five themes, dark-first (per global CLAUDE.md preference).
     private static readonly ThemeInfo[] Themes =
     {
-        new("Arctic",    "Arctic.xaml",    "Light"),
-        new("Obsidian",  "Obsidian.xaml",  "Dark"),
-        new("Matrix",    "Matrix.xaml",    "Tech"),
+        new("Catppuccin Mocha", "CatppuccinMocha.xaml", "Dark"),
+        new("OLED Black",       "OledBlack.xaml",       "Dark"),
+        new("Dracula",          "Dracula.xaml",         "Dark"),
+        new("Nord Polar",       "NordPolar.xaml",       "Dark"),
+        new("GitHub Dark",      "GitHubDark.xaml",      "Dark"),
+        new("Arctic",           "Arctic.xaml",          "Light"),
+        new("Obsidian",         "Obsidian.xaml",        "Dark"),
+        new("Matrix",           "Matrix.xaml",          "Dark"),
     };
 
+    private static readonly string SettingsDir = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "DeepPurge");
+    private static readonly string SettingsFile = Path.Combine(SettingsDir, "theme.txt");
+
     private static int _currentIndex;
+    private static int _lastDarkIndex;
 
     public static IReadOnlyList<ThemeInfo> AvailableThemes => Themes;
     public static IReadOnlyList<string> ThemeNames => Themes.Select(t => t.Name).ToArray();
     public static string CurrentThemeName => Themes[_currentIndex].Name;
     public static int CurrentThemeIndex => _currentIndex;
-    public static bool IsDarkTheme => Themes[_currentIndex].Category != "Light";
+    public static bool IsDarkTheme => !Themes[_currentIndex].Category.Equals("Light", StringComparison.OrdinalIgnoreCase);
 
-    public static void ApplyTheme(int index)
+    /// <summary>
+    /// Applies the saved theme (or the default dark theme on first run).
+    /// Safe to call early in App.OnStartup before the main window loads.
+    /// </summary>
+    public static void ApplySavedOrDefault()
     {
-        if (index < 0 || index >= Themes.Length) return;
-        _currentIndex = index;
-        var dicts = Application.Current.Resources.MergedDictionaries;
-        if (dicts.Count < 1) return;
-        dicts[0] = new ResourceDictionary
-        {
-            Source = new Uri($"/Themes/Colors/{Themes[index].FileName}", UriKind.Relative)
-        };
+        var saved = TryReadSavedTheme();
+        var idx = saved >= 0 ? saved : 0; // 0 = Catppuccin Mocha (dark default)
+        ApplyTheme(idx, persist: false);
     }
+
+    public static void ApplyTheme(int index) => ApplyTheme(index, persist: true);
 
     public static void ApplyTheme(string name)
     {
         var idx = Array.FindIndex(Themes, t => t.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
-        if (idx >= 0) ApplyTheme(idx);
+        if (idx >= 0) ApplyTheme(idx, persist: true);
     }
 
-    /// <summary>Toggle between Arctic (light) and Obsidian (dark)</summary>
+    private static void ApplyTheme(int index, bool persist)
+    {
+        if (index < 0 || index >= Themes.Length) return;
+
+        var app = Application.Current;
+        if (app == null) return;
+
+        var dict = new ResourceDictionary
+        {
+            Source = new Uri($"pack://application:,,,/Themes/Colors/{Themes[index].FileName}", UriKind.Absolute)
+        };
+
+        var merged = app.Resources.MergedDictionaries;
+        if (merged.Count == 0) merged.Add(dict);
+        else merged[0] = dict;
+
+        _currentIndex = index;
+        if (IsDarkTheme) _lastDarkIndex = index;
+
+        if (persist) TryWriteSavedTheme(Themes[index].Name);
+    }
+
+    /// <summary>Toggle between the most recent dark theme and Arctic (light).</summary>
     public static void ToggleLightDark()
     {
-        ApplyTheme(IsDarkTheme ? 0 : 1); // 0=Arctic, 1=Obsidian
+        if (IsDarkTheme)
+        {
+            var arcticIdx = Array.FindIndex(Themes, t => t.Category.Equals("Light", StringComparison.OrdinalIgnoreCase));
+            if (arcticIdx >= 0) ApplyTheme(arcticIdx, persist: true);
+        }
+        else
+        {
+            ApplyTheme(_lastDarkIndex, persist: true);
+        }
+    }
+
+    // ── persistence ───────────────────────────────────────────────
+
+    private static int TryReadSavedTheme()
+    {
+        try
+        {
+            if (!File.Exists(SettingsFile)) return -1;
+            var name = File.ReadAllText(SettingsFile).Trim();
+            return Array.FindIndex(Themes, t => t.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        }
+        catch { return -1; }
+    }
+
+    private static void TryWriteSavedTheme(string name)
+    {
+        try
+        {
+            Directory.CreateDirectory(SettingsDir);
+            File.WriteAllText(SettingsFile, name);
+        }
+        catch { /* non-fatal */ }
     }
 }

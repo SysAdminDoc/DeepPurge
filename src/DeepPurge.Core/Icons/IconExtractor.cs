@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -7,10 +8,14 @@ using System.Windows.Media.Imaging;
 
 namespace DeepPurge.Core.Icons;
 
+/// <summary>
+/// Shell-assisted icon extraction for InstalledProgram rows. All returned
+/// <see cref="ImageSource"/> instances are frozen, so they can be assigned
+/// across threads without WPF dispatcher affinity issues.
+/// </summary>
 public static class IconExtractor
 {
     private static readonly ConcurrentDictionary<string, ImageSource?> _cache = new(StringComparer.OrdinalIgnoreCase);
-
     private static readonly BitmapSource _defaultIcon = CreateDefaultIcon();
 
     // ── Shell32 P/Invoke ──────────────────────────────────────────
@@ -37,22 +42,18 @@ public static class IconExtractor
         public string szTypeName;
     }
 
-    private const uint SHGFI_ICON = 0x000000100;
-    private const uint SHGFI_LARGEICON = 0x000000000;
-    private const uint SHGFI_SMALLICON = 0x000000001;
-    private const uint SHGFI_USEFILEATTRIBUTES = 0x000000010;
+    private const uint SHGFI_ICON = 0x00000100;
+    private const uint SHGFI_LARGEICON = 0x00000000;
+    private const uint SHGFI_USEFILEATTRIBUTES = 0x00000010;
+    private const uint FILE_ATTRIBUTE_NORMAL = 0x00000080;
 
     // ── Public API ────────────────────────────────────────────────
 
     public static ImageSource DefaultIcon => _defaultIcon;
 
-    /// <summary>
-    /// Extracts icon for a program. Tries DisplayIcon, UninstallString exe, InstallLocation exe.
-    /// Returns a cached frozen BitmapSource suitable for binding from any thread.
-    /// </summary>
     public static ImageSource? GetProgramIcon(string? displayIconPath, string? uninstallString, string? installLocation)
     {
-        var cacheKey = $"{displayIconPath}|{uninstallString}|{installLocation}";
+        var cacheKey = BuildCacheKey(displayIconPath, uninstallString, installLocation);
         if (_cache.TryGetValue(cacheKey, out var cached))
             return cached ?? _defaultIcon;
 
@@ -60,9 +61,7 @@ public static class IconExtractor
 
         // 1. Try DisplayIcon path (most reliable)
         if (!string.IsNullOrEmpty(displayIconPath))
-        {
             result = ExtractFromDisplayIcon(displayIconPath);
-        }
 
         // 2. Try exe from UninstallString
         if (result == null && !string.IsNullOrEmpty(uninstallString))
@@ -70,14 +69,12 @@ public static class IconExtractor
             var exePath = ExtractExePath(uninstallString);
             if (!string.IsNullOrEmpty(exePath))
             {
-                // Expand environment variables
-                exePath = Environment.ExpandEnvironmentVariables(exePath);
-                if (File.Exists(exePath))
-                    result = ExtractFromFile(exePath);
+                var expanded = Environment.ExpandEnvironmentVariables(exePath);
+                if (File.Exists(expanded)) result = ExtractFromFile(expanded);
             }
         }
 
-        // 3. Try finding exes in InstallLocation (top-level + one level deep)
+        // 3. Try InstallLocation (top-level, then one level deep, at most 5 exes each)
         if (result == null && !string.IsNullOrEmpty(installLocation))
         {
             var loc = Environment.ExpandEnvironmentVariables(installLocation);
@@ -85,108 +82,62 @@ public static class IconExtractor
             {
                 try
                 {
-                    // Top-level first
-                    foreach (var exe in Directory.GetFiles(loc, "*.exe", SearchOption.TopDirectoryOnly).Take(5))
-                    {
-                        result = ExtractFromFile(exe);
-                        if (result != null) break;
-                    }
-                    // One level deep if still null
-                    if (result == null)
-                    {
-                        foreach (var exe in Directory.EnumerateFiles(loc, "*.exe", new EnumerationOptions
-                            { MaxRecursionDepth = 1, RecurseSubdirectories = true, IgnoreInaccessible = true }).Take(5))
-                        {
-                            result = ExtractFromFile(exe);
-                            if (result != null) break;
-                        }
-                    }
+                    result = ProbeFolderForIcon(loc, SearchOption.TopDirectoryOnly);
+                    result ??= ProbeFolderForIcon(loc, SearchOption.AllDirectories, maxDepth: 1);
                 }
-                catch { }
+                catch { /* skip */ }
             }
         }
 
         // 4. Try App Paths registry lookup
         if (result == null && !string.IsNullOrEmpty(uninstallString))
-        {
             result = TryAppPathsLookup(uninstallString);
-        }
 
-        // 5. Try SHGetFileInfo on DisplayIcon path with USEFILEATTRIBUTES flag (works for non-existent files)
+        // 5. Last resort: SHGetFileInfo with USEFILEATTRIBUTES (works even if file is missing)
         if (result == null && !string.IsNullOrEmpty(displayIconPath))
-        {
-            var path = displayIconPath.Trim().Trim('"');
-            var comma = path.LastIndexOf(',');
-            if (comma > 2) path = path[..comma].Trim().Trim('"');
-            path = Environment.ExpandEnvironmentVariables(path);
-            if (!string.IsNullOrEmpty(path) && path.Contains('.'))
-            {
-                var shfi = new SHFILEINFO();
-                var r = SHGetFileInfo(path, 0x80, ref shfi,
-                    (uint)Marshal.SizeOf(typeof(SHFILEINFO)), SHGFI_ICON | SHGFI_LARGEICON | SHGFI_USEFILEATTRIBUTES);
-                if (r != 0 && shfi.hIcon != IntPtr.Zero)
-                {
-                    try
-                    {
-                        var source = Imaging.CreateBitmapSourceFromHIcon(shfi.hIcon, Int32Rect.Empty,
-                            BitmapSizeOptions.FromWidthAndHeight(32, 32));
-                        source.Freeze();
-                        result = source;
-                    }
-                    catch { }
-                    finally { DestroyIcon(shfi.hIcon); }
-                }
-            }
-        }
+            result = TryUseFileAttributesFallback(displayIconPath);
 
         _cache[cacheKey] = result;
         return result ?? _defaultIcon;
     }
 
-    /// <summary>
-    /// Pre-loads icons for a batch of programs on a background thread.
-    /// Returns a dictionary mapping cache keys to ImageSource.
-    /// </summary>
-    public static Dictionary<string, ImageSource> BatchExtract(
-        IEnumerable<(string? displayIcon, string? uninstall, string? installLoc)> programs)
-    {
-        var results = new Dictionary<string, ImageSource>();
-        foreach (var (di, us, il) in programs)
-        {
-            var icon = GetProgramIcon(di, us, il);
-            var key = $"{di}|{us}|{il}";
-            if (icon != null) results[key] = icon;
-        }
-        return results;
-    }
-
     public static void ClearCache() => _cache.Clear();
 
-    // ── Extraction Methods ────────────────────────────────────────
+    // ═══════════════════════════════════════════════════════
+    //  Extraction Methods
+    // ═══════════════════════════════════════════════════════
+
+    private static ImageSource? ProbeFolderForIcon(string folder, SearchOption option, int maxDepth = 0)
+    {
+        IEnumerable<string> files;
+        try
+        {
+            files = option == SearchOption.TopDirectoryOnly
+                ? Directory.EnumerateFiles(folder, "*.exe", option)
+                : Directory.EnumerateFiles(folder, "*.exe", new EnumerationOptions
+                {
+                    RecurseSubdirectories = true,
+                    MaxRecursionDepth = maxDepth,
+                    IgnoreInaccessible = true,
+                });
+        }
+        catch { return null; }
+
+        foreach (var exe in files.Take(5))
+        {
+            var icon = ExtractFromFile(exe);
+            if (icon != null) return icon;
+        }
+        return null;
+    }
 
     private static ImageSource? ExtractFromDisplayIcon(string displayIconPath)
     {
-        if (string.IsNullOrEmpty(displayIconPath)) return null;
+        var (path, iconIndex) = ParseIconSpec(displayIconPath);
+        if (string.IsNullOrEmpty(path)) return null;
 
-        var path = displayIconPath.Trim().Trim('"');
-        int iconIndex = 0;
-
-        // Handle "path,index" format
-        var lastComma = path.LastIndexOf(',');
-        if (lastComma > 2)
-        {
-            var indexStr = path[(lastComma + 1)..].Trim();
-            if (int.TryParse(indexStr, out var idx))
-            {
-                iconIndex = idx;
-                path = path[..lastComma].Trim().Trim('"');
-            }
-        }
-
-        // Expand environment variables
         path = Environment.ExpandEnvironmentVariables(path);
 
-        // Handle .ico files directly
         if (path.EndsWith(".ico", StringComparison.OrdinalIgnoreCase) && File.Exists(path))
         {
             try
@@ -200,16 +151,32 @@ public static class IconExtractor
                 bitmap.Freeze();
                 return bitmap;
             }
-            catch { }
+            catch { /* fall through */ }
         }
 
-        // Extract from exe/dll
-        if (File.Exists(path))
+        return File.Exists(path) ? ExtractIconAtIndex(path, iconIndex) : null;
+    }
+
+    private static ImageSource? TryUseFileAttributesFallback(string displayIconPath)
+    {
+        var (path, _) = ParseIconSpec(displayIconPath);
+        if (string.IsNullOrEmpty(path) || !path.Contains('.')) return null;
+
+        path = Environment.ExpandEnvironmentVariables(path);
+        var shfi = new SHFILEINFO();
+        var r = SHGetFileInfo(path, FILE_ATTRIBUTE_NORMAL, ref shfi,
+            (uint)Marshal.SizeOf<SHFILEINFO>(), SHGFI_ICON | SHGFI_LARGEICON | SHGFI_USEFILEATTRIBUTES);
+        if (r == 0 || shfi.hIcon == IntPtr.Zero) return null;
+
+        try
         {
-            return ExtractIconAtIndex(path, iconIndex);
+            var source = Imaging.CreateBitmapSourceFromHIcon(shfi.hIcon, Int32Rect.Empty,
+                BitmapSizeOptions.FromWidthAndHeight(32, 32));
+            source.Freeze();
+            return source;
         }
-
-        return null;
+        catch { return null; }
+        finally { DestroyIcon(shfi.hIcon); }
     }
 
     private static ImageSource? TryAppPathsLookup(string uninstallString)
@@ -224,15 +191,12 @@ public static class IconExtractor
             using var key = global::Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
                 $@"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\{exeName}");
             var appPath = key?.GetValue(null)?.ToString();
-            if (!string.IsNullOrEmpty(appPath))
-            {
-                appPath = Environment.ExpandEnvironmentVariables(appPath.Trim('"'));
-                if (File.Exists(appPath))
-                    return ExtractFromFile(appPath);
-            }
+            if (string.IsNullOrEmpty(appPath)) return null;
+
+            appPath = Environment.ExpandEnvironmentVariables(appPath.Trim('"'));
+            return File.Exists(appPath) ? ExtractFromFile(appPath) : null;
         }
-        catch { }
-        return null;
+        catch { return null; }
     }
 
     private static ImageSource? ExtractIconAtIndex(string filePath, int index)
@@ -241,54 +205,56 @@ public static class IconExtractor
         try
         {
             hIcon = ExtractIcon(IntPtr.Zero, filePath, index);
-            if (hIcon != IntPtr.Zero && hIcon.ToInt64() > 1)
-            {
-                var source = Imaging.CreateBitmapSourceFromHIcon(
-                    hIcon,
-                    Int32Rect.Empty,
-                    BitmapSizeOptions.FromWidthAndHeight(32, 32));
-                source.Freeze();
-                return source;
-            }
+            // hIcon == 1 means "no icons in file"; treat as miss.
+            if (hIcon == IntPtr.Zero || hIcon.ToInt64() == 1) return null;
+
+            var source = Imaging.CreateBitmapSourceFromHIcon(hIcon, Int32Rect.Empty,
+                BitmapSizeOptions.FromWidthAndHeight(32, 32));
+            source.Freeze();
+            return source;
         }
-        catch { }
+        catch { return null; }
         finally
         {
-            if (hIcon != IntPtr.Zero && hIcon.ToInt64() > 1)
-                DestroyIcon(hIcon);
+            if (hIcon != IntPtr.Zero && hIcon.ToInt64() != 1) DestroyIcon(hIcon);
         }
-        return null;
     }
 
     private static ImageSource? ExtractFromFile(string filePath)
     {
         if (!File.Exists(filePath)) return null;
 
-        // Try SHGetFileInfo first
         var shfi = new SHFILEINFO();
         var result = SHGetFileInfo(filePath, 0, ref shfi,
-            (uint)Marshal.SizeOf(typeof(SHFILEINFO)), SHGFI_ICON | SHGFI_LARGEICON);
+            (uint)Marshal.SizeOf<SHFILEINFO>(), SHGFI_ICON | SHGFI_LARGEICON);
 
         if (result != 0 && shfi.hIcon != IntPtr.Zero)
         {
             try
             {
-                var source = Imaging.CreateBitmapSourceFromHIcon(
-                    shfi.hIcon,
-                    Int32Rect.Empty,
+                var source = Imaging.CreateBitmapSourceFromHIcon(shfi.hIcon, Int32Rect.Empty,
                     BitmapSizeOptions.FromWidthAndHeight(32, 32));
                 source.Freeze();
                 return source;
             }
-            catch { }
-            finally
-            {
-                DestroyIcon(shfi.hIcon);
-            }
+            catch { /* fall through to ExtractIcon */ }
+            finally { DestroyIcon(shfi.hIcon); }
         }
 
-        // Fallback to ExtractIcon
         return ExtractIconAtIndex(filePath, 0);
+    }
+
+    private static (string path, int index) ParseIconSpec(string displayIconPath)
+    {
+        var path = displayIconPath.Trim().Trim('"');
+        var comma = path.LastIndexOf(',');
+        if (comma > 2)
+        {
+            var indexStr = path[(comma + 1)..].Trim();
+            if (int.TryParse(indexStr, out var idx))
+                return (path[..comma].Trim().Trim('"'), idx);
+        }
+        return (path, 0);
     }
 
     private static string ExtractExePath(string command)
@@ -300,7 +266,6 @@ public static class IconExtractor
             if (end > 0) return command[1..end];
         }
 
-        // Handle "MsiExec.exe /X{GUID}" etc.
         if (command.Contains("msiexec", StringComparison.OrdinalIgnoreCase))
             return "";
 
@@ -308,11 +273,27 @@ public static class IconExtractor
         return space > 0 ? command[..space] : command;
     }
 
+    /// <summary>
+    /// Uses null separators in the cache key so path components with `|`
+    /// never collide with each other. Null bytes cannot appear in real paths.
+    /// </summary>
+    private static string BuildCacheKey(string? displayIcon, string? uninstall, string? installLoc)
+    {
+        var sb = new StringBuilder();
+        sb.Append(displayIcon ?? "").Append('\0');
+        sb.Append(uninstall ?? "").Append('\0');
+        sb.Append(installLoc ?? "");
+        return sb.ToString();
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  Default icon
+    // ═══════════════════════════════════════════════════════
+
     private static BitmapSource CreateDefaultIcon()
     {
-        // 32x32 muted rounded square default icon
-        int w = 32, h = 32;
-        int stride = w * 4;
+        const int w = 32, h = 32;
+        const int stride = w * 4;
         var pixels = new byte[h * stride];
 
         for (int y = 0; y < h; y++)
@@ -320,19 +301,18 @@ public static class IconExtractor
             for (int x = 0; x < w; x++)
             {
                 int idx = (y * stride) + (x * 4);
-                // Rounded rect with 5px corner radius
+
+                // Outer rounded rect with ~5px corner radius.
                 int dx = Math.Min(x - 3, 28 - x);
                 int dy = Math.Min(y - 3, 28 - y);
                 if (dx < 0 || dy < 0) { pixels[idx + 3] = 0; continue; }
-
-                // Corner rounding
                 if (dx < 5 && dy < 5)
                 {
                     double dist = Math.Sqrt((5 - dx) * (5 - dx) + (5 - dy) * (5 - dy));
                     if (dist > 5.5) { pixels[idx + 3] = 0; continue; }
                 }
 
-                // Inner app icon shape (small square in center)
+                // Little inner "box + bar" glyph.
                 bool isInnerSquare = x >= 11 && x <= 20 && y >= 10 && y <= 19;
                 bool isBar = x >= 10 && x <= 21 && y >= 22 && y <= 23;
 

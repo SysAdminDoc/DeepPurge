@@ -1,0 +1,40 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Catppuccin Mocha — deep blues with lavender accents -->
+    <Color x:Key="CrustColor">#11111B</Color>
+    <Color x:Key="MantleColor">#181825</Color>
+    <Color x:Key="BaseColor">#1E1E2E</Color>
+    <Color x:Key="Surface0Color">#313244</Color>
+    <Color x:Key="Surface1Color">#45475A</Color>
+    <Color x:Key="Surface2Color">#585B70</Color>
+    <Color x:Key="OverlayColor">#6C7086</Color>
+    <Color x:Key="TextColor">#CDD6F4</Color>
+    <Color x:Key="SubtextColor">#BAC2DE</Color>
+    <Color x:Key="Subtext0Color">#A6ADC8</Color>
+    <Color x:Key="AccentColor">#89B4FA</Color>
+    <Color x:Key="AccentHoverColor">#B4BEFE</Color>
+    <Color x:Key="GreenColor">#A6E3A1</Color>
+    <Color x:Key="RedColor">#F38BA8</Color>
+    <Color x:Key="YellowColor">#F9E2AF</Color>
+    <Color x:Key="PeachColor">#FAB387</Color>
+    <Color x:Key="TealColor">#94E2D5</Color>
+    <Color x:Key="MauveColor">#CBA6F7</Color>
+    <SolidColorBrush x:Key="CrustBrush" Color="{StaticResource CrustColor}"/>
+    <SolidColorBrush x:Key="MantleBrush" Color="{StaticResource MantleColor}"/>
+    <SolidColorBrush x:Key="BaseBrush" Color="{StaticResource BaseColor}"/>
+    <SolidColorBrush x:Key="Surface0Brush" Color="{StaticResource Surface0Color}"/>
+    <SolidColorBrush x:Key="Surface1Brush" Color="{StaticResource Surface1Color}"/>
+    <SolidColorBrush x:Key="Surface2Brush" Color="{StaticResource Surface2Color}"/>
+    <SolidColorBrush x:Key="OverlayBrush" Color="{StaticResource OverlayColor}"/>
+    <SolidColorBrush x:Key="TextBrush" Color="{StaticResource TextColor}"/>
+    <SolidColorBrush x:Key="SubtextBrush" Color="{StaticResource SubtextColor}"/>
+    <SolidColorBrush x:Key="Subtext0Brush" Color="{StaticResource Subtext0Color}"/>
+    <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}"/>
+    <SolidColorBrush x:Key="AccentHoverBrush" Color="{StaticResource AccentHoverColor}"/>
+    <SolidColorBrush x:Key="GreenBrush" Color="{StaticResource GreenColor}"/>
+    <SolidColorBrush x:Key="RedBrush" Color="{StaticResource RedColor}"/>
+    <SolidColorBrush x:Key="YellowBrush" Color="{StaticResource YellowColor}"/>
+    <SolidColorBrush x:Key="PeachBrush" Color="{StaticResource PeachColor}"/>
+    <SolidColorBrush x:Key="TealBrush" Color="{StaticResource TealColor}"/>
+    <SolidColorBrush x:Key="MauveBrush" Color="{StaticResource MauveColor}"/>
+</ResourceDictionary>

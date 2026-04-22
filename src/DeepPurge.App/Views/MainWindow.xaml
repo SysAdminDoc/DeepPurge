@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:DeepPurge.App.ViewModels"
         xmlns:conv="clr-namespace:DeepPurge.App.Converters"
-        Title="DeepPurge v0.6.0" Width="1380" Height="900"
+        Title="DeepPurge v0.8.0" Width="1380" Height="900"
         MinWidth="1060" MinHeight="700" WindowStartupLocation="CenterScreen"
         Style="{DynamicResource MainWindowStyle}">
 
@@ -283,7 +283,7 @@
                                 <StackPanel VerticalAlignment="Center">
                                     <TextBlock Text="DeepPurge" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource TextBrush}"/>
                                     <TextBlock FontSize="10.5" Foreground="{DynamicResource Subtext0Brush}" Margin="0,1,0,0">
-                                        <Run Text="v0.6.0"/>
+                                        <Run Text="v0.8.0"/>
                                     </TextBlock>
                                 </StackPanel>
                             </StackPanel>
@@ -472,11 +472,24 @@
                             </RadioButton>
                             <ProgressBar Value="{Binding TasksScanProgress}" Style="{StaticResource NavProgressBar}"/>
 
+                            <RadioButton GroupName="nav" Tag="Hunter" Checked="NavButton_Checked" Style="{StaticResource NavRadioButton}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE721;" Style="{StaticResource NavIcon}"/>
+                                    <TextBlock Text="Registry Hunter" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </RadioButton>
+
                             <TextBlock Text="SAFETY" Style="{StaticResource SectionLabel}"/>
                             <RadioButton GroupName="nav" Tag="Restore" Checked="NavButton_Checked" Style="{StaticResource NavRadioButton}">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="&#xE777;" Style="{StaticResource NavIcon}"/>
                                     <TextBlock Text="Restore Points" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </RadioButton>
+                            <RadioButton GroupName="nav" Tag="Backups" Checked="NavButton_Checked" Style="{StaticResource NavRadioButton}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE7B8;" Style="{StaticResource NavIcon}"/>
+                                    <TextBlock Text="Registry Backups" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </RadioButton>
                         </StackPanel>
@@ -543,6 +556,9 @@
                         <Button x:Name="btnRefresh" Content="Refresh" Click="Refresh_Click" Style="{DynamicResource GhostButton}" Margin="0,0,5,0"/>
                         <Button x:Name="btnScanLeftovers" Content="Scan Leftovers" Click="ScanLeftovers_Click" Margin="0,0,5,0"/>
                         <Button x:Name="btnUninstall" Content="Uninstall" Click="Uninstall_Click" Style="{DynamicResource AccentButton}" Margin="0,0,5,0"/>
+                        <Button x:Name="btnBulkUninstall" Content="Uninstall Selected" Click="BulkUninstall_Click"
+                                Style="{DynamicResource DangerButton}" Margin="0,0,5,0"
+                                ToolTip="Uninstall every program with a checkbox. Silent flags applied automatically."/>
                         <Button x:Name="btnDeleteLeftovers" Content="Delete Selected" Click="DeleteLeftovers_Click"
                                 Style="{DynamicResource DangerButton}" IsEnabled="False"/>
                     </StackPanel>
@@ -583,7 +599,9 @@
                         <DataGrid.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Header="Uninstall" Tag="&#xE74D;" Click="Uninstall_Click"/>
+                                <MenuItem Header="Uninstall Selected (bulk)" Tag="&#xE74D;" Click="BulkUninstall_Click"/>
                                 <MenuItem Header="Scan Leftovers" Tag="&#xE721;" Click="ScanLeftovers_Click"/>
+                                <MenuItem Header="Upgrade via winget" Tag="&#xE777;" Click="Ctx_WingetUpgrade_Click"/>
                                 <Separator Style="{StaticResource MenuSep}"/>
                                 <MenuItem Header="Open Install Folder" Tag="&#xE838;" Click="Ctx_OpenFolder_Click"/>
                                 <MenuItem Header="Open in Registry" Tag="&#xE756;" Click="Ctx_OpenRegistry_Click"/>
@@ -768,10 +786,11 @@
                         </DataGrid.ContextMenu>
                         <DataGrid.Columns>
                             <DataGridCheckBoxColumn Binding="{Binding IsEnabled}" Header="ON" Width="54"/>
-                            <DataGridTextColumn Binding="{Binding Name}" Header="NAME" Width="220"/>
-                            <DataGridTextColumn Binding="{Binding Location}" Header="LOCATION" Width="160"/>
+                            <DataGridTextColumn Binding="{Binding Name}" Header="NAME" Width="200"/>
+                            <DataGridTextColumn Binding="{Binding Location}" Header="LOCATION" Width="150"/>
                             <DataGridTextColumn Binding="{Binding Command}" Header="COMMAND" Width="*"/>
-                            <DataGridTextColumn Binding="{Binding Publisher}" Header="PUBLISHER" Width="140"/>
+                            <DataGridTextColumn Binding="{Binding Publisher}" Header="PUBLISHER" Width="130"/>
+                            <DataGridTextColumn Binding="{Binding SignatureDisplay}" Header="SIGNATURE" Width="130"/>
                         </DataGrid.Columns>
                     </DataGrid>
 
@@ -834,11 +853,12 @@
                         <DataGrid.Columns>
                             <DataGridCheckBoxColumn Binding="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" Width="44"
                                                     HeaderTemplate="{StaticResource MasterCheckboxHeader}"/>
-                            <DataGridTextColumn Binding="{Binding DisplayName}" Header="SERVICE" Width="*" MinWidth="220"/>
-                            <DataGridTextColumn Binding="{Binding Name}" Header="NAME" Width="180"/>
-                            <DataGridTextColumn Binding="{Binding StartType}" Header="STARTUP" Width="95"/>
-                            <DataGridTextColumn Binding="{Binding StatusDisplay}" Header="STATUS" Width="95"/>
-                            <DataGridTextColumn Binding="{Binding ImagePath}" Header="PATH" Width="240"/>
+                            <DataGridTextColumn Binding="{Binding DisplayName}" Header="SERVICE" Width="*" MinWidth="200"/>
+                            <DataGridTextColumn Binding="{Binding Name}" Header="NAME" Width="170"/>
+                            <DataGridTextColumn Binding="{Binding StartType}" Header="STARTUP" Width="90"/>
+                            <DataGridTextColumn Binding="{Binding StatusDisplay}" Header="STATUS" Width="90"/>
+                            <DataGridTextColumn Binding="{Binding SignatureDisplay}" Header="SIGNATURE" Width="130"/>
+                            <DataGridTextColumn Binding="{Binding ImagePath}" Header="PATH" Width="210"/>
                         </DataGrid.Columns>
                     </DataGrid>
 
@@ -883,6 +903,46 @@
                             <DataGridTextColumn Binding="{Binding AgeDisplay}" Header="AGE" Width="95"/>
                         </DataGrid.Columns>
                     </DataGrid>
+
+                    <!-- REGISTRY HUNTER -->
+                    <Grid x:Name="panelHunter" Visibility="Collapsed">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <Border Grid.Row="0" Padding="24,16,24,16">
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Content="Search" Click="RegistryHunt_Click"
+                                        Style="{DynamicResource AccentButton}" Margin="10,0,0,0" Padding="22,8"/>
+                                <TextBox x:Name="txtHunter" KeyDown="HunterInput_KeyDown"
+                                         ToolTip="Search all of HKLM / HKCU / HKCR for a substring (3+ chars)"/>
+                            </DockPanel>
+                        </Border>
+                        <DataGrid Grid.Row="1" x:Name="dgHunter" AutoGenerateColumns="False"
+                                  ItemsSource="{Binding RegistryHits}">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Binding="{Binding Path}" Header="PATH" Width="*"/>
+                                <DataGridTextColumn Binding="{Binding ValueName}" Header="VALUE" Width="180"/>
+                                <DataGridTextColumn Binding="{Binding ValueData}" Header="DATA" Width="300"/>
+                                <DataGridTextColumn Binding="{Binding Match}" Header="MATCH" Width="80"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+
+                    <!-- BACKUPS -->
+                    <Border x:Name="panelBackups" Visibility="Collapsed" Padding="48,32">
+                        <StackPanel MaxWidth="560" HorizontalAlignment="Left" VerticalAlignment="Top">
+                            <TextBlock Text="Registry Backups" FontSize="24" FontWeight="Bold"
+                                       Foreground="{DynamicResource TextBrush}" Margin="0,0,0,8"/>
+                            <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource SubtextBrush}"
+                                       Margin="0,0,0,24" FontSize="13" LineHeight="21">
+                                Every destructive registry operation creates a <Run FontWeight="SemiBold">.reg</Run> export
+                                in your local app data. Open the folder to inspect, import, or prune backups.
+                            </TextBlock>
+                            <Button Content="Open Backup Folder" Click="OpenBackupFolder_Click"
+                                    Style="{DynamicResource AccentButton}" HorizontalAlignment="Left" Padding="28,10"/>
+                        </StackPanel>
+                    </Border>
 
                     <!-- LEFTOVER RESULTS OVERLAY -->
                     <Border x:Name="panelLeftovers" Visibility="Collapsed" Background="{DynamicResource BaseBrush}">
@@ -953,7 +1013,55 @@
                     BorderBrush="{DynamicResource Surface0Brush}" BorderThickness="0,0.5,0,0">
                 <DockPanel>
                     <ProgressBar x:Name="progressBar" Width="160" Height="3" DockPanel.Dock="Right"
-                                 Margin="16,0,0,0" VerticalAlignment="Center" IsIndeterminate="{Binding IsBusy}"/>
+                                 Margin="16,0,0,0" VerticalAlignment="Center"
+                                 Value="{Binding OperationProgress}"
+                                 Visibility="{Binding OperationProgressVisible, Converter={StaticResource BoolToVis}}"/>
+                    <ProgressBar x:Name="busyBar" Width="160" Height="3" DockPanel.Dock="Right"
+                                 Margin="16,0,0,0" VerticalAlignment="Center" IsIndeterminate="True">
+                        <ProgressBar.Style>
+                            <Style TargetType="ProgressBar" BasedOn="{StaticResource {x:Type ProgressBar}}">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <MultiDataTrigger>
+                                        <MultiDataTrigger.Conditions>
+                                            <Condition Binding="{Binding IsBusy}" Value="True"/>
+                                            <Condition Binding="{Binding OperationProgressVisible}" Value="False"/>
+                                        </MultiDataTrigger.Conditions>
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </MultiDataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ProgressBar.Style>
+                    </ProgressBar>
+
+                    <!-- Dry-run + secure-delete toggles (BleachBit/PrivaZer pattern) -->
+                    <Border DockPanel.Dock="Right" CornerRadius="6" Padding="10,4" Margin="12,0,0,0"
+                            VerticalAlignment="Center" Background="{DynamicResource Surface0Brush}">
+                        <StackPanel Orientation="Horizontal">
+                            <CheckBox x:Name="chkDryRun" IsChecked="{Binding DryRunEnabled}"
+                                      VerticalAlignment="Center" ToolTip="Preview: enumerate and size items without deleting">
+                                <TextBlock Text="Dry Run" FontSize="10.5" FontWeight="Medium"
+                                           Foreground="{DynamicResource YellowBrush}" VerticalAlignment="Center"
+                                           Margin="6,0,0,0"/>
+                            </CheckBox>
+                            <CheckBox x:Name="chkSecure" IsChecked="{Binding SecureDeleteEnabled}"
+                                      VerticalAlignment="Center" Margin="14,0,0,0"
+                                      ToolTip="Overwrite file contents before unlink. Slower; no recycle-bin recovery.">
+                                <TextBlock Text="Secure Delete" FontSize="10.5" FontWeight="Medium"
+                                           Foreground="{DynamicResource RedBrush}" VerticalAlignment="Center"
+                                           Margin="6,0,0,0"/>
+                            </CheckBox>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Live progress text when an operation is running -->
+                    <Border DockPanel.Dock="Right" CornerRadius="6" Padding="10,4" Margin="12,0,0,0"
+                            VerticalAlignment="Center" Background="{DynamicResource Surface0Brush}"
+                            Visibility="{Binding OperationProgressVisible, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="{Binding OperationProgressText}" FontSize="10.5" FontWeight="Medium"
+                                   Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis" MaxWidth="380"/>
+                    </Border>
 
                     <!-- Junk total badge -->
                     <Border DockPanel.Dock="Right" CornerRadius="6" Padding="10,4" Margin="12,0,0,0"
@@ -1033,7 +1141,7 @@
                     <!-- App name -->
                     <TextBlock Text="DeepPurge" FontSize="28" FontWeight="Bold"
                                Foreground="{DynamicResource TextBrush}" HorizontalAlignment="Center" Margin="0,0,0,6"/>
-                    <TextBlock Text="v0.6.0" FontSize="11" FontWeight="Medium"
+                    <TextBlock Text="v0.8.0" FontSize="11" FontWeight="Medium"
                                Foreground="{DynamicResource Subtext0Brush}" HorizontalAlignment="Center" Margin="0,0,0,28"
                                Opacity="0.5"/>
 

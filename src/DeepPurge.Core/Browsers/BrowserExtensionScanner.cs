@@ -1,9 +1,13 @@
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 
 namespace DeepPurge.Core.Browsers;
 
-public class BrowserExtension
+public class BrowserExtension : INotifyPropertyChanged
 {
+    private bool _isSelected;
+
     public string Name { get; set; } = "";
     public string Id { get; set; } = "";
     public string Version { get; set; } = "";
@@ -13,6 +17,12 @@ public class BrowserExtension
     public string Path { get; set; } = "";
     public bool IsEnabled { get; set; } = true;
     public long SizeBytes { get; set; }
+
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set { _isSelected = value; OnPropertyChanged(); }
+    }
 
     public string SizeDisplay
     {
@@ -24,6 +34,10 @@ public class BrowserExtension
             return $"{kb / 1024.0:F1} MB";
         }
     }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+    private void OnPropertyChanged([CallerMemberName] string? name = null)
+        => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
 
 public static class BrowserExtensionScanner
