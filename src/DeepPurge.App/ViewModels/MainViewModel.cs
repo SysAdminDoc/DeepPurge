@@ -129,10 +129,22 @@ public partial class MainViewModel : ObservableObject
     //  INITIAL SCAN
     // ═══════════════════════════════════════════════════════
 
+    /// <summary>
+    /// Allocate a fresh cancellation source for a new long-running operation,
+    /// disposing any previous one first. Prevents leaking CTS instances when
+    /// the user rapidly starts new operations, and prevents accidentally
+    /// re-using a cancelled CTS (which would immediately abort the new op).
+    /// </summary>
+    private CancellationToken RenewCts()
+    {
+        var old = Interlocked.Exchange(ref _cts, new CancellationTokenSource());
+        try { old?.Cancel(); old?.Dispose(); } catch { /* disposing a cancelled CTS can't throw but guard anyway */ }
+        return _cts!.Token;
+    }
+
     public async Task RunInitialScanAsync()
     {
-        _cts = new CancellationTokenSource();
-        var ct = _cts.Token;
+        var ct = RenewCts();
 
         IsInitialScanRunning = true;
         ScanOverlayText = "DeepPurge is analyzing your system...";
@@ -345,7 +357,7 @@ public partial class MainViewModel : ObservableObject
         try
         {
             var options = CurrentDeleteOptions();
-            var ct = (_cts ??= new CancellationTokenSource()).Token;
+            var ct = RenewCts();
             var summary = await Task.Run(() =>
                 JunkFilesCleaner.DeleteJunkSafe(list, options, progress, ct), ct);
 
@@ -385,7 +397,7 @@ public partial class MainViewModel : ObservableObject
         try
         {
             var options = CurrentDeleteOptions();
-            var ct = (_cts ??= new CancellationTokenSource()).Token;
+            var ct = RenewCts();
             var summary = await Task.Run(() =>
                 EvidenceRemover.CleanTracesSafe(list, options, progress, ct), ct);
 
@@ -499,26 +511,26 @@ public partial class MainViewModel : ObservableObject
 
     public async Task<UninstallResult?> UninstallAsync(InstalledProgram program, ScanMode mode)
     {
-        _cts = new CancellationTokenSource();
+        var ct = RenewCts();
         IsBusy = true; StatusText = $"Uninstalling {program.DisplayName}...";
         try
         {
             return await _engine.UninstallAsync(
-                program, mode, createRestorePoint: true, runBuiltInUninstaller: true, ct: _cts.Token);
+                program, mode, createRestorePoint: true, runBuiltInUninstaller: true, ct: ct);
         }
-        finally { IsBusy = false; _cts?.Dispose(); _cts = null; }
+        finally { IsBusy = false; }
     }
 
     public async Task<ScanResult> ScanLeftoversAsync(InstalledProgram program, ScanMode mode)
     {
-        _cts = new CancellationTokenSource();
+        var ct = RenewCts();
         IsBusy = true; StatusText = $"Scanning leftovers for {program.DisplayName}...";
         try
         {
             var regScanner = new RegistryLeftoverScanner();
             var fileScanner = new FileLeftoverScanner();
-            var regLeftovers = await Task.Run(() => regScanner.ScanForLeftovers(program, mode), _cts.Token);
-            var fileLeftovers = await Task.Run(() => fileScanner.ScanForLeftovers(program, mode), _cts.Token);
+            var regLeftovers = await Task.Run(() => regScanner.ScanForLeftovers(program, mode), ct);
+            var fileLeftovers = await Task.Run(() => fileScanner.ScanForLeftovers(program, mode), ct);
             return new ScanResult
             {
                 Program = program,
@@ -528,15 +540,15 @@ public partial class MainViewModel : ObservableObject
                 Mode = mode,
             };
         }
-        finally { IsBusy = false; _cts?.Dispose(); _cts = null; }
+        finally { IsBusy = false; }
     }
 
     public async Task<ScanResult> ForcedScanAsync(string name, string? folder, ScanMode mode)
     {
-        _cts = new CancellationTokenSource();
+        var ct = RenewCts();
         IsBusy = true; StatusText = $"Forced scan: {name}...";
-        try { return await _engine.ForcedScanAsync(name, folder, mode, _cts.Token); }
-        finally { IsBusy = false; _cts?.Dispose(); _cts = null; }
+        try { return await _engine.ForcedScanAsync(name, folder, mode, ct); }
+        finally { IsBusy = false; }
     }
 
     public async Task<(int regDel, int fileDel)> DeleteLeftoversAsync()
@@ -552,14 +564,14 @@ public partial class MainViewModel : ObservableObject
         try
         {
             var options = CurrentDeleteOptions();
-            _cts ??= new CancellationTokenSource();
+            var ct = RenewCts();
 
             var (summary, regDel, fileDel) = await _engine.DeleteLeftoversAsync(
                 CurrentScanResult.RegistryLeftovers,
                 CurrentScanResult.FileLeftovers,
                 options,
                 progress,
-                _cts.Token);
+                ct);
 
             if (!summary.DryRun)
             {
@@ -672,7 +684,7 @@ public partial class MainViewModel : ObservableObject
         var selected = Programs.Where(p => p.IsSelected).ToList();
         if (selected.Count == 0) return null;
 
-        _cts = new CancellationTokenSource();
+        var ct = RenewCts();
         IsBusy = true;
         ShowOperationProgress($"Uninstalling {selected.Count} programs...");
 
@@ -682,7 +694,7 @@ public partial class MainViewModel : ObservableObject
         try
         {
             var results = await _engine.UninstallBatchAsync(
-                selected, mode, createRestorePoint: true, progress, _cts.Token);
+                selected, mode, createRestorePoint: true, progress, ct);
 
             // Remove successfully-uninstalled programs from the list.
             for (int i = 0; i < selected.Count; i++)
@@ -708,8 +720,7 @@ public partial class MainViewModel : ObservableObject
         {
             IsBusy = false;
             HideOperationProgress();
-            _cts?.Dispose();
-            _cts = null;
+            // CTS is now owned by RenewCts — next operation will dispose it.
         }
     }
 
@@ -801,7 +812,7 @@ public partial class MainViewModel : ObservableObject
             UseRegex: HunterUseRegex,
             MaxHits: 500);
 
-        _cts = new CancellationTokenSource();
+        var ct = RenewCts();
         IsBusy = true;
         StatusText = $"Searching registry for '{needle}'...";
         var sw = Stopwatch.StartNew();
@@ -812,8 +823,8 @@ public partial class MainViewModel : ObservableObject
                 _dispatcher.BeginInvoke(() => HunterLiveCount = count));
 
             var hits = await Task.Run(
-                () => RegistryHunter.Search(needle, options, progress, _cts.Token),
-                _cts.Token);
+                () => RegistryHunter.Search(needle, options, progress, ct),
+                ct);
 
             foreach (var h in hits) RegistryHits.Add(h);
             HunterLiveCount = hits.Count;
@@ -827,8 +838,7 @@ public partial class MainViewModel : ObservableObject
         finally
         {
             IsBusy = false;
-            _cts?.Dispose();
-            _cts = null;
+            // CTS ownership moves to RenewCts — no manual dispose here.
         }
     }
 

@@ -1,0 +1,54 @@
+{
+  "$schema": "https://raw.githubusercontent.com/ScoopInstaller/Scoop/master/schema.json",
+  "version": "0.9.0",
+  "description": "Thorough open-source Windows uninstaller + system cleaner. Ships GUI and headless CLI.",
+  "homepage": "https://github.com/SysAdminDoc/DeepPurge",
+  "license": "MIT",
+  "architecture": {
+    "64bit": {
+      "url": [
+        "https://github.com/SysAdminDoc/DeepPurge/releases/download/v0.9.0/DeepPurge.exe#/DeepPurge.exe",
+        "https://github.com/SysAdminDoc/DeepPurge/releases/download/v0.9.0/DeepPurgeCli.exe#/DeepPurgeCli.exe"
+      ],
+      "hash": [
+        "a59b2f5270f566523f75325c02f5cbac9f94f1e58a3fa06855b1d113f3f8cee5",
+        "0324ddcdb50ab47a4f2ee818e3bfae208b935372d697a1137bc27926a546c02f"
+      ]
+    }
+  },
+  "bin": [
+    "DeepPurgeCli.exe"
+  ],
+  "shortcuts": [
+    [
+      "DeepPurge.exe",
+      "DeepPurge"
+    ]
+  ],
+  "pre_install": [
+    "# Enable portable mode — Scoop installs are user-scoped, so the app's",
+    "# state should live alongside the binaries rather than %LocalAppData%.",
+    "Set-Content -Path \"$dir\\DeepPurge.portable\" -Value \"portable\" -Encoding ASCII"
+  ],
+  "checkver": {
+    "github": "https://github.com/SysAdminDoc/DeepPurge"
+  },
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": [
+          "https://github.com/SysAdminDoc/DeepPurge/releases/download/v$version/DeepPurge.exe#/DeepPurge.exe",
+          "https://github.com/SysAdminDoc/DeepPurge/releases/download/v$version/DeepPurgeCli.exe#/DeepPurgeCli.exe"
+        ]
+      }
+    },
+    "hash": {
+      "url": "https://github.com/SysAdminDoc/DeepPurge/releases/download/v$version/SHA256SUMS.txt"
+    }
+  },
+  "notes": [
+    "DeepPurge GUI requires Administrator elevation (app.manifest enforces).",
+    "DeepPurgeCli runs as invoker — launch an elevated shell for admin operations.",
+    "Data lives next to the binary in portable mode. Delete DeepPurge.portable to switch to %LocalAppData%."
+  ]
+}
