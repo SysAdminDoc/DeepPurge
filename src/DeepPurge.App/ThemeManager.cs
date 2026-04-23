@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using DeepPurge.Core.App;
 
 namespace DeepPurge.App;
 
@@ -25,10 +26,8 @@ public static class ThemeManager
         new("Matrix",           "Matrix.xaml",          "Dark"),
     };
 
-    private static readonly string SettingsDir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "DeepPurge");
-    private static readonly string SettingsFile = Path.Combine(SettingsDir, "theme.txt");
+    // Routed through DataPaths — picks up portable-mode redirection automatically.
+    private static readonly string SettingsFile = DataPaths.ThemeFile;
 
     private static int _currentIndex;
     private static int _lastDarkIndex;
@@ -111,7 +110,7 @@ public static class ThemeManager
     {
         try
         {
-            Directory.CreateDirectory(SettingsDir);
+            Directory.CreateDirectory(Path.GetDirectoryName(SettingsFile)!);
             File.WriteAllText(SettingsFile, name);
         }
         catch { /* non-fatal */ }

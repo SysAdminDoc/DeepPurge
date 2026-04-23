@@ -60,11 +60,25 @@ public class UninstallEngine
                 if (string.IsNullOrWhiteSpace(uninstallCmd))
                     uninstallCmd = program.UninstallString;
 
-                var (exitCode, output, error) = await RunUninstallerAsync(uninstallCmd, ct);
-                result.ExitCode = exitCode;
-                result.Output = output;
-                result.ErrorOutput = error;
-                result.Success = UninstallerSuccessCodes.Contains(exitCode);
+                if (string.IsNullOrWhiteSpace(uninstallCmd))
+                {
+                    // Nothing to run — the registry had HasUninstaller=true but
+                    // no actual command. Report rather than silently launching
+                    // an empty process.
+                    StatusChanged?.Invoke($"No uninstall command registered for {program.DisplayName}");
+                    result.ExitCode = -1;
+                    result.ErrorOutput = "No uninstall command registered.";
+                    result.UninstallerSkipped = true;
+                    result.Success = false;
+                }
+                else
+                {
+                    var (exitCode, output, error) = await RunUninstallerAsync(uninstallCmd, silent, ct);
+                    result.ExitCode = exitCode;
+                    result.Output = output;
+                    result.ErrorOutput = error;
+                    result.Success = UninstallerSuccessCodes.Contains(exitCode);
+                }
             }
             else
             {
@@ -328,22 +342,29 @@ public class UninstallEngine
     // ═══════════════════════════════════════════════════════
 
     private async Task<(int exitCode, string output, string error)> RunUninstallerAsync(
-        string uninstallCommand, CancellationToken ct)
+        string uninstallCommand, bool silent, CancellationToken ct)
     {
-        var psi = BuildUninstallerStartInfo(uninstallCommand);
+        var psi = BuildUninstallerStartInfo(uninstallCommand, silent);
 
         using var process = new Process { StartInfo = psi };
         var output = new StringBuilder();
         var error = new StringBuilder();
 
-        process.OutputDataReceived += (_, e) => { if (e.Data != null) output.AppendLine(e.Data); };
-        process.ErrorDataReceived += (_, e) => { if (e.Data != null) error.AppendLine(e.Data); };
+        // Only subscribe to stdout/stderr when we actually redirected.
+        // Interactive uninstallers left unredirected (silent=false) don't
+        // surface through these streams; subscribing would be a no-op, but
+        // BeginOutputReadLine throws InvalidOperationException against a
+        // non-redirected stream.
+        if (psi.RedirectStandardOutput)
+            process.OutputDataReceived += (_, e) => { if (e.Data != null) output.AppendLine(e.Data); };
+        if (psi.RedirectStandardError)
+            process.ErrorDataReceived += (_, e) => { if (e.Data != null) error.AppendLine(e.Data); };
 
         try
         {
             process.Start();
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
+            if (psi.RedirectStandardOutput) process.BeginOutputReadLine();
+            if (psi.RedirectStandardError)  process.BeginErrorReadLine();
         }
         catch (Exception ex)
         {
@@ -368,17 +389,34 @@ public class UninstallEngine
 
     /// <summary>
     /// Turn an arbitrary uninstall string into a concrete ProcessStartInfo.
+    ///
+    /// Silent-mode behaviour:
+    ///   silent=true  → hide the console window, redirect stdout/stderr so
+    ///                  we can capture exit output cleanly for bulk runs
+    ///   silent=false → leave the window visible and DO NOT redirect stdout,
+    ///                  because GUI uninstallers (NSIS, InnoSetup) that don't
+    ///                  use stdout will hang indefinitely when we pipe them.
+    ///
     /// Handles:
     ///   - Quoted paths: `"C:\foo\unins.exe" /S`
     ///   - MsiExec special-case (/I→/X rewrite happens in GetSilentUninstallCommand)
     ///   - Unquoted paths with spaces: routed through `cmd /c` for shell parsing
-    /// The old implementation incorrectly returned the whole unquoted command as
-    /// the exe, which prevented launch for NSIS/InnoSetup uninstallers with spaces
-    /// in their install path.
     /// </summary>
-    internal static ProcessStartInfo BuildUninstallerStartInfo(string uninstallCommand)
+    internal static ProcessStartInfo BuildUninstallerStartInfo(string uninstallCommand, bool silent = false)
     {
+        if (string.IsNullOrWhiteSpace(uninstallCommand))
+            throw new ArgumentException("Uninstall command is empty.", nameof(uninstallCommand));
+
         var trimmed = uninstallCommand.Trim();
+
+        ProcessStartInfo Tune(ProcessStartInfo psi)
+        {
+            psi.UseShellExecute        = false;
+            psi.CreateNoWindow         = silent;
+            psi.RedirectStandardOutput = silent;
+            psi.RedirectStandardError  = silent;
+            return psi;
+        }
 
         // MSI special case — always route through msiexec.exe so we can trust the path.
         if (trimmed.StartsWith("MsiExec", StringComparison.OrdinalIgnoreCase) ||
@@ -386,15 +424,7 @@ public class UninstallEngine
         {
             var args = System.Text.RegularExpressions.Regex.Replace(
                 trimmed, @"(?i)msiexec(\.exe)?\s*", "", System.Text.RegularExpressions.RegexOptions.None).Trim();
-            return new ProcessStartInfo
-            {
-                FileName = "msiexec.exe",
-                Arguments = args,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = false,
-            };
+            return Tune(new ProcessStartInfo { FileName = "msiexec.exe", Arguments = args });
         }
 
         // Quoted path: `"C:\foo\unins.exe" /S`
@@ -405,44 +435,16 @@ public class UninstallEngine
             {
                 var exe = trimmed[1..end];
                 var args = trimmed[(end + 1)..].Trim();
-                return new ProcessStartInfo
-                {
-                    FileName = exe,
-                    Arguments = args,
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = false,
-                };
+                return Tune(new ProcessStartInfo { FileName = exe, Arguments = args });
             }
         }
 
-        // Unquoted. If it clearly has no args (single token), run directly.
+        // Unquoted, no spaces — run directly.
         if (!trimmed.Contains(' '))
-        {
-            return new ProcessStartInfo
-            {
-                FileName = trimmed,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = false,
-            };
-        }
+            return Tune(new ProcessStartInfo { FileName = trimmed });
 
-        // Unquoted path with spaces — ambiguous (could be `C:\Program Files\...\exe /S`
-        // or `unins.exe /S` where the path has spaces). Let cmd.exe parse it.
-        // /c closes cmd after the command finishes; we quote the whole thing so
-        // internal quotes propagate correctly.
-        return new ProcessStartInfo
-        {
-            FileName = "cmd.exe",
-            Arguments = $"/c \"{trimmed}\"",
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = false,
-        };
+        // Unquoted with spaces — let cmd.exe parse. /c closes cmd after exit.
+        return Tune(new ProcessStartInfo { FileName = "cmd.exe", Arguments = $"/c \"{trimmed}\"" });
     }
 
     // ═══════════════════════════════════════════════════════
@@ -455,12 +457,17 @@ public class UninstallEngine
         RegistryKey? hive;
         string subPath;
 
+        // Recognise every hive a leftover scanner can produce. Previously HKU
+        // paths silently returned — the delete would succeed-looking with
+        // zero effect, which breaks "Delete selected" for HKU-scoped leftovers.
         if (path.StartsWith("HKLM\\", StringComparison.OrdinalIgnoreCase))
         { hive = global::Microsoft.Win32.Registry.LocalMachine; subPath = path[5..]; }
         else if (path.StartsWith("HKCU\\", StringComparison.OrdinalIgnoreCase))
         { hive = global::Microsoft.Win32.Registry.CurrentUser; subPath = path[5..]; }
         else if (path.StartsWith("HKCR\\", StringComparison.OrdinalIgnoreCase))
         { hive = global::Microsoft.Win32.Registry.ClassesRoot; subPath = path[5..]; }
+        else if (path.StartsWith("HKU\\", StringComparison.OrdinalIgnoreCase))
+        { hive = global::Microsoft.Win32.Registry.Users; subPath = path[4..]; }
         else return;
 
         if (item.Type == LeftoverType.RegistryValue)
@@ -486,6 +493,15 @@ public class UninstallEngine
             File.Delete(item.Path);
     }
 
+    /// <summary>
+    /// Move a file/folder to the Recycle Bin.
+    /// Previously this silently fell back to <see cref="File.Delete"/> /
+    /// <see cref="Directory.Delete"/> on any Recycle-Bin failure, which
+    /// converts an "I can't safely recycle this" error into a permanent
+    /// delete without telling the user. Now we surface the error and
+    /// leave the file untouched — safer default, and matches Explorer's
+    /// behaviour.
+    /// </summary>
     private void MoveToRecycleBin(string path, bool isDirectory)
     {
         try
@@ -493,24 +509,25 @@ public class UninstallEngine
             var fileOp = new NativeMethods.SHFILEOPSTRUCT
             {
                 wFunc = NativeMethods.FO_DELETE,
+                // SHFileOperation requires the path to be null-terminated
+                // AND the whole buffer to be double-null-terminated.
                 pFrom = path + '\0' + '\0',
                 fFlags = NativeMethods.FOF_ALLOWUNDO | NativeMethods.FOF_NOCONFIRMATION |
                          NativeMethods.FOF_NOERRORUI | NativeMethods.FOF_SILENT,
             };
-            if (NativeMethods.SHFileOperation(ref fileOp) == 0) return;
-        }
-        catch { /* fall through */ }
+            var rc = NativeMethods.SHFileOperation(ref fileOp);
+            if (rc == 0 && !fileOp.fAnyOperationsAborted) return;
 
-        // Fallback to permanent delete.
-        try
-        {
-            if (isDirectory && Directory.Exists(path)) Directory.Delete(path, recursive: true);
-            else if (File.Exists(path)) File.Delete(path);
+            StatusChanged?.Invoke(
+                $"Recycle Bin move failed (code {rc}); leaving file in place: {path}");
+            // Leave the file where it is. If the user wants to force a
+            // permanent delete, they can toggle Secure Delete or rerun.
         }
         catch (Exception ex)
         {
-            StatusChanged?.Invoke($"Delete failed: {path} - {ex.Message}");
+            StatusChanged?.Invoke($"Recycle Bin move threw: {path} - {ex.Message}");
         }
+        // Intentionally no fall-through to permanent delete — see summary above.
     }
 }
 

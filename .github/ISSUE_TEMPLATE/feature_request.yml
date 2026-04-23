@@ -1,0 +1,38 @@
+name: Feature request
+description: Suggest a new capability or a change to an existing one.
+title: "[feature] "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, skim [ROADMAP.md](../../blob/main/ROADMAP.md) — the feature may already be queued,
+        or explicitly on the "will not ship" list with a reason.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do that DeepPurge doesn't support?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would a good user experience look like?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Existing tools / workarounds. Helps me understand how much leverage this gives.
+
+  - type: textarea
+    id: references
+    attributes:
+      label: Reference implementations
+      description: BCU / BleachBit / Revo / etc. that already solve this. Links welcome.
