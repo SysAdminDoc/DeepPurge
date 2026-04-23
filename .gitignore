@@ -1,12 +1,39 @@
+# ─── Build output ────────────────────────────────────────
 bin/
 obj/
+build/
+publish/
+TestResults/
+*.binlog
+
+# ─── IDE / editor ────────────────────────────────────────
 .vs/
+.vscode/
+.idea/
 *.user
 *.suo
+*.userprefs
 *.cache
+
+# ─── Local overrides / temporary ─────────────────────────
 *.bak
+*.tmp
+*.swp
+*~
+
+# ─── Tooling artefacts ───────────────────────────────────
 /packages/
 *.nupkg
-CLAUDE.md
-build/
+coverage/
+*.coverage
+*.coveragexml
 
+# ─── AI / agent working files (per global CLAUDE.md) ─────
+CLAUDE.md
+CODEX_CHANGELOG.md
+
+# ─── Signing (keep certs out of the repo, always) ────────
+*.pfx
+*.p12
+*.snk
+signing.pfx

@@ -67,12 +67,52 @@ public static class AutorunScanner
     public static List<AutorunEntry> GetAllAutoruns()
     {
         var entries = new List<AutorunEntry>();
-        ScanRegistryRun(entries);
+        // Single pass over the process table — previously every autorun entry
+        // did its own Process.GetProcessesByName() call, which (a) leaked
+        // Process handles and (b) re-enumerated hundreds of processes per entry.
+        using var procSet = ProcessNameSet.Snapshot();
+        ScanRegistryRun(entries, procSet);
         ScanStartupFolders(entries);
-        ScanServices(entries);
-        ScanScheduledTasks(entries);
+        ScanServices(entries, procSet);
+        ScanScheduledTasks(entries, procSet);
         PopulateSignatures(entries);
         return entries;
+    }
+
+    /// <summary>
+    /// Disposable snapshot of running-process names. Enumerates
+    /// <see cref="Process.GetProcesses"/> once, extracts the exe basenames,
+    /// and disposes every Process object on release. Lookups are O(1).
+    /// </summary>
+    private sealed class ProcessNameSet : IDisposable
+    {
+        private readonly HashSet<string> _names;
+
+        private ProcessNameSet(HashSet<string> names) { _names = names; }
+
+        public static ProcessNameSet Snapshot()
+        {
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            Process[] procs;
+            try { procs = Process.GetProcesses(); }
+            catch { return new ProcessNameSet(names); }
+            foreach (var p in procs)
+            {
+                try { names.Add(p.ProcessName); }
+                catch { /* exited between enum and access */ }
+                finally { try { p.Dispose(); } catch { } }
+            }
+            return new ProcessNameSet(names);
+        }
+
+        public bool IsRunning(string exePath)
+        {
+            if (string.IsNullOrWhiteSpace(exePath)) return false;
+            var name = Path.GetFileNameWithoutExtension(exePath);
+            return !string.IsNullOrEmpty(name) && _names.Contains(name);
+        }
+
+        public void Dispose() { /* snapshot is value-only; nothing to release */ }
     }
 
     /// <summary>
@@ -122,7 +162,7 @@ public static class AutorunScanner
             global::Microsoft.Win32.Registry.LocalMachine, @"HKLM\...\Run (32-bit)", AutorunType.RegistryRun, "HKLM"),
     };
 
-    private static void ScanRegistryRun(List<AutorunEntry> entries)
+    private static void ScanRegistryRun(List<AutorunEntry> entries, ProcessNameSet procSet)
     {
         foreach (var loc in RunLocations)
         {
@@ -146,7 +186,7 @@ public static class AutorunScanner
                         Type = loc.Type,
                         IsEnabled = true,
                         Publisher = GetFilePublisher(exePath),
-                        IsRunning = IsProcessRunning(exePath),
+                        IsRunning = procSet.IsRunning(exePath),
                     });
                 }
             }
@@ -233,7 +273,7 @@ public static class AutorunScanner
     //  Services (Win32 only, autostart only)
     // ═══════════════════════════════════════════════════════
 
-    private static void ScanServices(List<AutorunEntry> entries)
+    private static void ScanServices(List<AutorunEntry> entries, ProcessNameSet procSet)
     {
         try
         {
@@ -267,7 +307,7 @@ public static class AutorunScanner
                         Location = "Windows Service",
                         Type = AutorunType.Service,
                         IsEnabled = true,
-                        IsRunning = IsProcessRunning(ExtractExePath(imagePath)),
+                        IsRunning = procSet.IsRunning(ExtractExePath(imagePath)),
                     });
                 }
                 catch { /* skip */ }
@@ -280,8 +320,13 @@ public static class AutorunScanner
     //  Scheduled tasks (non-Microsoft only)
     // ═══════════════════════════════════════════════════════
 
-    private static void ScanScheduledTasks(List<AutorunEntry> entries)
+    private static void ScanScheduledTasks(List<AutorunEntry> entries, ProcessNameSet procSet)
     {
+        // procSet currently unused for scheduled tasks (we don't resolve their
+        // image to the process table today), but the parameter keeps the API
+        // consistent with the Run/Services scans and leaves the door open for
+        // future "task process is running" status.
+        _ = procSet;
         try
         {
             var psi = new ProcessStartInfo
@@ -516,16 +561,8 @@ public static class AutorunScanner
         catch { return ""; }
     }
 
-    private static bool IsProcessRunning(string exePath)
-    {
-        try
-        {
-            var exeName = Path.GetFileNameWithoutExtension(exePath);
-            if (string.IsNullOrEmpty(exeName)) return false;
-            return Process.GetProcessesByName(exeName).Length > 0;
-        }
-        catch { return false; }
-    }
+    // Legacy per-entry IsProcessRunning was replaced by ProcessNameSet to
+    // eliminate per-call Process handle leaks and O(N*M) re-enumeration.
 
     private static string[] ParseCsvLine(string line)
     {

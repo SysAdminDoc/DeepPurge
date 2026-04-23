@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:DeepPurge.App.ViewModels"
         xmlns:conv="clr-namespace:DeepPurge.App.Converters"
-        Title="DeepPurge v0.8.1" Width="1380" Height="900"
+        Title="DeepPurge v0.9.0" Width="1380" Height="900"
         MinWidth="1060" MinHeight="700" WindowStartupLocation="CenterScreen"
         Style="{DynamicResource MainWindowStyle}">
 
@@ -11,6 +11,11 @@
         <FontFamily x:Key="Ico">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         <conv:StringToVisibilityConverter x:Key="BadgeVisConverter"/>
+        <conv:BytesToSizeConverter x:Key="BytesToSizeConverter"/>
+        <conv:BoolToOldBadgeConverter x:Key="BoolToOldBadgeConverter"/>
+        <conv:PathListJoinConverter x:Key="PathListJoinConverter"/>
+        <conv:FirstOrEmptyConverter x:Key="FirstOrEmptyConverter"/>
+        <conv:CountConverter x:Key="CountConverter"/>
 
         <!-- ══ NAV BUTTON ══ -->
         <Style x:Key="NavRadioButton" TargetType="RadioButton">
@@ -476,6 +481,73 @@
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="&#xE7B8;" Style="{StaticResource NavIcon}"/>
                                     <TextBlock Text="Registry Backups" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </RadioButton>
+
+                            <!-- ═══════════════════════════════════════════════════════ -->
+                            <!-- SYSTEM TOOLS (v0.9.0) — optional scans, run on demand  -->
+                            <!-- ═══════════════════════════════════════════════════════ -->
+                            <TextBlock Text="SYSTEM TOOLS" Style="{StaticResource SectionLabel}"/>
+
+                            <RadioButton GroupName="nav" Tag="Drivers" Checked="NavButton_Checked" Style="{StaticResource NavRadioButton}">
+                                <DockPanel>
+                                    <Border DockPanel.Dock="Right" Style="{StaticResource NavBadge}"
+                                            Visibility="{Binding DriverBadge, Converter={StaticResource BadgeVisConverter}}">
+                                        <TextBlock Text="{Binding DriverBadge}" Style="{StaticResource NavBadgeText}"/>
+                                    </Border>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="&#xE950;" Style="{StaticResource NavIcon}"/>
+                                        <TextBlock Text="Driver Store" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </DockPanel>
+                            </RadioButton>
+
+                            <RadioButton GroupName="nav" Tag="StartupImpact" Checked="NavButton_Checked" Style="{StaticResource NavRadioButton}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE945;" Style="{StaticResource NavIcon}"/>
+                                    <TextBlock Text="Startup Impact" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </RadioButton>
+
+                            <RadioButton GroupName="nav" Tag="Shortcuts" Checked="NavButton_Checked" Style="{StaticResource NavRadioButton}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE71B;" Style="{StaticResource NavIcon}"/>
+                                    <TextBlock Text="Broken Shortcuts" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </RadioButton>
+
+                            <RadioButton GroupName="nav" Tag="Duplicates" Checked="NavButton_Checked" Style="{StaticResource NavRadioButton}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE8C8;" Style="{StaticResource NavIcon}"/>
+                                    <TextBlock Text="Duplicate Files" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </RadioButton>
+
+                            <RadioButton GroupName="nav" Tag="Winapp2" Checked="NavButton_Checked" Style="{StaticResource NavRadioButton}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE90F;" Style="{StaticResource NavIcon}"/>
+                                    <TextBlock Text="Community Cleaners" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </RadioButton>
+
+                            <RadioButton GroupName="nav" Tag="Repair" Checked="NavButton_Checked" Style="{StaticResource NavRadioButton}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE90F;" Style="{StaticResource NavIcon}"/>
+                                    <TextBlock Text="Repair Windows" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </RadioButton>
+
+                            <RadioButton GroupName="nav" Tag="Schedule" Checked="NavButton_Checked" Style="{StaticResource NavRadioButton}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE823;" Style="{StaticResource NavIcon}"/>
+                                    <TextBlock Text="Scheduled Cleaning" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </RadioButton>
+
+                            <RadioButton GroupName="nav" Tag="About" Checked="NavButton_Checked" Style="{StaticResource NavRadioButton}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE946;" Style="{StaticResource NavIcon}"/>
+                                    <TextBlock Text="About / Updates" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </RadioButton>
                         </StackPanel>
@@ -956,6 +1028,172 @@
                             </TextBlock>
                             <Button Content="Open Backup Folder" Click="OpenBackupFolder_Click"
                                     Style="{DynamicResource AccentButton}" HorizontalAlignment="Left" Padding="28,10"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- ═══════════════════════════════════════════════════════ -->
+                    <!-- DRIVER STORE (pnputil /enum-drivers + size + old-version flag)  -->
+                    <!-- ═══════════════════════════════════════════════════════ -->
+                    <DataGrid x:Name="dgDrivers" Visibility="Collapsed" AutoGenerateColumns="False"
+                              ItemsSource="{Binding DriverPackages}">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Binding="{Binding PublishedName}" Header="OEM" Width="90"/>
+                            <DataGridTextColumn Binding="{Binding OriginalName}" Header="INF" Width="220"/>
+                            <DataGridTextColumn Binding="{Binding ProviderName}" Header="PROVIDER" Width="170"/>
+                            <DataGridTextColumn Binding="{Binding ClassName}" Header="CLASS" Width="140"/>
+                            <DataGridTextColumn Binding="{Binding DriverVersion}" Header="VERSION / DATE" Width="220"/>
+                            <DataGridTextColumn Binding="{Binding SizeBytes, Converter={StaticResource BytesToSizeConverter}}" Header="SIZE" Width="90"/>
+                            <DataGridTextColumn Binding="{Binding IsOldVersion, Converter={StaticResource BoolToOldBadgeConverter}}" Header="STATUS" Width="80"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <!-- ═══════════════════════════════════════════════════════ -->
+                    <!-- STARTUP IMPACT (parsed from WDI boot traces)            -->
+                    <!-- ═══════════════════════════════════════════════════════ -->
+                    <DataGrid x:Name="dgStartupImpact" Visibility="Collapsed" AutoGenerateColumns="False"
+                              ItemsSource="{Binding StartupImpacts}">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Binding="{Binding Impact}" Header="IMPACT" Width="90"/>
+                            <DataGridTextColumn Binding="{Binding ProcessName}" Header="PROCESS" Width="280"/>
+                            <DataGridTextColumn Binding="{Binding DiskBytes, Converter={StaticResource BytesToSizeConverter}}" Header="DISK" Width="90"/>
+                            <DataGridTextColumn Binding="{Binding CpuMs, StringFormat={}{0} ms}" Header="CPU" Width="90"/>
+                            <DataGridTextColumn Binding="{Binding CommandLine}" Header="COMMAND" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <!-- ═══════════════════════════════════════════════════════ -->
+                    <!-- BROKEN SHORTCUTS (.lnk on Desktop + Start Menu)         -->
+                    <!-- ═══════════════════════════════════════════════════════ -->
+                    <DataGrid x:Name="dgShortcuts" Visibility="Collapsed" AutoGenerateColumns="False"
+                              ItemsSource="{Binding BrokenShortcuts}">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Binding="{Binding Path}" Header="SHORTCUT" Width="2*"/>
+                            <DataGridTextColumn Binding="{Binding TargetPath}" Header="MISSING TARGET" Width="2*"/>
+                            <DataGridTextColumn Binding="{Binding Description}" Header="DESCRIPTION" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <!-- ═══════════════════════════════════════════════════════ -->
+                    <!-- DUPLICATE FILES (size → XXH3 head → XXH3 full)          -->
+                    <!-- ═══════════════════════════════════════════════════════ -->
+                    <DataGrid x:Name="dgDuplicates" Visibility="Collapsed" AutoGenerateColumns="False"
+                              ItemsSource="{Binding DuplicateGroups}">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Binding="{Binding FileSize, Converter={StaticResource BytesToSizeConverter}}" Header="SIZE" Width="90"/>
+                            <DataGridTextColumn Binding="{Binding Paths, Converter={StaticResource CountConverter}}" Header="COPIES" Width="70"/>
+                            <DataGridTextColumn Binding="{Binding WastedBytes, Converter={StaticResource BytesToSizeConverter}}" Header="WASTED" Width="100"/>
+                            <DataGridTextColumn Header="PATHS" Width="*">
+                                <DataGridTextColumn.Binding>
+                                    <Binding Path="Paths" Converter="{StaticResource PathListJoinConverter}"/>
+                                </DataGridTextColumn.Binding>
+                            </DataGridTextColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <!-- ═══════════════════════════════════════════════════════ -->
+                    <!-- COMMUNITY CLEANERS (winapp2.ini)                        -->
+                    <!-- ═══════════════════════════════════════════════════════ -->
+                    <Grid x:Name="panelWinapp2" Visibility="Collapsed">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <Border Grid.Row="0" Padding="24,14" Background="{DynamicResource MantleBrush}">
+                            <TextBlock FontSize="12" Foreground="{DynamicResource SubtextBrush}"
+                                       Text="{Binding Winapp2Source, StringFormat=Source: {0}}"/>
+                        </Border>
+                        <DataGrid Grid.Row="1" AutoGenerateColumns="False" ItemsSource="{Binding Winapp2Entries}">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Binding="{Binding Section}" Header="ENTRY" Width="2*"/>
+                                <DataGridTextColumn Binding="{Binding LangSecRef}" Header="CATEGORY" Width="100"/>
+                                <DataGridTextColumn Binding="{Binding DetectOS}" Header="OS GATE" Width="120"/>
+                                <DataGridTextColumn Binding="{Binding FileKeys, Converter={StaticResource CountConverter}}" Header="FILES" Width="70"/>
+                                <DataGridTextColumn Binding="{Binding RegKeys, Converter={StaticResource CountConverter}}"  Header="REG" Width="70"/>
+                                <DataGridTextColumn Binding="{Binding Warning, Converter={StaticResource FirstOrEmptyConverter}}" Header="WARNING" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+
+                    <!-- ═══════════════════════════════════════════════════════ -->
+                    <!-- REPAIR WINDOWS (sfc / dism / chkdsk / caches)           -->
+                    <!-- ═══════════════════════════════════════════════════════ -->
+                    <Grid x:Name="panelRepair" Visibility="Collapsed">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <Border Grid.Row="0" Padding="24,16,24,8">
+                            <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource SubtextBrush}" FontSize="12.5" LineHeight="20">
+                                Integrity and cache-rebuild tools that wrap Microsoft utilities. Each command streams its
+                                output below. Long runs (DISM, chkdsk) can take several minutes — leave the window open.
+                            </TextBlock>
+                        </Border>
+                        <WrapPanel Grid.Row="1" Orientation="Horizontal" Margin="24,4,24,14">
+                            <Button Content="sfc /scannow"              Command="{Binding RunSfcCommand}"            Style="{DynamicResource AccentButton}" Margin="0,0,8,6" Padding="14,8"/>
+                            <Button Content="DISM ScanHealth"           Command="{Binding RunDismScanCommand}"       Margin="0,0,8,6" Padding="14,8"/>
+                            <Button Content="DISM RestoreHealth"        Command="{Binding RunDismRestoreCommand}"    Margin="0,0,8,6" Padding="14,8"/>
+                            <Button Content="DISM ComponentCleanup"     Command="{Binding RunDismCleanupCommand}"    Margin="0,0,8,6" Padding="14,8"/>
+                            <Button Content="chkdsk C: /scan"           Command="{Binding RunChkDskCommand}"         Margin="0,0,8,6" Padding="14,8"/>
+                            <Button Content="Rebuild Font Cache"        Command="{Binding RebuildFontCacheCommand}"  Margin="0,0,8,6" Padding="14,8"/>
+                            <Button Content="Rebuild Icon Cache"        Command="{Binding RebuildIconCacheCommand}"  Margin="0,0,8,6" Padding="14,8"/>
+                        </WrapPanel>
+                        <Border Grid.Row="2" Margin="24,0,24,16" Padding="14" Background="{DynamicResource MantleBrush}" CornerRadius="8">
+                            <TextBox x:Name="txtRepairOutput"
+                                     Text="{Binding RepairOutput, Mode=OneWay}"
+                                     IsReadOnly="True" BorderThickness="0"
+                                     Background="Transparent" Foreground="{DynamicResource TextBrush}"
+                                     FontFamily="Consolas,Cascadia Code" FontSize="12"
+                                     TextWrapping="NoWrap" AcceptsReturn="True"
+                                     VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                                     TextChanged="RepairOutput_TextChanged"/>
+                        </Border>
+                    </Grid>
+
+                    <!-- ═══════════════════════════════════════════════════════ -->
+                    <!-- SCHEDULED CLEANING (schtasks wrappers)                  -->
+                    <!-- ═══════════════════════════════════════════════════════ -->
+                    <Grid x:Name="panelSchedule" Visibility="Collapsed">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <Border Grid.Row="0" Padding="24,16">
+                            <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource SubtextBrush}" FontSize="12.5" LineHeight="20">
+                                Scheduled jobs run DeepPurgeCli as SYSTEM at their next trigger. Jobs are created in the
+                                Task Scheduler folder <Run FontWeight="SemiBold">\DeepPurge\</Run>. Use the CLI
+                                (<Run FontFamily="Consolas" FontWeight="SemiBold">deeppurgecli schedule add</Run>) to create new jobs —
+                                this panel lists the ones currently active.
+                            </TextBlock>
+                        </Border>
+                        <ListBox Grid.Row="1" ItemsSource="{Binding ScheduledJobs}" BorderThickness="0" Margin="24,0,24,16"
+                                 Background="{DynamicResource MantleBrush}"/>
+                    </Grid>
+
+                    <!-- ═══════════════════════════════════════════════════════ -->
+                    <!-- ABOUT / UPDATES                                         -->
+                    <!-- ═══════════════════════════════════════════════════════ -->
+                    <Border x:Name="panelAbout" Visibility="Collapsed" Padding="48,32">
+                        <StackPanel MaxWidth="640" HorizontalAlignment="Left" VerticalAlignment="Top">
+                            <TextBlock Text="DeepPurge" FontSize="32" FontWeight="Bold"
+                                       Foreground="{DynamicResource TextBrush}" Margin="0,0,0,2"/>
+                            <TextBlock Text="{Binding AppVersionDisplay, StringFormat=Version {0}}" FontSize="13"
+                                       Foreground="{DynamicResource SubtextBrush}" Margin="0,0,0,24"/>
+
+                            <TextBlock Text="Data location" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                            <TextBlock Text="{Binding DataRootDisplay}" FontFamily="Consolas,Cascadia Code"
+                                       FontSize="12" Foreground="{DynamicResource SubtextBrush}" Margin="0,0,0,20"
+                                       TextWrapping="Wrap"/>
+
+                            <TextBlock Text="Portable mode" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                            <TextBlock Text="{Binding PortableStatusDisplay}" FontSize="12"
+                                       Foreground="{DynamicResource SubtextBrush}" Margin="0,0,0,20" TextWrapping="Wrap"/>
+
+                            <TextBlock Text="Updates" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                            <TextBlock Text="{Binding UpdateText}" FontSize="12"
+                                       Foreground="{DynamicResource SubtextBrush}" Margin="0,0,0,12" TextWrapping="Wrap"/>
+                            <Button Content="Check for updates" Command="{Binding CheckForUpdatesCommand}"
+                                    Style="{DynamicResource AccentButton}" HorizontalAlignment="Left" Padding="24,10"/>
                         </StackPanel>
                     </Border>
 

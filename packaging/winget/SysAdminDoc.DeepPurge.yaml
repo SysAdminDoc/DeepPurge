@@ -1,0 +1,48 @@
+# ─── winget manifest ───────────────────────────────────────────────
+# Submit to https://github.com/microsoft/winget-pkgs by splitting this
+# single-file form into the three required docs (Version, Installer,
+# DefaultLocale) with `wingetcreate update` or the manual templates.
+#
+# Reference: https://learn.microsoft.com/windows/package-manager/package/manifest
+# ────────────────────────────────────────────────────────────────────
+
+PackageIdentifier: SysAdminDoc.DeepPurge
+PackageVersion:    0.9.0
+PackageName:       DeepPurge
+Publisher:         SysAdminDoc
+PublisherSupportUrl: https://github.com/SysAdminDoc/DeepPurge/issues
+PackageUrl:        https://github.com/SysAdminDoc/DeepPurge
+Author:            SysAdminDoc
+License:           MIT
+LicenseUrl:        https://github.com/SysAdminDoc/DeepPurge/blob/main/LICENSE
+ShortDescription:  Thorough open-source Windows uninstaller and system cleaner.
+Description: |-
+  DeepPurge is a deep, safe, open-source Windows uninstaller that removes programs completely,
+  hunts down every leftover, and cleans system cruft other tools miss. Ships a GUI and a
+  headless CLI for scripting / Task Scheduler / Intune / SCCM.
+Tags:
+  - uninstaller
+  - cleaner
+  - windows
+  - sysadmin
+  - privacy
+  - driver-store
+  - registry
+  - sfc
+  - dism
+
+Installers:
+  - Architecture: x64
+    InstallerType: portable
+    Scope: user
+    InstallerUrl: https://github.com/SysAdminDoc/DeepPurge/releases/download/v0.9.0/DeepPurge.exe
+    # Hash computed from the locally-published Release build. Re-run
+    # Get-FileHash and update this line any time DeepPurge.exe is rebuilt.
+    InstallerSha256: A59B2F5270F566523F75325C02F5CBAC9F94F1E58A3FA06855B1D113F3F8CEE5
+    Commands:
+      - DeepPurge
+
+ReleaseDate: 2026-04-22
+
+ManifestType:    singleton
+ManifestVersion: 1.6.0

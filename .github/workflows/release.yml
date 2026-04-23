@@ -1,42 +1,84 @@
-name: Build & Release
+name: Release
 
 on:
   push:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v0.9.0). Must already exist as a git tag.'
+        required: true
+
+permissions:
+  contents: write
 
 jobs:
-  build:
+  release:
     runs-on: windows-latest
-    permissions:
-      contents: write
+    timeout-minutes: 25
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
 
       - name: Setup .NET 8
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
 
-      - name: Restore dependencies
-        run: dotnet restore DeepPurge.sln
+      - name: Resolve tag
+        id: tag
+        shell: pwsh
+        run: |
+          $tag = "${{ github.event.inputs.tag }}"
+          if ([string]::IsNullOrEmpty($tag)) { $tag = "${{ github.ref_name }}" }
+          echo "TAG=$tag"          >> $env:GITHUB_OUTPUT
+          echo "VERSION=$($tag.TrimStart('v'))" >> $env:GITHUB_OUTPUT
 
-      - name: Publish self-contained Windows exe
+      - name: Restore + build
+        run: |
+          dotnet restore DeepPurge.sln
+          dotnet build DeepPurge.sln -c Release --no-restore
+
+      - name: Test
+        run: dotnet test tests/DeepPurge.Tests/DeepPurge.Tests.csproj -c Release --no-build
+
+      - name: Publish GUI
         run: >
-          dotnet publish src/DeepPurge.App
-          -c Release
-          -r win-x64
-          --self-contained true
-          -p:PublishSingleFile=true
-          -p:IncludeNativeLibrariesForSelfExtract=true
-          -o publish/
+          dotnet publish src/DeepPurge.App/DeepPurge.App.csproj
+          -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true
+          -p:DebugType=none -p:DebugSymbols=false
+          --output build --nologo
 
-      - name: Upload to Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: publish/DeepPurge.exe
-          fail_on_unmatched_files: true
+      - name: Publish CLI
+        run: >
+          dotnet publish src/DeepPurge.Cli/DeepPurge.Cli.csproj
+          -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true
+          -p:DebugType=none -p:DebugSymbols=false
+          --output build --nologo
+
+      - name: Strip extras + SHA256
+        shell: pwsh
+        run: |
+          Get-ChildItem build -Exclude 'DeepPurge.exe','DeepPurgeCli.exe' |
+            Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
+          Get-FileHash build/DeepPurge.exe,build/DeepPurgeCli.exe -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash)  $(Split-Path -Leaf $_.Path)" } |
+            Out-File build/SHA256SUMS.txt -Encoding ascii
+
+      - name: Create / update release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $tag = '${{ steps.tag.outputs.TAG }}'
+          $exists = $true
+          try { gh release view $tag 2>&1 | Out-Null } catch { $exists = $false }
+          if (-not $exists) {
+            gh release create $tag --title $tag --notes "Automated release of $tag. See CHANGELOG.md for details."
+          }
+          gh release upload $tag build/DeepPurge.exe build/DeepPurgeCli.exe build/SHA256SUMS.txt --clobber
