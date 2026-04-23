@@ -109,6 +109,9 @@ public partial class MainWindow : Window
         dgEmptyFolders, panelDisk, dgAutorun, dgBrowserExt, dgContextMenu,
         dgServices, dgTasks, dgRestore, panelLeftovers,
         panelHunter, panelBackups,
+        // v0.9.0 system-tools panels
+        dgDrivers, dgStartupImpact, dgShortcuts, dgDuplicates,
+        panelWinapp2, panelRepair, panelSchedule, panelAbout,
     };
 
     private void NavButton_Checked(object sender, RoutedEventArgs e)
@@ -192,7 +195,134 @@ public partial class MainWindow : Window
                 panelBackups.Visibility = Visibility.Visible; txtPanelTitle.Text = "Registry Backups";
                 AppendToolbarButton("Open Folder", OpenBackupFolder_Click, "AccentButton");
                 break;
+
+            // ─── v0.9.0 SYSTEM TOOLS ───
+            case "Drivers":
+                dgDrivers.Visibility = Visibility.Visible; txtPanelTitle.Text = "Driver Store";
+                AppendToolbarButton("Rescan",         ScanDrivers_Click,  "AccentButton");
+                AppendToolbarButton("Delete Selected", DeleteDrivers_Click, "DangerButton");
+                MaybeAutoLoad("Drivers", () => _vm.ScanDriversCommand.Execute(null));
+                break;
+            case "StartupImpact":
+                dgStartupImpact.Visibility = Visibility.Visible; txtPanelTitle.Text = "Startup Impact";
+                AppendToolbarButton("Rescan", ScanStartupImpact_Click, "AccentButton");
+                MaybeAutoLoad("StartupImpact", () => _vm.ScanStartupImpactCommand.Execute(null));
+                break;
+            case "Shortcuts":
+                dgShortcuts.Visibility = Visibility.Visible; txtPanelTitle.Text = "Broken Shortcuts";
+                AppendToolbarButton("Rescan", ScanShortcuts_Click, "AccentButton");
+                AppendToolbarButton("Recycle All", RecycleBrokenShortcuts_Click, "DangerButton");
+                MaybeAutoLoad("Shortcuts", () => _vm.ScanShortcutsCommand.Execute(null));
+                break;
+            case "Duplicates":
+                dgDuplicates.Visibility = Visibility.Visible; txtPanelTitle.Text = "Duplicate Files";
+                AppendToolbarButton("Scan User Profile", ScanDuplicates_Click, "AccentButton");
+                AppendToolbarButton("Delete Duplicates", DeleteDuplicates_Click, "DangerButton");
+                // No auto-scan on Duplicates — a user-profile walk is heavy and
+                // the user should opt in explicitly.
+                break;
+            case "Winapp2":
+                panelWinapp2.Visibility = Visibility.Visible; txtPanelTitle.Text = "Community Cleaners (winapp2)";
+                AppendToolbarButton("Load / Refresh", LoadWinapp2_Click, "AccentButton");
+                AppendToolbarButton("Run Applicable", RunWinapp2_Click, "DangerButton");
+                MaybeAutoLoad("Winapp2", () => _vm.LoadWinapp2Command.Execute(null));
+                break;
+            case "Repair":
+                panelRepair.Visibility = Visibility.Visible; txtPanelTitle.Text = "Repair Windows";
+                break;
+            case "Schedule":
+                panelSchedule.Visibility = Visibility.Visible; txtPanelTitle.Text = "Scheduled Cleaning";
+                AppendToolbarButton("Refresh", RefreshSchedule_Click, "AccentButton");
+                // Refresh every time — schedule list is cheap and can change externally.
+                _vm.RefreshScheduledJobsCommand.Execute(null);
+                break;
+            case "About":
+                panelAbout.Visibility = Visibility.Visible; txtPanelTitle.Text = "About / Updates";
+                break;
         }
+    }
+
+    // Tracks "this panel has been scanned at least once this session." The old
+    // `if (Count == 0) Scan()` guard would re-trigger scans every time the user
+    // navigated away and back if the previous scan returned zero results —
+    // expensive for Drivers / Shortcuts scans.
+    private readonly HashSet<string> _autoLoaded = new(StringComparer.OrdinalIgnoreCase);
+    private void MaybeAutoLoad(string panel, Action load)
+    {
+        if (_autoLoaded.Add(panel)) load();
+    }
+
+    // ─── v0.9.0 panel click handlers — all delegate to VM commands so
+    //     business logic stays out of the view. Keeps the Ctrl+F
+    //     "where does X live?" search consistent with existing handlers.
+
+    private void ScanDrivers_Click(object s, RoutedEventArgs e)
+        => _vm.ScanDriversCommand.Execute(null);
+
+    private async void DeleteDrivers_Click(object s, RoutedEventArgs e)
+    {
+        var row = dgDrivers.SelectedItem as DeepPurge.Core.Drivers.DriverPackage;
+        if (row == null) { _vm.StatusText = "Select a driver row first"; return; }
+        if (MessageBox.Show(this,
+                $"Remove driver package '{row.PublishedName}' ({row.OriginalName})?\n\nThis calls pnputil /delete-driver.",
+                "Confirm driver removal", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
+            return;
+        try
+        {
+            var (ok, output) = await new DeepPurge.Core.Drivers.DriverStoreScanner().DeleteAsync(row.PublishedName, force: false);
+            _vm.StatusText = ok ? $"Removed {row.PublishedName}" : $"pnputil: {output.Trim()}";
+            if (ok) _vm.ScanDriversCommand.Execute(null);
+        }
+        catch (Exception ex) { _vm.StatusText = $"Driver delete failed: {ex.Message}"; }
+    }
+
+    private void ScanStartupImpact_Click(object s, RoutedEventArgs e)
+        => _vm.ScanStartupImpactCommand.Execute(null);
+
+    private void ScanShortcuts_Click(object s, RoutedEventArgs e)
+        => _vm.ScanShortcutsCommand.Execute(null);
+
+    private void RecycleBrokenShortcuts_Click(object s, RoutedEventArgs e)
+        => _vm.RecycleBrokenShortcutsCommand.Execute(null);
+
+    private void ScanDuplicates_Click(object s, RoutedEventArgs e)
+        => _vm.ScanDuplicatesCommand.Execute(null);
+
+    private void DeleteDuplicates_Click(object s, RoutedEventArgs e)
+    {
+        if (_vm.DuplicateGroups.Count == 0) { _vm.StatusText = "Run a scan first."; return; }
+        if (MessageBox.Show(this,
+                $"Delete the oldest copy from each of {_vm.DuplicateGroups.Count} duplicate group(s)?",
+                "Confirm duplicate cleanup", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
+            return;
+        _vm.DeleteDuplicatesCommand.Execute(null);
+    }
+
+    private void LoadWinapp2_Click(object s, RoutedEventArgs e)
+        => _vm.LoadWinapp2Command.Execute(null);
+
+    private void RunWinapp2_Click(object s, RoutedEventArgs e)
+    {
+        if (_vm.Winapp2Entries.Count == 0) { _vm.StatusText = "Load cleaners first."; return; }
+        if (MessageBox.Show(this,
+                $"Run {_vm.Winapp2Entries.Count} applicable cleaners?\n\n" +
+                (_vm.DryRunEnabled ? "(dry-run — no files will be deleted)" : "Files will be deleted."),
+                "Confirm winapp2 run", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
+            return;
+        _vm.RunWinapp2Command.Execute(null);
+    }
+
+    private void RefreshSchedule_Click(object s, RoutedEventArgs e)
+        => _vm.RefreshScheduledJobsCommand.Execute(null);
+
+    /// <summary>
+    /// Auto-scroll the Repair output box to the tail as new lines stream in.
+    /// Wired via TextChanged so it's independent of which repair button
+    /// produced the output.
+    /// </summary>
+    private void RepairOutput_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.TextBox tb) tb.ScrollToEnd();
     }
 
     /// <summary>

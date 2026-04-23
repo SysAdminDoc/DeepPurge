@@ -1,0 +1,28 @@
+version: 2
+updates:
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "05:00"
+    open-pull-requests-limit: 5
+    groups:
+      test-stack:
+        patterns:
+          - "xunit*"
+          - "Microsoft.NET.Test.Sdk"
+      mvvm:
+        patterns:
+          - "CommunityToolkit.*"
+    labels:
+      - "dependencies"
+      - "nuget"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "ci"
