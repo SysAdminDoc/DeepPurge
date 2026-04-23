@@ -1,0 +1,75 @@
+name: Bug report
+description: Something is wrong or isn't doing what it claims.
+title: "[bug] "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. A few things that make this fast to triage:
+        1. Run `deeppurgecli doctor` from an elevated shell and paste the output.
+        2. Tell me which panel / CLI command you were using.
+        3. If it's a UI issue, a screenshot helps more than a description.
+
+  - type: input
+    id: version
+    attributes:
+      label: DeepPurge version
+      description: From the About panel, or `deeppurgecli version`.
+      placeholder: "0.9.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      options:
+        - GUI
+        - CLI
+        - Both
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you expect, and what actually happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Open the Drivers panel
+        2. Click Rescan
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: deeppurgecli doctor output
+      description: Paste the full doctor output from an elevated shell.
+      render: text
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log lines
+      description: From %LocalAppData%\DeepPurge\Logs\deeppurge.log (or Data\Logs\ in portable mode).
+      render: text
+
+  - type: checkboxes
+    id: confirms
+    attributes:
+      label: Confirm
+      options:
+        - label: I am running the latest 0.9.x release
+          required: true
+        - label: I am not reporting a security vulnerability (those go to SECURITY.md)
+          required: true

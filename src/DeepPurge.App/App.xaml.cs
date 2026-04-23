@@ -1,16 +1,20 @@
 using System.IO;
+using System.Reflection;
 using System.Security.Principal;
 using System.Windows;
 using System.Windows.Threading;
+using DeepPurge.Core.App;
 
 namespace DeepPurge.App;
 
 public partial class App : Application
 {
-    private const string Version = "0.8.1";
-    private static readonly string CrashLogDir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "DeepPurge", "Logs");
+    // Single source of truth: the running assembly's version. Avoids the old
+    // duplicated-string problem where csproj, manifest, and this hardcoded
+    // const could silently disagree after a release bump.
+    private static readonly string Version =
+        (Assembly.GetExecutingAssembly().GetName().Version ?? new Version(0, 0)).ToString(3);
+    private static readonly string CrashLogDir = DataPaths.Logs;
 
     protected override void OnStartup(StartupEventArgs e)
     {

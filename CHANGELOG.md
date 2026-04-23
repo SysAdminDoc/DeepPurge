@@ -2,6 +2,55 @@
 
 All notable changes to DeepPurge will be documented in this file.
 
+## [v0.9.0] — Ten-feature competitive pass + headless CLI
+
+### Wide-net completion (post-audit hardening)
+- **7 new GUI panels** under a "SYSTEM TOOLS" sidebar section: Driver Store, Startup Impact, Broken Shortcuts, Duplicate Files, Community Cleaners (winapp2), Repair Windows, Scheduled Cleaning, About / Updates. Each panel auto-scans on first navigation; confirmation dialogs gate destructive actions.
+- **`deeppurgecli doctor`** — 14-check environment self-test (elevation, OS version, pnputil/schtasks/winget availability, WDI traces, DriverStore, registry access, log writability, snapshot dir, winapp2 cache). Exit 1 on any failure so CI can gate on it.
+- **Unit test project** (`tests/DeepPurge.Tests`, xUnit) — **64 tests pass** covering UpdateChecker version-compare (regression tests for the 3-part-vs-4-part bug), Winapp2Parser bucket routing, StartupImpact thresholds, SafetyGuard block/allow lists, ScheduleManager name sanitisation, DataPaths resolution. Wired into the CI workflow.
+- **GitHub Actions** — `.github/workflows/build.yml` (CI: build + test + artifact upload on every push/PR) + `.github/workflows/release.yml` (on tag push: build + test + SHA256 + release-asset upload of both exes).
+- **winget + Scoop manifests** — `packaging/winget/SysAdminDoc.DeepPurge.yaml` (singleton manifest ready for `wingetcreate update`) + `packaging/scoop/deeppurge.json` (Scoop bucket manifest with autoupdate + pre-install portable-marker hook).
+- **Authenticode signing** — `Build.ps1 -Sign` detects signtool.exe under the Windows SDK, supports PFX file + SecureString password, env-var (`DEEPPURGE_CERT_PATH`/`_PASSWORD`), or cert-store thumbprint. Signs both exes with SHA256 + RFC 3161 timestamp and verifies. Fails soft — unsigned builds still ship.
+- **Install-manifest replay uninstall** — `MainViewModel.ForcedUninstallByManifestAsync(programName)` loads a previously-captured install delta and replays its deletions through `SafetyGuard` + `DeleteOptions`. Closes the "open-source Revo" loop between snapshot capture and uninstall.
+- **3 new XAML value converters** in `Converters/V09Converters.cs`: `BytesToSizeConverter`, `BoolToOldBadgeConverter`, `PathListJoinConverter`.
+
+### Core hardening (audit pass)
+
+Pre-polish audit shipped the following fixes: UpdateChecker version-compare (3-part vs 4-part semver), ScheduleManager quote-escape (now uses per-job `.cmd` wrapper script, no inline quoting), StartupImpactCalculator (namespace-independent XML walk, multi-schema field lookup), Winapp2Parser (DetectOS / SpecialDetect / DetectFile / numbered Detect routed to correct buckets), ShortcutRepairScanner (dedicated STA thread, COM RCW release in `finally`, `SHFileOperation` Recycle Bin), DriverStoreScanner (schema-agnostic XML parsing via `LocalName`, OEM-codepage stdout, InvariantCulture date parse fallback), DuplicateFinder (`ArrayPool<byte>`, sort-safety for missing files), InstallSnapshotEngine (parallel roots via `Task.WhenAll`, gzipped snapshots, pruning to 3-per-program/30-global, atomic JSON write), WindowsRepairEngine (narrow font/icon cache deletes instead of `del /s`, correct console-encoding passthrough), DataPaths (error propagation on portable-enable failure), and the MainViewModel.Extensions HTTP work (shared `HttpClient` with 15s timeout, per-command try/catch with `Log.Error`). Plus a new `Core/Diagnostics/Log.cs` helper that rotates at 5 MB so swallowed exceptions leave a paper trail.
+
+### Original research-driven feature pass
+
+Research-driven feature pass against BCUninstaller, BleachBit, RAPR/DriverStoreExplorer, Czkawka, SophiApp, and the winapp2.ini community database. Every recommendation from the April 2026 competitive-research report landed.
+
+### Added — Core services (`DeepPurge.Core`)
+- **`App/DataPaths.cs`** — Single source of truth for per-user data location. Detects `DeepPurge.portable` next to the running exe and redirects every setting / backup / log / snapshot to `./Data/` beside the binary. BCU `PortableSettingsProvider` pattern. `BackupManager`, `ThemeManager`, and `App.xaml.cs` all migrated to use it.
+- **`Drivers/DriverStoreScanner.cs`** — `pnputil /enum-drivers /format:xml` (with text-output fallback) parser. Computes FileRepository size per package, groups by `OriginalName`, flags non-latest versions as `IsOldVersion`. `DeleteAsync` routes through `pnputil /delete-driver` with `/force` option. Reference: `lostindark/DriverStoreExplorer` (RAPR).
+- **`Startup/StartupImpactCalculator.cs`** — Parses `%SystemRoot%\System32\wdi\LogFiles\StartupInfo\Startup{SID}_*.xml` and classifies each process High / Medium / Low using Microsoft's documented thresholds (3 MB disk / 1000 ms CPU for High; 300 KB / 300 ms for Medium). Pure XML — no undocumented APIs.
+- **`Repair/WindowsRepairEngine.cs`** — Wrapper for sfc / DISM (`ScanHealth`, `RestoreHealth`, `StartComponentCleanup`, `ResetBase`) / chkdsk / font & icon cache rebuild / `winget repair` / `msiexec /fa`. Live stdout streaming via `IProgress<string>`. Cancellable. Product-code and winget-ID sanitised.
+- **`Shortcuts/ShortcutRepairScanner.cs`** — Walks Desktop + Start Menu (per-user + common) for `.lnk`, parses via `IShellLinkW` + `IPersistFile` COM, classifies Valid / Broken / Unresolved / MsiAdvertised / Store. `SLR_NO_UI` prevents "find target" prompts during bulk scan.
+- **`Cleaning/Winapp2Parser.cs`** + `Winapp2Runner` — Parses community `winapp2.ini` cleaner database. Honours `Detect=` / `DetectFile=` applicability gating, `FileKey*` with `RECURSE` / `REMOVESELF` modifiers, `RegKey*` with SafetyGuard enforcement. Auto-downloads from `MoscaDotTo/Winapp2` on first run to `DataPaths.Cleaners`.
+- **`FileSystem/DuplicateFinder.cs`** — Three-stage hash: size grouping → XXH3 first-MB head → XXH3 full for collisions. Uses `System.IO.Hashing.XxHash3` (new NuGet dep). Skips `FileAttributes.ReparsePoint` to avoid junction loops. Algorithm lifted from Czkawka.
+- **`InstallMonitor/InstallSnapshotEngine.cs`** — **Flagship feature.** Pre/post snapshot diff of Program Files / ProgramData / LocalAppData / AppData + `HKLM\SOFTWARE`, `WOW6432Node`, `HKCU\SOFTWARE` (depth-3 subkey manifest). `TraceInstallAsync` launches an installer, waits for exit + 5s idle, snapshots again, persists the delta as `{name}.manifest.json`. `ReplayRemoveAsync` feeds the manifest back through SafetyGuard for exact-manifest forced uninstall. Closes the #1 feature gap vs Revo.
+- **`Schedule/ScheduleManager.cs`** — Creates / lists / removes Task Scheduler jobs under `\DeepPurge\` via `schtasks.exe`. Runs as SYSTEM with highest privileges. `Create`, `Delete`, `List` operations.
+- **`Updates/UpdateChecker.cs`** — Hits `GitHub /repos/{owner}/{repo}/releases/latest`, diffs semver, returns `UpdateInfo`. 8-second timeout. Never blocks startup.
+
+### Added — Headless CLI (`DeepPurge.Cli`)
+- New `DeepPurgeCli.exe` — separate project, `asInvoker` manifest so it's scriptable from Task Scheduler / PowerShell / cmd without a UAC prompt.
+- Commands: `version`, `portable`, `list`, `uninstall`, `clean`, `repair`, `drivers`, `startup-impact`, `shortcuts`, `duplicates`, `snapshot trace`, `winapp2`, `schedule`, `check-update`.
+- Exit codes follow BCU convention: `0` ok, `1` general fail, `2` bad args, `13` access denied, `1223` cancelled.
+
+### Added — GUI (`DeepPurge.App`)
+- `ViewModels/MainViewModel.Extensions.cs` — Partial class exposing the ten new Core services as `ObservableCollection`s + `[RelayCommand]` methods, ready for XAML panel binding. Async with `_dispatcher.Invoke` marshaling. Observable properties for badges, summaries, live output.
+
+### Changed
+- Version bumped `0.8.1` → `0.9.0` across `DeepPurge.Core.csproj`, `DeepPurge.App.csproj`, `DeepPurge.Cli.csproj`, `BUILD.bat`, `Build.ps1`, `README.md`, `App.xaml.cs`.
+- `BackupManager.BackupRoot`, `ThemeManager.SettingsFile`, `App.CrashLogDir` now resolve through `DataPaths` — transparently honour portable-mode redirection.
+- `Build.ps1` now publishes both `DeepPurge.exe` and `DeepPurgeCli.exe` into `build/`. Cleanup pass spares both exes; drops all side artifacts.
+- Solution file adds the `DeepPurge.Cli` project entry + build configs.
+
+### Dependencies
+- New: `System.IO.Hashing 8.0.0` — for the duplicate finder's XXH3 hashing. No other new deps.
+
 ## [v0.8.1] — UX polish + WizTree-speed disk analyzer
 
 ### Added
