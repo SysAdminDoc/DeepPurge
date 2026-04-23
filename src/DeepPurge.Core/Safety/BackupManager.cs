@@ -1,14 +1,13 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
+using DeepPurge.Core.App;
 
 namespace DeepPurge.Core.Safety;
 
 public class BackupManager
 {
-    private static readonly string BackupRoot = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "DeepPurge", "Backups");
+    private static readonly string BackupRoot = DataPaths.Backups;
 
     // Allow the subset of chars Windows registry keys actually permit in paths.
     // Anything else is rejected rather than sanitized — if we saw a weird key,

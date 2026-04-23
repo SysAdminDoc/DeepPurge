@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/SysAdminDoc/DeepPurge/blob/main/SECURITY.md
+    about: Please report security issues privately — see SECURITY.md.
+  - name: Ask a question (discussion)
+    url: https://github.com/SysAdminDoc/DeepPurge/discussions
+    about: For usage questions or design discussion, use Discussions rather than Issues.

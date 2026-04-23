@@ -1,0 +1,59 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore DeepPurge.sln
+
+      - name: Build
+        run: dotnet build DeepPurge.sln -c Release --no-restore
+
+      - name: Test
+        run: dotnet test tests/DeepPurge.Tests/DeepPurge.Tests.csproj -c Release --no-build --verbosity normal
+
+      - name: Publish GUI
+        run: >
+          dotnet publish src/DeepPurge.App/DeepPurge.App.csproj
+          -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true
+          -p:DebugType=none -p:DebugSymbols=false
+          --output build --nologo
+
+      - name: Publish CLI
+        run: >
+          dotnet publish src/DeepPurge.Cli/DeepPurge.Cli.csproj
+          -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true
+          -p:DebugType=none -p:DebugSymbols=false
+          --output build --nologo
+
+      - name: Drop extras
+        shell: pwsh
+        run: |
+          Get-ChildItem build -Exclude 'DeepPurge.exe','DeepPurgeCli.exe' |
+            Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: DeepPurge-win-x64
+          path: build/*.exe
+          retention-days: 14

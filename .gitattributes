@@ -1,0 +1,40 @@
+# Normalise line endings. Text in the repo is LF; tooling handles CRLF on checkout.
+* text=auto eol=lf
+
+# Source: always LF.
+*.cs     text eol=lf diff=csharp
+*.csproj text eol=lf
+*.sln    text eol=lf
+*.md     text eol=lf
+*.yml    text eol=lf
+*.yaml   text eol=lf
+*.json   text eol=lf
+*.xml    text eol=lf
+*.xaml   text eol=lf
+
+# Windows scripts must keep CRLF or they won't parse correctly.
+*.bat    text eol=crlf
+*.cmd    text eol=crlf
+*.ps1    text eol=crlf
+*.psm1   text eol=crlf
+*.psd1   text eol=crlf
+*.manifest text eol=crlf
+
+# Binary assets — no line-ending conversion, no diff.
+*.exe    binary
+*.dll    binary
+*.ico    binary
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.webp   binary
+*.pfx    binary
+*.snk    binary
+*.zip    binary
+*.7z     binary
+*.tar.gz binary
+
+# GitHub linguist — mark generated / packaging from language stats.
+packaging/** linguist-vendored
+.github/**   linguist-generated=false
