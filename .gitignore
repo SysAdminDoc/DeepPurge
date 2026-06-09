@@ -37,3 +37,7 @@ CODEX_CHANGELOG.md
 *.p12
 *.snk
 signing.pfx
+
+# Markdown files local-only (except README)
+*.md
+!README.md
