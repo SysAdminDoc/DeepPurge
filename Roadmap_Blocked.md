@@ -22,3 +22,9 @@ development passes.
 - [ ] **Real-world field test** of each v0.9 panel on a freshly-imaged
       Windows 11 VM
       Blocked: requires a clean VM image and manual human testing.
+
+## v0.12 — accessibility + polish
+
+- [ ] **Crowdin submission** for localization strings
+      Blocked: requires Crowdin project creation and external contributor setup.
+      The `.resx` infrastructure is already in place (`Properties/Resources.resx`).

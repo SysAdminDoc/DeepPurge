@@ -2,6 +2,33 @@
 
 All notable changes to DeepPurge will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **Install Monitor 2.0** — USN journal-based filesystem change tracking (`UsnJournalReader`) replaces the before/after snapshot walk. Catches every NTFS file create/modify/rename/delete during an installer run. Falls back to legacy snapshot diff on non-NTFS or when the journal is unavailable. CLI: `--legacy` flag forces the old path.
+- **Install Monitor UI** — "Track This Installer" panel in the SYSTEM TOOLS section with program name, installer path, browse button, and trace workflow. Results display inline with upgrade-aware delta.
+- **SpecialDetect browser detection** for winapp2.ini — `DET_CHROME`, `DET_FIREFOX`, `DET_OPERA`, `DET_EDGE`, `DET_THUNDERBIRD`, `DET_SAFARI`, `DET_SEAMONKEY`, `DET_WATERFOX`, `DET_PALE_MOON` are now evaluated against real registry keys instead of always returning "applicable". Unknown tokens remain permissive.
+- **CSV / JSON export** on drivers, shortcuts, duplicates, and startup-impact panels via `--export <file> --format csv|json` CLI flags. New `GridExporter` in Core.
+- **High Contrast theme** — WCAG AAA, pure black background with bright saturated accents (cyan/yellow/green/red). 9th theme in the theme picker.
+- **Upgrade-aware snapshots** — `InstallDelta.RemovedFiles` and `RemovedRegistryKeys` now surfaced in both the GUI status line and CLI output. `IsUpgrade` flag labels upgrade vs fresh-install deltas.
+- **Activity History tab** — structured JSONL activity log (`ActivityLog.cs`) records every cleanup/repair/snapshot/winapp2 operation. New "History" sidebar panel shows the last 200 entries with timestamp, operation type, summary, items, and bytes freed.
+- **Intune/SCCM detection scripts** — `deeppurgecli detection-script --program "Name" [--export file.ps1]` generates a PowerShell detection script for Microsoft Intune or SCCM deployment.
+- **Windows toast notifications** — `ToastNotifier` using `Microsoft.Toolkit.Uwp.Notifications`. Scheduled cleaning runs from the CLI now show a Windows toast with the cleanup summary.
+- **Screen-reader narration** — `AutomationProperties.Name` and `.HelpText` on all v0.9 SYSTEM TOOLS panels (drivers, startup impact, shortcuts, duplicates, winapp2, repair, schedule, install monitor, about).
+- **Localization infrastructure** — `Properties/Resources.resx` with top 20 UI strings and a strongly-typed `Resources.Designer.cs` accessor. Ready for Crowdin submission.
+
+### Changed
+- TFM updated from `net8.0-windows` to `net8.0-windows10.0.17763.0` across all 4 projects to enable WinRT toast notification APIs.
+
+### Dependencies
+- New: `Microsoft.Toolkit.Uwp.Notifications 7.1.3` — Windows 10/11 toast notifications.
+
+### Fixed
+- `deeppurgecli doctor` now includes suggested fixes for actionable warning/failure paths, including missing system tools, inaccessible registry/shell roots, and unwritable data folders.
+
+### Tests
+- Expanded stabilization coverage for `DriverStoreScanner.ParseText`, `InstallSnapshotEngine.Diff`, and `WindowsRepairEngine` command sanitizers.
+
 ## [v0.9.0] — Ten-feature competitive pass + headless CLI
 
 ### Wide-net completion (post-audit hardening)
