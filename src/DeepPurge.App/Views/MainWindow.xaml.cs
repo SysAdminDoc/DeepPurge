@@ -111,7 +111,7 @@ public partial class MainWindow : Window
         panelHunter, panelBackups,
         // v0.9.0 system-tools panels
         dgDrivers, dgStartupImpact, dgShortcuts, dgDuplicates,
-        panelWinapp2, panelRepair, panelSchedule, dgHistory, panelAbout,
+        panelWinapp2, panelRepair, panelSchedule, panelInstallMonitor, dgHistory, panelAbout,
     };
 
     private void NavButton_Checked(object sender, RoutedEventArgs e)
@@ -235,6 +235,9 @@ public partial class MainWindow : Window
                 AppendToolbarButton("Refresh", RefreshSchedule_Click, "AccentButton");
                 // Refresh every time — schedule list is cheap and can change externally.
                 _vm.RefreshScheduledJobsCommand.Execute(null);
+                break;
+            case "InstallMonitor":
+                panelInstallMonitor.Visibility = Visibility.Visible; txtPanelTitle.Text = "Install Monitor";
                 break;
             case "History":
                 dgHistory.Visibility = Visibility.Visible; txtPanelTitle.Text = "Activity History";
@@ -900,6 +903,34 @@ public partial class MainWindow : Window
     {
         var dlg = new Microsoft.Win32.OpenFolderDialog { Title = "Select the program's install folder" };
         if (dlg.ShowDialog() == true) txtForcedPath.Text = dlg.FolderName;
+    }
+
+    private void BrowseInstaller_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Select the installer executable",
+            Filter = "Executables (*.exe;*.msi)|*.exe;*.msi|All files (*.*)|*.*",
+        };
+        if (dlg.ShowDialog() == true) txtMonitorInstaller.Text = dlg.FileName;
+    }
+
+    private async void StartInstallTrace_Click(object sender, RoutedEventArgs e)
+    {
+        var name = txtMonitorName.Text.Trim();
+        var installer = txtMonitorInstaller.Text.Trim();
+        var args = txtMonitorArgs.Text.Trim();
+        if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(installer))
+        {
+            _vm.StatusText = "Enter a program name and installer path first.";
+            return;
+        }
+        _vm.StatusText = "Tracing installer — do not close DeepPurge...";
+        var delta = await _vm.TraceInstallerAsync(name, installer, string.IsNullOrEmpty(args) ? null : args);
+        if (delta != null)
+        {
+            DeepPurge.Core.Diagnostics.ActivityLog.Record("snapshot", $"{name}: +{delta.AddedFiles.Count} files, +{delta.AddedRegistryKeys.Count} keys", delta.TotalAddedBytes, delta.AddedFiles.Count);
+        }
     }
 
     protected override void OnClosing(CancelEventArgs e)
