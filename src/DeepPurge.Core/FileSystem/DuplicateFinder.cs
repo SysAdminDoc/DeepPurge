@@ -1,5 +1,7 @@
 using System.Buffers;
 using System.IO.Hashing;
+using System.Text.Json;
+using DeepPurge.Core.App;
 using DeepPurge.Core.Diagnostics;
 using DeepPurge.Core.Safety;
 
@@ -22,10 +24,21 @@ public class DuplicateGroup
 /// million files doesn't allocate a million 1 MB arrays. Matches the
 /// algorithm used by Czkawka / dupeGuru / fdupes.
 /// </summary>
+public class HashCacheEntry
+{
+    public long Size { get; set; }
+    public long LastWriteTicks { get; set; }
+    public ulong HeadHash { get; set; }
+    public ulong FullHash { get; set; }
+    public bool HasFullHash { get; set; }
+}
+
 public class DuplicateFinder
 {
     private const int FirstChunkBytes = 1 * 1024 * 1024;
     private const long MinFileBytes   = 4 * 1024;
+    private static readonly string CachePath = Path.Combine(DataPaths.Root, "hash-cache.json");
+    private Dictionary<string, HashCacheEntry> _cache = new(StringComparer.OrdinalIgnoreCase);
 
     public async Task<List<DuplicateGroup>> FindAsync(
         IEnumerable<string> roots,
@@ -33,6 +46,7 @@ public class DuplicateFinder
         IProgress<string>? progress = null,
         CancellationToken ct = default)
     {
+        LoadCache();
         var bySize = await Task.Run(() => GroupBySize(roots, minBytes, progress, ct), ct);
         progress?.Report($"Stage 1: {bySize.Count} size-collision groups");
 
@@ -88,6 +102,7 @@ public class DuplicateFinder
             }
         }
 
+        SaveCache();
         return finalGroups
             .OrderByDescending(g => g.WastedBytes)
             .ToList();
@@ -194,8 +209,9 @@ public class DuplicateFinder
         }
     }
 
-    private static async Task<ulong?> HashHeadAsync(string path, CancellationToken ct)
+    private async Task<ulong?> HashHeadAsync(string path, CancellationToken ct)
     {
+        if (TryGetCachedHead(path, out var cached)) return cached;
         byte[]? rented = null;
         try
         {
@@ -213,7 +229,9 @@ public class DuplicateFinder
             }
             var hash = new XxHash3();
             hash.Append(rented.AsSpan(0, total));
-            return hash.GetCurrentHashAsUInt64();
+            var result = hash.GetCurrentHashAsUInt64();
+            UpdateCache(path, headHash: result);
+            return result;
         }
         catch (OperationCanceledException) { throw; }
         catch { return null; }
@@ -223,8 +241,9 @@ public class DuplicateFinder
         }
     }
 
-    private static async Task<ulong?> HashFullAsync(string path, CancellationToken ct)
+    private async Task<ulong?> HashFullAsync(string path, CancellationToken ct)
     {
+        if (TryGetCachedFull(path, out var cached)) return cached;
         const int BufferBytes = 256 * 1024;
         byte[]? rented = null;
         try
@@ -238,7 +257,9 @@ public class DuplicateFinder
             int read;
             while ((read = await fs.ReadAsync(rented.AsMemory(0, BufferBytes), ct)) > 0)
                 hash.Append(rented.AsSpan(0, read));
-            return hash.GetCurrentHashAsUInt64();
+            var result = hash.GetCurrentHashAsUInt64();
+            UpdateCache(path, fullHash: result);
+            return result;
         }
         catch (OperationCanceledException) { throw; }
         catch { return null; }
@@ -246,5 +267,74 @@ public class DuplicateFinder
         {
             if (rented != null) ArrayPool<byte>.Shared.Return(rented);
         }
+    }
+
+    private bool TryGetCachedHead(string path, out ulong hash)
+    {
+        hash = 0;
+        if (!_cache.TryGetValue(path, out var entry)) return false;
+        try
+        {
+            var fi = new FileInfo(path);
+            if (fi.Length != entry.Size || fi.LastWriteTimeUtc.Ticks != entry.LastWriteTicks) return false;
+            hash = entry.HeadHash;
+            return true;
+        }
+        catch { return false; }
+    }
+
+    private bool TryGetCachedFull(string path, out ulong hash)
+    {
+        hash = 0;
+        if (!_cache.TryGetValue(path, out var entry)) return false;
+        if (!entry.HasFullHash) return false;
+        try
+        {
+            var fi = new FileInfo(path);
+            if (fi.Length != entry.Size || fi.LastWriteTimeUtc.Ticks != entry.LastWriteTicks) return false;
+            hash = entry.FullHash;
+            return true;
+        }
+        catch { return false; }
+    }
+
+    private void UpdateCache(string path, ulong? headHash = null, ulong? fullHash = null)
+    {
+        try
+        {
+            var fi = new FileInfo(path);
+            if (!_cache.TryGetValue(path, out var entry))
+            {
+                entry = new HashCacheEntry { Size = fi.Length, LastWriteTicks = fi.LastWriteTimeUtc.Ticks };
+                _cache[path] = entry;
+            }
+            entry.Size = fi.Length;
+            entry.LastWriteTicks = fi.LastWriteTimeUtc.Ticks;
+            if (headHash.HasValue) entry.HeadHash = headHash.Value;
+            if (fullHash.HasValue) { entry.FullHash = fullHash.Value; entry.HasFullHash = true; }
+        }
+        catch { }
+    }
+
+    private void LoadCache()
+    {
+        try
+        {
+            if (!File.Exists(CachePath)) return;
+            var json = File.ReadAllText(CachePath);
+            _cache = JsonSerializer.Deserialize<Dictionary<string, HashCacheEntry>>(json)
+                     ?? new(StringComparer.OrdinalIgnoreCase);
+        }
+        catch { _cache = new(StringComparer.OrdinalIgnoreCase); }
+    }
+
+    private void SaveCache()
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(_cache);
+            File.WriteAllText(CachePath, json);
+        }
+        catch (Exception ex) { Log.Warn($"SaveCache: {ex.Message}"); }
     }
 }
