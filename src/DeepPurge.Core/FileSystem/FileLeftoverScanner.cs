@@ -1,3 +1,4 @@
+using DeepPurge.Core.Data;
 using DeepPurge.Core.Models;
 
 namespace DeepPurge.Core.FileSystem;
@@ -61,6 +62,26 @@ public class FileLeftoverScanner
     public List<LeftoverItem> ScanForLeftovers(InstalledProgram program, ScanMode mode)
     {
         var leftovers = new List<LeftoverItem>();
+
+        var sigMatch = LeftoverSignatureDb.FindMatch(program.DisplayName);
+        if (sigMatch != null)
+        {
+            foreach (var path in sigMatch.FilePaths)
+            {
+                if (!Safety.SafetyGuard.IsPathSafeToDelete(path)) continue;
+                var isDir = Directory.Exists(path);
+                var size = isDir ? GetDirectorySize(path) : (File.Exists(path) ? new FileInfo(path).Length : 0);
+                if (size == 0 && !isDir) continue;
+                leftovers.Add(new LeftoverItem
+                {
+                    Path = path, DisplayPath = path,
+                    Type = isDir ? LeftoverType.Folder : LeftoverType.File,
+                    Confidence = LeftoverConfidence.Safe, SizeBytes = size,
+                    IsSelected = true, Details = "Known leftover (signature match)"
+                });
+            }
+        }
+
         BuildSearchTerms(program);
         BuildCrossReference(program);
 
