@@ -132,6 +132,7 @@ public static class JunkFilesCleaner
             {
                 if (file.IsDirectory && Directory.Exists(file.Path))
                 {
+                    if (Safety.SafetyGuard.IsReparsePoint(file.Path)) { skipped++; continue; }
                     if (options.SecureDelete) SecureDelete.WipeDirectory(file.Path);
                     else Directory.Delete(file.Path, recursive: true);
                     freed += file.Size;
@@ -635,7 +636,12 @@ public static class JunkFilesCleaner
         try
         {
             return new DirectoryInfo(path)
-                .EnumerateFiles("*", SearchOption.AllDirectories)
+                .EnumerateFiles("*", new EnumerationOptions
+                {
+                    RecurseSubdirectories = true,
+                    IgnoreInaccessible = true,
+                    AttributesToSkip = FileAttributes.ReparsePoint,
+                })
                 .Sum(fi => { try { return fi.Length; } catch { return 0L; } });
         }
         catch { return 0; }

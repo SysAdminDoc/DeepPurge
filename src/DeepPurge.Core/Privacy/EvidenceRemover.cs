@@ -121,6 +121,7 @@ public static class EvidenceRemover
                 }
                 else if (item.IsDirectory && Directory.Exists(item.Path))
                 {
+                    if (Safety.SafetyGuard.IsReparsePoint(item.Path)) { skipped++; continue; }
                     if (options.SecureDelete) SecureDelete.WipeDirectory(item.Path);
                     else Directory.Delete(item.Path, recursive: true);
                     freed += item.SizeBytes;
@@ -528,7 +529,12 @@ public static class EvidenceRemover
         try
         {
             return new DirectoryInfo(path)
-                .EnumerateFiles("*", SearchOption.AllDirectories)
+                .EnumerateFiles("*", new EnumerationOptions
+                {
+                    RecurseSubdirectories = true,
+                    IgnoreInaccessible = true,
+                    AttributesToSkip = FileAttributes.ReparsePoint,
+                })
                 .Sum(fi => { try { return fi.Length; } catch { return 0L; } });
         }
         catch { return 0; }
