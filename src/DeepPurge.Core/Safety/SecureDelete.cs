@@ -172,8 +172,9 @@ public static class SecureDelete
                 $"SELECT MediaType FROM MSFT_PhysicalDisk WHERE DeviceID IN " +
                 $"(SELECT DiskNumber FROM MSFT_Partition WHERE DriveLetter='{driveLetter}')");
             searcher.Scope = new ManagementScope(@"\\.\ROOT\Microsoft\Windows\Storage");
-            foreach (var obj in searcher.Get())
+            foreach (ManagementBaseObject baseObj in searcher.Get())
             {
+                using var obj = baseObj;
                 var mediaType = Convert.ToInt32(obj["MediaType"]);
                 return mediaType == 4; // 4 = SSD, 3 = HDD
             }
