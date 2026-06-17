@@ -97,6 +97,8 @@ public static class SafetyGuard
     {
         if (string.IsNullOrWhiteSpace(path)) return false;
 
+        if (path.Contains("..")) return false;
+
         var normalized = Path.GetFullPath(path).TrimEnd('\\');
 
         // Never delete protected files
