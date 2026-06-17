@@ -170,4 +170,59 @@ public static class InstalledProgramScanner
             _ => ""
         };
     }
+
+    public static void ComputeActualSizes(IList<InstalledProgram> programs)
+    {
+        Parallel.ForEach(programs, new ParallelOptions { MaxDegreeOfParallelism = 4 }, prog =>
+        {
+            long total = 0;
+            var paths = new List<string>();
+
+            if (!string.IsNullOrEmpty(prog.InstallLocation) && Directory.Exists(prog.InstallLocation))
+                paths.Add(prog.InstallLocation);
+
+            var appDataDirs = new[]
+            {
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            };
+
+            var nameTerms = new List<string>();
+            if (!string.IsNullOrEmpty(prog.DisplayName)) nameTerms.Add(prog.DisplayName);
+            if (!string.IsNullOrEmpty(prog.InstallLocation))
+            {
+                var folderName = Path.GetFileName(prog.InstallLocation.TrimEnd('\\'));
+                if (!string.IsNullOrEmpty(folderName) && folderName.Length > 2) nameTerms.Add(folderName);
+            }
+
+            foreach (var appDataDir in appDataDirs)
+            {
+                if (string.IsNullOrEmpty(appDataDir) || !Directory.Exists(appDataDir)) continue;
+                try
+                {
+                    foreach (var sub in Directory.GetDirectories(appDataDir))
+                    {
+                        var subName = Path.GetFileName(sub);
+                        if (nameTerms.Any(t => subName.Equals(t, StringComparison.OrdinalIgnoreCase)))
+                            paths.Add(sub);
+                    }
+                }
+                catch { }
+            }
+
+            foreach (var path in paths.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    total += new DirectoryInfo(path)
+                        .EnumerateFiles("*", SearchOption.AllDirectories)
+                        .Sum(fi => { try { return fi.Length; } catch { return 0L; } });
+                }
+                catch { }
+            }
+
+            if (total > 0) prog.ActualSizeBytes = total;
+        });
+    }
 }
