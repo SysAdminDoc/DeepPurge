@@ -6,7 +6,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
-namespace DeepPurge.Core.Icons;
+namespace DeepPurge.App.Icons;
 
 /// <summary>
 /// Shell-assisted icon extraction for InstalledProgram rows. All returned
