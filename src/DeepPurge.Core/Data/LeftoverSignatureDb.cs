@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Text.Json;
+using DeepPurge.Core.App;
 using DeepPurge.Core.Diagnostics;
 
 namespace DeepPurge.Core.Data;
@@ -62,22 +63,53 @@ public static class LeftoverSignatureDb
 
     private static List<LeftoverSignature> Load()
     {
+        var all = new List<LeftoverSignature>();
+
         try
         {
             var asm = Assembly.GetExecutingAssembly();
             var resourceName = asm.GetManifestResourceNames()
                 .FirstOrDefault(n => n.EndsWith("leftover-signatures.json", StringComparison.OrdinalIgnoreCase));
-            if (resourceName == null) return new();
-
-            using var stream = asm.GetManifestResourceStream(resourceName);
-            if (stream == null) return new();
-
-            return JsonSerializer.Deserialize<List<LeftoverSignature>>(stream) ?? new();
+            if (resourceName != null)
+            {
+                using var stream = asm.GetManifestResourceStream(resourceName);
+                if (stream != null)
+                {
+                    var embedded = JsonSerializer.Deserialize<List<LeftoverSignature>>(stream);
+                    if (embedded != null) all.AddRange(embedded);
+                }
+            }
         }
-        catch (Exception ex)
+        catch (Exception ex) { Log.Warn($"Failed to load embedded signatures: {ex.Message}"); }
+
+        try
         {
-            Log.Warn($"Failed to load leftover signatures: {ex.Message}");
-            return new();
+            var cleanersDir = DataPaths.Cleaners;
+            if (Directory.Exists(cleanersDir))
+            {
+                foreach (var file in Directory.GetFiles(cleanersDir, "*.signatures.json"))
+                {
+                    try
+                    {
+                        var json = File.ReadAllText(file);
+                        var external = JsonSerializer.Deserialize<List<LeftoverSignature>>(json);
+                        if (external == null) continue;
+                        foreach (var ext in external)
+                        {
+                            var existing = all.FindIndex(s =>
+                                s.Name.Equals(ext.Name, StringComparison.OrdinalIgnoreCase));
+                            if (existing >= 0)
+                                all[existing] = ext;
+                            else
+                                all.Add(ext);
+                        }
+                    }
+                    catch (Exception ex) { Log.Warn($"Failed to load {file}: {ex.Message}"); }
+                }
+            }
         }
+        catch (Exception ex) { Log.Warn($"Failed to scan external signatures: {ex.Message}"); }
+
+        return all;
     }
 }
