@@ -25,6 +25,7 @@ public class InstallDelta
     public List<string>        RemovedFiles       { get; set; } = new();
     public List<string>        RemovedRegistryKeys{ get; set; } = new();
     public long TotalAddedBytes => AddedFiles.Sum(f => f.SizeBytes);
+    public bool IsUpgrade => RemovedFiles.Count > 0 || RemovedRegistryKeys.Count > 0;
 }
 
 /// <summary>

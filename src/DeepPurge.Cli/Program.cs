@@ -314,10 +314,11 @@ public static class Program
 
         var engine = new InstallSnapshotEngine();
         var delta = await engine.TraceInstallAsync(name, installer, extraArgs, ct);
-        Console.WriteLine($"Added files: {delta.AddedFiles.Count} ({FormatBytes(delta.TotalAddedBytes)})");
-        Console.WriteLine($"Added regkeys: {delta.AddedRegistryKeys.Count}");
-        Console.WriteLine($"Removed files: {delta.RemovedFiles.Count}");
-        Console.WriteLine($"Removed regkeys: {delta.RemovedRegistryKeys.Count}");
+        if (delta.IsUpgrade) Console.WriteLine("[upgrade detected — showing diff against prior version]");
+        Console.WriteLine($"Added files:      {delta.AddedFiles.Count,5} ({FormatBytes(delta.TotalAddedBytes)})");
+        Console.WriteLine($"Added regkeys:    {delta.AddedRegistryKeys.Count,5}");
+        Console.WriteLine($"Removed files:    {delta.RemovedFiles.Count,5}");
+        Console.WriteLine($"Removed regkeys:  {delta.RemovedRegistryKeys.Count,5}");
         return 0;
     }
 
