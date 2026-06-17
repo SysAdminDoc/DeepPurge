@@ -217,7 +217,6 @@ public static class SafetyGuard
     {
         try
         {
-            const int REG_OPTION_OPEN_LINK = 0x00000008;
             var field = typeof(Microsoft.Win32.RegistryKey).GetField("_hkey",
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
             if (field == null) return false;
