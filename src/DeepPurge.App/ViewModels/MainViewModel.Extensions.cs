@@ -328,9 +328,16 @@ public partial class MainViewModel
             var delta = await new InstallSnapshotEngine().TraceInstallAsync(programName, installerPath, args);
             _dispatcher.Invoke(() =>
             {
-                SnapshotStatus = $"{programName}: +{delta.AddedFiles.Count} files, " +
-                                 $"+{delta.AddedRegistryKeys.Count} keys, " +
-                                 $"+{FormatSize(delta.TotalAddedBytes)}";
+                var parts = new List<string>
+                {
+                    $"+{delta.AddedFiles.Count} files (+{FormatSize(delta.TotalAddedBytes)})",
+                    $"+{delta.AddedRegistryKeys.Count} keys"
+                };
+                if (delta.RemovedFiles.Count > 0)
+                    parts.Add($"-{delta.RemovedFiles.Count} removed files");
+                if (delta.RemovedRegistryKeys.Count > 0)
+                    parts.Add($"-{delta.RemovedRegistryKeys.Count} removed keys");
+                SnapshotStatus = $"{programName}: {string.Join(", ", parts)}";
             });
             return delta;
         }
