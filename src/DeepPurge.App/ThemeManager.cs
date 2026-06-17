@@ -24,6 +24,7 @@ public static class ThemeManager
         new("Arctic",           "Arctic.xaml",          "Light"),
         new("Obsidian",         "Obsidian.xaml",        "Dark"),
         new("Matrix",           "Matrix.xaml",          "Dark"),
+        new("High Contrast",    "HighContrast.xaml",    "HighContrast"),
     };
 
     // Routed through DataPaths — picks up portable-mode redirection automatically.
