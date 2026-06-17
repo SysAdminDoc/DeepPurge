@@ -1,0 +1,40 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- High Contrast — WCAG AAA, black background, bright saturated accents -->
+    <Color x:Key="CrustColor">#000000</Color>
+    <Color x:Key="MantleColor">#000000</Color>
+    <Color x:Key="BaseColor">#000000</Color>
+    <Color x:Key="Surface0Color">#1A1A1A</Color>
+    <Color x:Key="Surface1Color">#2D2D2D</Color>
+    <Color x:Key="Surface2Color">#404040</Color>
+    <Color x:Key="OverlayColor">#808080</Color>
+    <Color x:Key="TextColor">#FFFFFF</Color>
+    <Color x:Key="SubtextColor">#E0E0E0</Color>
+    <Color x:Key="Subtext0Color">#C0C0C0</Color>
+    <Color x:Key="AccentColor">#00DFFF</Color>
+    <Color x:Key="AccentHoverColor">#FFFF00</Color>
+    <Color x:Key="GreenColor">#00FF00</Color>
+    <Color x:Key="RedColor">#FF3333</Color>
+    <Color x:Key="YellowColor">#FFFF00</Color>
+    <Color x:Key="PeachColor">#FF8C00</Color>
+    <Color x:Key="TealColor">#00FFCC</Color>
+    <Color x:Key="MauveColor">#FF00FF</Color>
+    <SolidColorBrush x:Key="CrustBrush" Color="{StaticResource CrustColor}"/>
+    <SolidColorBrush x:Key="MantleBrush" Color="{StaticResource MantleColor}"/>
+    <SolidColorBrush x:Key="BaseBrush" Color="{StaticResource BaseColor}"/>
+    <SolidColorBrush x:Key="Surface0Brush" Color="{StaticResource Surface0Color}"/>
+    <SolidColorBrush x:Key="Surface1Brush" Color="{StaticResource Surface1Color}"/>
+    <SolidColorBrush x:Key="Surface2Brush" Color="{StaticResource Surface2Color}"/>
+    <SolidColorBrush x:Key="OverlayBrush" Color="{StaticResource OverlayColor}"/>
+    <SolidColorBrush x:Key="TextBrush" Color="{StaticResource TextColor}"/>
+    <SolidColorBrush x:Key="SubtextBrush" Color="{StaticResource SubtextColor}"/>
+    <SolidColorBrush x:Key="Subtext0Brush" Color="{StaticResource Subtext0Color}"/>
+    <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}"/>
+    <SolidColorBrush x:Key="AccentHoverBrush" Color="{StaticResource AccentHoverColor}"/>
+    <SolidColorBrush x:Key="GreenBrush" Color="{StaticResource GreenColor}"/>
+    <SolidColorBrush x:Key="RedBrush" Color="{StaticResource RedColor}"/>
+    <SolidColorBrush x:Key="YellowBrush" Color="{StaticResource YellowColor}"/>
+    <SolidColorBrush x:Key="PeachBrush" Color="{StaticResource PeachColor}"/>
+    <SolidColorBrush x:Key="TealBrush" Color="{StaticResource TealColor}"/>
+    <SolidColorBrush x:Key="MauveBrush" Color="{StaticResource MauveColor}"/>
+</ResourceDictionary>
