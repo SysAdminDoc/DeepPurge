@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=8.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=8.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="AppTitle" xml:space="preserve"><value>DeepPurge</value></data>
+  <data name="Nav_InstalledPrograms" xml:space="preserve"><value>Installed Programs</value></data>
+  <data name="Nav_JunkCleaner" xml:space="preserve"><value>Junk Cleaner</value></data>
+  <data name="Nav_EvidenceRemover" xml:space="preserve"><value>Evidence Remover</value></data>
+  <data name="Nav_AutorunManager" xml:space="preserve"><value>Autorun Manager</value></data>
+  <data name="Nav_DriverStore" xml:space="preserve"><value>Driver Store</value></data>
+  <data name="Nav_RepairWindows" xml:space="preserve"><value>Repair Windows</value></data>
+  <data name="Nav_History" xml:space="preserve"><value>History</value></data>
+  <data name="Nav_About" xml:space="preserve"><value>About / Updates</value></data>
+  <data name="Status_Ready" xml:space="preserve"><value>Ready</value></data>
+  <data name="Btn_Uninstall" xml:space="preserve"><value>Uninstall</value></data>
+  <data name="Btn_Refresh" xml:space="preserve"><value>Refresh</value></data>
+  <data name="Btn_Export" xml:space="preserve"><value>Export</value></data>
+  <data name="Btn_CleanSelected" xml:space="preserve"><value>Clean Selected</value></data>
+  <data name="Btn_DeleteSelected" xml:space="preserve"><value>Delete Selected</value></data>
+  <data name="Btn_CheckForUpdates" xml:space="preserve"><value>Check for updates</value></data>
+  <data name="DryRun_Prefix" xml:space="preserve"><value>Would free</value></data>
+  <data name="Action_Freed" xml:space="preserve"><value>Freed</value></data>
+  <data name="Status_ScanComplete" xml:space="preserve"><value>Scan complete</value></data>
+  <data name="Confirm_BulkUninstall" xml:space="preserve"><value>Uninstall all selected programs? This cannot be undone.</value></data>
+</root>
