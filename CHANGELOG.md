@@ -17,11 +17,23 @@ All notable changes to DeepPurge will be documented in this file.
 - **Screen-reader narration** — `AutomationProperties.Name` and `.HelpText` on all v0.9 SYSTEM TOOLS panels (drivers, startup impact, shortcuts, duplicates, winapp2, repair, schedule, install monitor, about).
 - **Localization infrastructure** — `Properties/Resources.resx` with top 20 UI strings and a strongly-typed `Resources.Designer.cs` accessor. Ready for Crowdin submission.
 
+### Security hardening (research round 2)
+- **CVE-2025-30399 mitigation** — `TargetLatestRuntimePatch` enabled via `Directory.Build.props` to pin .NET runtime ≥8.0.17.
+- **DuplicateFinder thread-safety** — replaced `Dictionary` with `ConcurrentDictionary` for hash cache to prevent data corruption under concurrent scans.
+- **Symlink/junction traversal guards** — all recursive deletion paths in FileLeftoverScanner, JunkFilesCleaner, and EvidenceRemover now check `FileAttributes.ReparsePoint` before traversal. `GetDirectorySize` uses `EnumerationOptions.AttributesToSkip`.
+- **Registry symlink detection** — `SafetyGuard.IsRegistrySymlink()` checks for `REG_LINK` class before any registry write/delete in UninstallEngine. Prevents TOCTOU privilege escalation via registry symbolic links.
+- **NuGet supply chain hardening** — `packages.lock.json` generated for all projects, CI uses `--locked-mode`, NuGet audit enabled at `moderate` level, package source mapping in `NuGet.Config`.
+- **Silent catch logging** — 22 empty `catch { }` blocks in RegistryLeftoverScanner replaced with `Log.Warn()` calls for field debugging.
+- **ManagementObject disposal** — WMI `ManagementObject` instances in SystemRestoreManager and SecureDelete now properly disposed via `using`.
+- **Always-keep protection** — `ProtectedPrograms` persisted list excludes marked programs from batch uninstall. `IsProtected` flag on `InstalledProgram`.
+- **External signature loading** — `LeftoverSignatureDb` now loads `*.signatures.json` files from `DataPaths.Cleaners` alongside the embedded database for community contributions.
+- **Toast notification migration** — replaced deprecated `Microsoft.Toolkit.Uwp.Notifications` with direct WinRT `Windows.UI.Notifications` API. Removes transitive `System.Drawing.Common` 4.7.0 vulnerability.
+
 ### Changed
 - TFM updated from `net8.0-windows` to `net8.0-windows10.0.17763.0` across all 4 projects to enable WinRT toast notification APIs.
 
 ### Dependencies
-- New: `Microsoft.Toolkit.Uwp.Notifications 7.1.3` — Windows 10/11 toast notifications.
+- Removed: `Microsoft.Toolkit.Uwp.Notifications 7.1.3` — deprecated, replaced with WinRT API.
 
 ### Research-driven additions (competitive analysis pass)
 - **Leftover signature database** — embedded JSON database with 50 application profiles (Chrome, Firefox, Adobe, Steam, etc.) for known leftover paths. Signature-matched leftovers are flagged as Safe confidence before heuristic matching runs.
