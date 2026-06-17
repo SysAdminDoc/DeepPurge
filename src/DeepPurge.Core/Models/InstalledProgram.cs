@@ -82,6 +82,20 @@ public class InstalledProgram : INotifyPropertyChanged
         }
     }
 
+    public bool IsRecentlyInstalled
+    {
+        get
+        {
+            if (string.IsNullOrEmpty(InstallDate) || InstallDate.Length != 8) return false;
+            try
+            {
+                var dt = DateTime.ParseExact(InstallDate, "yyyyMMdd", null);
+                return (DateTime.Now - dt).TotalDays <= 7;
+            }
+            catch { return false; }
+        }
+    }
+
     public bool HasUninstaller => !string.IsNullOrEmpty(UninstallString);
     public bool HasQuietUninstaller => !string.IsNullOrEmpty(QuietUninstallString);
 
