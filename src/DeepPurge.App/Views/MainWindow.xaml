@@ -1035,7 +1035,9 @@
                     <!-- DRIVER STORE (pnputil /enum-drivers + size + old-version flag)  -->
                     <!-- ═══════════════════════════════════════════════════════ -->
                     <DataGrid x:Name="dgDrivers" Visibility="Collapsed" AutoGenerateColumns="False"
-                              ItemsSource="{Binding DriverPackages}">
+                              ItemsSource="{Binding DriverPackages}"
+                              AutomationProperties.Name="Driver Store packages"
+                              AutomationProperties.HelpText="Third-party driver packages. Old versions can be removed to reclaim disk space.">
                         <DataGrid.Columns>
                             <DataGridTextColumn Binding="{Binding PublishedName}" Header="OEM" Width="90"/>
                             <DataGridTextColumn Binding="{Binding OriginalName}" Header="INF" Width="220"/>
@@ -1051,7 +1053,9 @@
                     <!-- STARTUP IMPACT (parsed from WDI boot traces)            -->
                     <!-- ═══════════════════════════════════════════════════════ -->
                     <DataGrid x:Name="dgStartupImpact" Visibility="Collapsed" AutoGenerateColumns="False"
-                              ItemsSource="{Binding StartupImpacts}">
+                              ItemsSource="{Binding StartupImpacts}"
+                              AutomationProperties.Name="Startup impact analysis"
+                              AutomationProperties.HelpText="Boot-time cost per autorun process. High-impact processes slow system startup.">
                         <DataGrid.Columns>
                             <DataGridTextColumn Binding="{Binding Impact}" Header="IMPACT" Width="90"/>
                             <DataGridTextColumn Binding="{Binding ProcessName}" Header="PROCESS" Width="280"/>
@@ -1065,7 +1069,9 @@
                     <!-- BROKEN SHORTCUTS (.lnk on Desktop + Start Menu)         -->
                     <!-- ═══════════════════════════════════════════════════════ -->
                     <DataGrid x:Name="dgShortcuts" Visibility="Collapsed" AutoGenerateColumns="False"
-                              ItemsSource="{Binding BrokenShortcuts}">
+                              ItemsSource="{Binding BrokenShortcuts}"
+                              AutomationProperties.Name="Broken shortcuts"
+                              AutomationProperties.HelpText="Desktop and Start Menu shortcuts pointing to missing targets.">
                         <DataGrid.Columns>
                             <DataGridTextColumn Binding="{Binding Path}" Header="SHORTCUT" Width="2*"/>
                             <DataGridTextColumn Binding="{Binding TargetPath}" Header="MISSING TARGET" Width="2*"/>
@@ -1077,7 +1083,9 @@
                     <!-- DUPLICATE FILES (size → XXH3 head → XXH3 full)          -->
                     <!-- ═══════════════════════════════════════════════════════ -->
                     <DataGrid x:Name="dgDuplicates" Visibility="Collapsed" AutoGenerateColumns="False"
-                              ItemsSource="{Binding DuplicateGroups}">
+                              ItemsSource="{Binding DuplicateGroups}"
+                              AutomationProperties.Name="Duplicate file groups"
+                              AutomationProperties.HelpText="Files with identical content grouped by hash. Delete copies to reclaim wasted space.">
                         <DataGrid.Columns>
                             <DataGridTextColumn Binding="{Binding FileSize, Converter={StaticResource BytesToSizeConverter}}" Header="SIZE" Width="90"/>
                             <DataGridTextColumn Binding="{Binding Paths, Converter={StaticResource CountConverter}}" Header="COPIES" Width="70"/>
@@ -1093,7 +1101,9 @@
                     <!-- ═══════════════════════════════════════════════════════ -->
                     <!-- COMMUNITY CLEANERS (winapp2.ini)                        -->
                     <!-- ═══════════════════════════════════════════════════════ -->
-                    <Grid x:Name="panelWinapp2" Visibility="Collapsed">
+                    <Grid x:Name="panelWinapp2" Visibility="Collapsed"
+                          AutomationProperties.Name="Community Cleaners panel"
+                          AutomationProperties.HelpText="Winapp2.ini community-maintained cleaner definitions. Run applicable rules to clean third-party app caches.">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
@@ -1117,7 +1127,9 @@
                     <!-- ═══════════════════════════════════════════════════════ -->
                     <!-- REPAIR WINDOWS (sfc / dism / chkdsk / caches)           -->
                     <!-- ═══════════════════════════════════════════════════════ -->
-                    <Grid x:Name="panelRepair" Visibility="Collapsed">
+                    <Grid x:Name="panelRepair" Visibility="Collapsed"
+                          AutomationProperties.Name="Windows Repair tools"
+                          AutomationProperties.HelpText="System integrity and cache rebuild tools. sfc, DISM, chkdsk, font cache, and icon cache.">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
@@ -1130,8 +1142,10 @@
                             </TextBlock>
                         </Border>
                         <WrapPanel Grid.Row="1" Orientation="Horizontal" Margin="24,4,24,14">
-                            <Button Content="sfc /scannow"              Command="{Binding RunSfcCommand}"            Style="{DynamicResource AccentButton}" Margin="0,0,8,6" Padding="14,8"/>
-                            <Button Content="DISM ScanHealth"           Command="{Binding RunDismScanCommand}"       Margin="0,0,8,6" Padding="14,8"/>
+                            <Button Content="sfc /scannow"              Command="{Binding RunSfcCommand}"            Style="{DynamicResource AccentButton}" Margin="0,0,8,6" Padding="14,8"
+                                    AutomationProperties.Name="Run System File Checker scan"/>
+                            <Button Content="DISM ScanHealth"           Command="{Binding RunDismScanCommand}"       Margin="0,0,8,6" Padding="14,8"
+                                    AutomationProperties.Name="Run DISM scan health check"/>
                             <Button Content="DISM RestoreHealth"        Command="{Binding RunDismRestoreCommand}"    Margin="0,0,8,6" Padding="14,8"/>
                             <Button Content="DISM ComponentCleanup"     Command="{Binding RunDismCleanupCommand}"    Margin="0,0,8,6" Padding="14,8"/>
                             <Button Content="chkdsk C: /scan"           Command="{Binding RunChkDskCommand}"         Margin="0,0,8,6" Padding="14,8"/>
@@ -1153,7 +1167,9 @@
                     <!-- ═══════════════════════════════════════════════════════ -->
                     <!-- SCHEDULED CLEANING (schtasks wrappers)                  -->
                     <!-- ═══════════════════════════════════════════════════════ -->
-                    <Grid x:Name="panelSchedule" Visibility="Collapsed">
+                    <Grid x:Name="panelSchedule" Visibility="Collapsed"
+                          AutomationProperties.Name="Scheduled Cleaning panel"
+                          AutomationProperties.HelpText="Scheduled cleaning jobs running via Task Scheduler. Create jobs from the command line.">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
@@ -1173,7 +1189,9 @@
                     <!-- ═══════════════════════════════════════════════════════ -->
                     <!-- ABOUT / UPDATES                                         -->
                     <!-- ═══════════════════════════════════════════════════════ -->
-                    <Border x:Name="panelAbout" Visibility="Collapsed" Padding="48,32">
+                    <Border x:Name="panelAbout" Visibility="Collapsed" Padding="48,32"
+                            AutomationProperties.Name="About and Updates panel"
+                            AutomationProperties.HelpText="Application version, data location, portable mode status, and update check.">
                         <StackPanel MaxWidth="640" HorizontalAlignment="Left" VerticalAlignment="Top">
                             <TextBlock Text="DeepPurge" FontSize="32" FontWeight="Bold"
                                        Foreground="{DynamicResource TextBrush}" Margin="0,0,0,2"/>
