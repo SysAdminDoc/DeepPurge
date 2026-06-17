@@ -1,4 +1,5 @@
 using global::Microsoft.Win32;
+using DeepPurge.Core.Data;
 using DeepPurge.Core.Models;
 
 namespace DeepPurge.Core.Registry;
@@ -52,6 +53,24 @@ public class RegistryLeftoverScanner
     public List<LeftoverItem> ScanForLeftovers(InstalledProgram program, ScanMode mode)
     {
         var leftovers = new List<LeftoverItem>();
+
+        var sigMatch = LeftoverSignatureDb.FindMatch(program.DisplayName);
+        if (sigMatch != null)
+        {
+            foreach (var regPath in sigMatch.RegistryPaths)
+            {
+                if (!Safety.SafetyGuard.IsRegistryPathSafeToDelete(regPath)) continue;
+                if (!RegistryKeyExists(regPath)) continue;
+                leftovers.Add(new LeftoverItem
+                {
+                    Path = regPath, DisplayPath = regPath,
+                    Type = LeftoverType.RegistryKey,
+                    Confidence = LeftoverConfidence.Safe,
+                    IsSelected = true, Details = "Known leftover (signature match)"
+                });
+            }
+        }
+
         BuildSearchTerms(program);
 
         // 1. Remove the uninstall registry key itself
@@ -639,6 +658,28 @@ public class RegistryLeftoverScanner
             }
         }
         catch { }
+    }
+
+    private static bool RegistryKeyExists(string path)
+    {
+        try
+        {
+            var split = path.IndexOf('\\');
+            if (split <= 0) return false;
+            var hive = path[..split].ToUpperInvariant();
+            var sub = path[(split + 1)..];
+            RegistryKey? baseKey = hive switch
+            {
+                "HKLM" or "HKEY_LOCAL_MACHINE" => global::Microsoft.Win32.Registry.LocalMachine,
+                "HKCU" or "HKEY_CURRENT_USER" => global::Microsoft.Win32.Registry.CurrentUser,
+                "HKCR" or "HKEY_CLASSES_ROOT" => global::Microsoft.Win32.Registry.ClassesRoot,
+                _ => null,
+            };
+            if (baseKey == null) return false;
+            using var key = baseKey.OpenSubKey(sub);
+            return key != null;
+        }
+        catch { return false; }
     }
 
     private static string ExtractExeName(string uninstallString)
