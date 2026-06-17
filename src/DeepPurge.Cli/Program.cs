@@ -157,6 +157,8 @@ public static class Program
             total += freed;
         }
         Console.WriteLine($"Total: {FormatBytes(total)} {(dryRun ? "(dry-run)" : "")}");
+        if (!dryRun && total > 0)
+            DeepPurge.Core.Diagnostics.ToastNotifier.ShowCleaningSummary("Scheduled Clean", total, categories.Count, dryRun);
         return 0;
     }
 
