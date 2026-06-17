@@ -38,7 +38,7 @@ public class DuplicateFinder
     private const int FirstChunkBytes = 1 * 1024 * 1024;
     private const long MinFileBytes   = 4 * 1024;
     private static readonly string CachePath = Path.Combine(DataPaths.Root, "hash-cache.json");
-    private Dictionary<string, HashCacheEntry> _cache = new(StringComparer.OrdinalIgnoreCase);
+    private ConcurrentDictionary<string, HashCacheEntry> _cache = new(StringComparer.OrdinalIgnoreCase);
 
     public async Task<List<DuplicateGroup>> FindAsync(
         IEnumerable<string> roots,
@@ -303,11 +303,7 @@ public class DuplicateFinder
         try
         {
             var fi = new FileInfo(path);
-            if (!_cache.TryGetValue(path, out var entry))
-            {
-                entry = new HashCacheEntry { Size = fi.Length, LastWriteTicks = fi.LastWriteTimeUtc.Ticks };
-                _cache[path] = entry;
-            }
+            var entry = _cache.GetOrAdd(path, _ => new HashCacheEntry());
             entry.Size = fi.Length;
             entry.LastWriteTicks = fi.LastWriteTimeUtc.Ticks;
             if (headHash.HasValue) entry.HeadHash = headHash.Value;
@@ -322,8 +318,9 @@ public class DuplicateFinder
         {
             if (!File.Exists(CachePath)) return;
             var json = File.ReadAllText(CachePath);
-            _cache = JsonSerializer.Deserialize<Dictionary<string, HashCacheEntry>>(json)
-                     ?? new(StringComparer.OrdinalIgnoreCase);
+            var dict = JsonSerializer.Deserialize<Dictionary<string, HashCacheEntry>>(json);
+            if (dict != null)
+                _cache = new ConcurrentDictionary<string, HashCacheEntry>(dict, StringComparer.OrdinalIgnoreCase);
         }
         catch { _cache = new(StringComparer.OrdinalIgnoreCase); }
     }
