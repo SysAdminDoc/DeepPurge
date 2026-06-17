@@ -6,7 +6,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using DeepPurge.Core.Browsers;
 using DeepPurge.Core.Export;
 using DeepPurge.Core.FileSystem;
-using DeepPurge.Core.Icons;
+using DeepPurge.App.Icons;
 using DeepPurge.Core.Models;
 using DeepPurge.Core.Packages;
 using DeepPurge.Core.Privacy;
