@@ -1,17 +1,28 @@
-using Microsoft.Toolkit.Uwp.Notifications;
+using Windows.Data.Xml.Dom;
+using Windows.UI.Notifications;
 
 namespace DeepPurge.Core.Diagnostics;
 
 public static class ToastNotifier
 {
+    private const string AppId = "DeepPurge";
+
     public static void Show(string title, string body)
     {
         try
         {
-            new ToastContentBuilder()
-                .AddText(title)
-                .AddText(body)
-                .Show();
+            var xml = $@"<toast>
+  <visual>
+    <binding template='ToastGeneric'>
+      <text>{EscapeXml(title)}</text>
+      <text>{EscapeXml(body)}</text>
+    </binding>
+  </visual>
+</toast>";
+            var doc = new XmlDocument();
+            doc.LoadXml(xml);
+            var toast = new ToastNotification(doc);
+            ToastNotificationManager.CreateToastNotifier(AppId).Show(toast);
         }
         catch (Exception ex)
         {
@@ -33,4 +44,7 @@ public static class ToastNotifier
         while (b >= 1024 && i < u.Length - 1) { b /= 1024; i++; }
         return $"{b:F1} {u[i]}";
     }
+
+    private static string EscapeXml(string s) =>
+        s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
 }
