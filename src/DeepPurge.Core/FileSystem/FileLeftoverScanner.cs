@@ -323,6 +323,7 @@ public class FileLeftoverScanner
                 var dirName = Path.GetFileName(dir);
                 if (SharedFolderNames.Contains(dirName)) continue;
                 if (IsProtected(dir)) continue;
+                if (Safety.SafetyGuard.IsReparsePoint(dir)) continue;
 
                 var confidence = MatchConfidence(dirName, dir);
                 if (confidence == null) continue;
@@ -610,7 +611,12 @@ public class FileLeftoverScanner
         try
         {
             return new DirectoryInfo(path)
-                .EnumerateFiles("*", SearchOption.AllDirectories)
+                .EnumerateFiles("*", new EnumerationOptions
+                {
+                    RecurseSubdirectories = true,
+                    IgnoreInaccessible = true,
+                    AttributesToSkip = FileAttributes.ReparsePoint,
+                })
                 .Sum(fi => { try { return fi.Length; } catch { return 0; } });
         }
         catch { return 0; }
