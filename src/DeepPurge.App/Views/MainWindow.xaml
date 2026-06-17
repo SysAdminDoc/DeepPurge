@@ -544,6 +544,13 @@
                                 </StackPanel>
                             </RadioButton>
 
+                            <RadioButton GroupName="nav" Tag="History" Checked="NavButton_Checked" Style="{StaticResource NavRadioButton}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE81C;" Style="{StaticResource NavIcon}"/>
+                                    <TextBlock Text="History" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </RadioButton>
+
                             <RadioButton GroupName="nav" Tag="About" Checked="NavButton_Checked" Style="{StaticResource NavRadioButton}">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="&#xE946;" Style="{StaticResource NavIcon}"/>
@@ -1185,6 +1192,23 @@
                         <ListBox Grid.Row="1" ItemsSource="{Binding ScheduledJobs}" BorderThickness="0" Margin="24,0,24,16"
                                  Background="{DynamicResource MantleBrush}"/>
                     </Grid>
+
+                    <!-- ═══════════════════════════════════════════════════════ -->
+                    <!-- ACTIVITY HISTORY                                         -->
+                    <!-- ═══════════════════════════════════════════════════════ -->
+                    <DataGrid x:Name="dgHistory" Visibility="Collapsed" AutoGenerateColumns="False"
+                              ItemsSource="{Binding HistoryEntries}"
+                              AutomationProperties.Name="Activity history"
+                              AutomationProperties.HelpText="Prior uninstall, cleanup, and repair activity.">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Binding="{Binding TimestampUtc, StringFormat={}{0:yyyy-MM-dd HH:mm}}" Header="DATE (UTC)" Width="140"/>
+                            <DataGridTextColumn Binding="{Binding Operation}" Header="OPERATION" Width="120"/>
+                            <DataGridTextColumn Binding="{Binding Summary}" Header="SUMMARY" Width="*"/>
+                            <DataGridTextColumn Binding="{Binding ItemCount}" Header="ITEMS" Width="70"/>
+                            <DataGridTextColumn Binding="{Binding BytesFreed, Converter={StaticResource BytesToSizeConverter}}" Header="FREED" Width="90"/>
+                            <DataGridTextColumn Binding="{Binding DryRun}" Header="DRY RUN" Width="75"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
 
                     <!-- ═══════════════════════════════════════════════════════ -->
                     <!-- ABOUT / UPDATES                                         -->

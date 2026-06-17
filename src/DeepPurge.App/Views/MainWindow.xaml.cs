@@ -111,7 +111,7 @@ public partial class MainWindow : Window
         panelHunter, panelBackups,
         // v0.9.0 system-tools panels
         dgDrivers, dgStartupImpact, dgShortcuts, dgDuplicates,
-        panelWinapp2, panelRepair, panelSchedule, panelAbout,
+        panelWinapp2, panelRepair, panelSchedule, dgHistory, panelAbout,
     };
 
     private void NavButton_Checked(object sender, RoutedEventArgs e)
@@ -235,6 +235,10 @@ public partial class MainWindow : Window
                 AppendToolbarButton("Refresh", RefreshSchedule_Click, "AccentButton");
                 // Refresh every time — schedule list is cheap and can change externally.
                 _vm.RefreshScheduledJobsCommand.Execute(null);
+                break;
+            case "History":
+                dgHistory.Visibility = Visibility.Visible; txtPanelTitle.Text = "Activity History";
+                _vm.LoadHistoryCommand.Execute(null);
                 break;
             case "About":
                 panelAbout.Visibility = Visibility.Visible; txtPanelTitle.Text = "About / Updates";

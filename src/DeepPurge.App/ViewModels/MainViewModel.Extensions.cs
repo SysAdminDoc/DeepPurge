@@ -174,6 +174,7 @@ public partial class MainViewModel
                 SecureDelete: SecureDeleteEnabled,
                 UseRecycleBin: !SecureDeleteEnabled);
             var n = new DuplicateFinder().DeleteDuplicates(DuplicateGroups.ToList(), opt);
+            ActivityLog.Record("duplicates", $"{(opt.DryRun ? "Would delete" : "Deleted")} {n} duplicate file(s)", itemCount: n, dryRun: opt.DryRun);
             StatusText = $"{(opt.DryRun ? "Would delete" : "Deleted")} {n} duplicate file(s).";
         }
         catch (Exception ex) { Log.Error("DeleteDuplicates", ex); StatusText = $"Duplicate delete failed: {ex.Message}"; }
@@ -208,6 +209,7 @@ public partial class MainViewModel
             // Final flush so the last lines make it onto the screen.
             FlushRepairBuffer(force: true);
 
+            ActivityLog.Record("repair", $"{op}: exit={r.ExitCode} in {r.Elapsed:mm\\:ss}");
             _dispatcher.Invoke(() => StatusText = $"[{op}] exit={r.ExitCode} in {r.Elapsed:mm\\:ss}");
         }
         catch (Exception ex) { Log.Error($"RunRepairAsync({op})", ex); StatusText = $"Repair failed: {ex.Message}"; }
@@ -304,6 +306,7 @@ public partial class MainViewModel
                 OperationProgressVisible = true;
             }));
             var s = await runner.RunAsync(Winapp2Entries.ToList(), opt, progress);
+            ActivityLog.Record("winapp2", $"{(opt.DryRun ? "Would free" : "Freed")} {FormatSize(s.BytesFreed)} across {s.ItemsDeleted} entries", s.BytesFreed, s.ItemsDeleted, opt.DryRun);
             _dispatcher.Invoke(() =>
             {
                 OperationProgressVisible = false;
@@ -451,6 +454,27 @@ public partial class MainViewModel
             if (File.Exists(candidate2)) return candidate2;
         }
         return null;
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  ACTIVITY HISTORY
+    // ═══════════════════════════════════════════════════════
+    public ObservableCollection<ActivityEntry> HistoryEntries { get; } = new();
+
+    [RelayCommand]
+    private void LoadHistory()
+    {
+        try
+        {
+            var entries = ActivityLog.LoadRecent(200);
+            _dispatcher.Invoke(() =>
+            {
+                HistoryEntries.Clear();
+                foreach (var e in entries) HistoryEntries.Add(e);
+                StatusText = $"{entries.Count} history entries loaded";
+            });
+        }
+        catch (Exception ex) { Log.Error("LoadHistory", ex); }
     }
 
     // ═══════════════════════════════════════════════════════
