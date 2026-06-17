@@ -23,6 +23,21 @@ All notable changes to DeepPurge will be documented in this file.
 ### Dependencies
 - New: `Microsoft.Toolkit.Uwp.Notifications 7.1.3` — Windows 10/11 toast notifications.
 
+### Research-driven additions (competitive analysis pass)
+- **Leftover signature database** — embedded JSON database with 50 application profiles (Chrome, Firefox, Adobe, Steam, etc.) for known leftover paths. Signature-matched leftovers are flagged as Safe confidence before heuristic matching runs.
+- **Administrator Protection (SMAA) readiness** — `UserIdentity` helper resolves the real interactive user's SID and LocalAppData even when running under Windows 11 SMAA elevation. InstalledProgramScanner and DataPaths use the real user's paths.
+- **SafetyGuard path-traversal hardening** — paths containing `..` segments are rejected before normalization. 5 new test cases for traversal patterns.
+- **Backup file validation** — `BackupManager` now validates registry backup content (non-empty, starts with `Windows Registry Editor Version 5.00`). Truncated backups log a warning instead of silently passing.
+- **True disk footprint** — `InstalledProgram.ActualSizeBytes` computed by walking InstallLocation + AppData + ProgramData paths in parallel. Falls back to registry's EstimatedSizeKB.
+- **Hash caching for duplicate finder** — persistent JSON cache keyed by (path, size, mtime). Second scans of the same directories are near-instant.
+- **Configurable uninstall timeout** — default increased from 10 to 30 minutes. Settable via `UninstallEngine.UninstallerTimeout` and CLI `--timeout` flag.
+- **Winget JSON output** — `PackageManagerScanner` tries `winget list --output json` first, falls back to fixed-width table parsing for older winget versions.
+- **Orphaned Package Cache scanner** — `JunkFilesCleaner` scans `C:\ProgramData\Package Cache\` and flags entries whose parent product is no longer installed.
+- **USB device history cleaner** — new trace category in `EvidenceRemover` for USBSTOR registry entries and SetupAPI logs.
+- **Free space wipe** — `SecureDelete.WipeFreeSpaceAsync()` fills unallocated disk space with random data. Auto-detects SSD vs HDD via WMI MediaType.
+- **Recently-installed highlighting** — programs installed in the last 7 days get an accent-colored left border in the Programs DataGrid.
+- **IconExtractor WPF decoupling** — moved from Core to App. `InstalledProgram.Icon` changed to `object?`. Core.csproj no longer has `UseWPF=true`.
+
 ### Fixed
 - `deeppurgecli doctor` now includes suggested fixes for actionable warning/failure paths, including missing system tools, inaccessible registry/shell roots, and unwritable data folders.
 
