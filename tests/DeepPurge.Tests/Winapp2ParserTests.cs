@@ -86,6 +86,22 @@ FileKey1=%AppData%\Bar|*.bak
     }
 
     [Fact]
+    public void SpecialDetect_unknown_token_is_permissive()
+    {
+        using var reader = new StringReader("[X]\nSpecialDetect=DET_SOME_FUTURE_APP\n");
+        var list = Winapp2Parser.Parse(reader);
+        Assert.True(list[0].IsApplicable());
+    }
+
+    [Fact]
+    public void SpecialDetect_parsed_into_correct_field()
+    {
+        using var reader = new StringReader("[X]\nSpecialDetect=DET_CHROME\nFileKey1=%TEMP%|*.tmp\n");
+        var list = Winapp2Parser.Parse(reader);
+        Assert.Equal("DET_CHROME", list[0].SpecialDetect);
+    }
+
+    [Fact]
     public void Comments_and_blank_lines_ignored()
     {
         using var reader = new StringReader(@"

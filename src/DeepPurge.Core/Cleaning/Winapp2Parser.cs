@@ -35,17 +35,37 @@ public class Winapp2Entry
     public bool IsApplicable()
     {
         if (!OsMatchesDetectOs(DetectOS)) return false;
+        if (!string.IsNullOrEmpty(SpecialDetect) && !EvaluateSpecialDetect(SpecialDetect)) return false;
         foreach (var det in Detect) if (!RegistryKeyExists(det)) return false;
         foreach (var f in DetectFile)
         {
             var expanded = Environment.ExpandEnvironmentVariables(f);
             if (!File.Exists(expanded) && !Directory.Exists(expanded)) return false;
         }
-        // SpecialDetect tokens (DET_CHROME / DET_FIREFOX / etc.) are well
-        // known but implementation would require hard-coded per-family
-        // detection. We accept any SpecialDetect as "maybe applicable" —
-        // FileKey paths will no-op on systems where the browser is absent.
         return true;
+    }
+
+    private static bool EvaluateSpecialDetect(string token)
+    {
+        return token.ToUpperInvariant() switch
+        {
+            "DET_CHROME"      => AnyKeyExists(@"HKCU\Software\Google\Chrome", @"HKLM\SOFTWARE\Google\Chrome\BLBeacon"),
+            "DET_FIREFOX"     => AnyKeyExists(@"HKLM\SOFTWARE\Mozilla\Mozilla Firefox", @"HKCU\Software\Mozilla\Firefox"),
+            "DET_OPERA"       => AnyKeyExists(@"HKCU\Software\Opera Software", @"HKLM\SOFTWARE\Opera Software"),
+            "DET_THUNDERBIRD" => AnyKeyExists(@"HKLM\SOFTWARE\Mozilla\Mozilla Thunderbird", @"HKCU\Software\Mozilla\Thunderbird"),
+            "DET_EDGE"        => AnyKeyExists(@"HKLM\SOFTWARE\Microsoft\Edge", @"HKCU\Software\Microsoft\Edge"),
+            "DET_SAFARI"      => RegistryKeyExists(@"HKLM\SOFTWARE\Apple Computer, Inc.\Safari"),
+            "DET_SEAMONKEY"   => AnyKeyExists(@"HKLM\SOFTWARE\Mozilla\SeaMonkey", @"HKCU\Software\Mozilla\SeaMonkey"),
+            "DET_WATERFOX"    => AnyKeyExists(@"HKLM\SOFTWARE\Waterfox", @"HKCU\Software\Waterfox"),
+            "DET_PALE_MOON"   => AnyKeyExists(@"HKLM\SOFTWARE\Mozilla\Pale Moon", @"HKCU\Software\Mozilla\Pale Moon"),
+            _ => true, // unknown token: allow — FileKey paths will no-op if the app is absent
+        };
+    }
+
+    private static bool AnyKeyExists(params string[] paths)
+    {
+        foreach (var p in paths) if (RegistryKeyExists(p)) return true;
+        return false;
     }
 
     private static bool OsMatchesDetectOs(string gate)
