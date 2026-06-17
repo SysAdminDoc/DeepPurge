@@ -20,6 +20,7 @@ public class InstalledProgram : INotifyPropertyChanged
     public string QuietUninstallString { get; set; } = string.Empty;
     public string DisplayIconPath { get; set; } = string.Empty;
     public long EstimatedSizeKB { get; set; }
+    public long ActualSizeBytes { get; set; } = -1;
     public bool IsSystemComponent { get; set; }
     public bool IsWindowsInstaller { get; set; }
     public string ParentKeyName { get; set; } = string.Empty;
@@ -49,12 +50,22 @@ public class InstalledProgram : INotifyPropertyChanged
     {
         get
         {
+            if (ActualSizeBytes > 0) return FormatBytes(ActualSizeBytes);
             if (EstimatedSizeKB <= 0) return "";
             if (EstimatedSizeKB < 1024) return $"{EstimatedSizeKB} KB";
             double mb = EstimatedSizeKB / 1024.0;
             if (mb < 1024) return $"{mb:F1} MB";
             return $"{mb / 1024.0:F2} GB";
         }
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        double kb = bytes / 1024.0;
+        if (kb < 1024) return $"{kb:F0} KB";
+        double mb = kb / 1024.0;
+        return mb < 1024 ? $"{mb:F1} MB" : $"{mb / 1024.0:F2} GB";
     }
 
     public string InstallDateDisplay
