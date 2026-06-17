@@ -48,7 +48,12 @@ public class BackupManager
 
             using var process = Process.Start(psi);
             process?.WaitForExit(30000);
-            return File.Exists(backupFile) ? backupFile : "";
+            if (!ValidateBackupFile(backupFile))
+            {
+                Diagnostics.Log.Warn($"Registry backup failed validation: {backupFile}");
+                return "";
+            }
+            return backupFile;
         }
         catch { return ""; }
     }
@@ -99,6 +104,20 @@ public class BackupManager
             }
         }
         catch { /* best-effort */ }
+    }
+
+    internal static bool ValidateBackupFile(string path)
+    {
+        try
+        {
+            if (!File.Exists(path)) return false;
+            var fi = new FileInfo(path);
+            if (fi.Length == 0) return false;
+            using var sr = new StreamReader(path, detectEncodingFromByteOrderMarks: true);
+            var firstLine = sr.ReadLine();
+            return firstLine != null && firstLine.Contains("Windows Registry Editor", StringComparison.OrdinalIgnoreCase);
+        }
+        catch { return false; }
     }
 
     private static string NormalizeRegistryPath(string path) => path
