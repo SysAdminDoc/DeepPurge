@@ -305,6 +305,12 @@ public class UninstallEngine
             ct.ThrowIfCancellationRequested();
             var program = programs[i];
 
+            if (program.IsProtected || App.ProtectedPrograms.IsProtected(program.DisplayName))
+            {
+                StatusChanged?.Invoke($"[{i + 1}/{programs.Count}] Skipping protected: {program.DisplayName}");
+                continue;
+            }
+
             StatusChanged?.Invoke($"[{i + 1}/{programs.Count}] Uninstalling {program.DisplayName}...");
 
             // Create a single restore point at the start of the batch rather
