@@ -1,13 +1,12 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
-using System.Windows.Media;
 
 namespace DeepPurge.Core.Models;
 
 public class InstalledProgram : INotifyPropertyChanged
 {
     private bool _isSelected;
-    private ImageSource? _icon;
+    private object? _icon;
 
     public string RegistryKeyName { get; set; } = string.Empty;
     public string RegistryPath { get; set; } = string.Empty;
@@ -34,7 +33,7 @@ public class InstalledProgram : INotifyPropertyChanged
     public string PackageId { get; set; } = string.Empty;
     public string UpgradeAvailable { get; set; } = string.Empty;
 
-    public ImageSource? Icon
+    public object? Icon
     {
         get => _icon;
         set { _icon = value; OnPropertyChanged(); }
