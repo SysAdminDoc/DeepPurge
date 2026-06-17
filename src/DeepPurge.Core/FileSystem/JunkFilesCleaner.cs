@@ -67,6 +67,8 @@ public static class JunkFilesCleaner
             ScanLogFiles(), ScanCrashDumps(), ScanWerReports(),
             // Installer cache
             ScanInstallerCache(),
+            // Package Cache (orphaned installer caches)
+            ScanPackageCache(),
             // App-specific caches
             ScanAppCaches(),
             // Runtime caches
@@ -459,6 +461,44 @@ public static class JunkFilesCleaner
         }
         catch { /* skip */ }
         AddDirIfExists(cat, @"C:\Windows.old");
+        return cat;
+    }
+
+    private static JunkCategory ScanPackageCache()
+    {
+        var cat = new JunkCategory
+        {
+            Name = "Orphaned Package Cache",
+            Description = "Installer caches for products that are no longer installed",
+            IsSelected = false,
+        };
+        var cacheRoot = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Package Cache");
+        if (!Directory.Exists(cacheRoot)) return cat;
+
+        var installed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            foreach (var p in Registry.InstalledProgramScanner.GetAllInstalledPrograms())
+            {
+                if (!string.IsNullOrEmpty(p.RegistryKeyName)) installed.Add(p.RegistryKeyName);
+                if (!string.IsNullOrEmpty(p.DisplayName)) installed.Add(p.DisplayName);
+            }
+        }
+        catch { }
+
+        try
+        {
+            foreach (var dir in Directory.GetDirectories(cacheRoot))
+            {
+                var name = Path.GetFileName(dir);
+                if (installed.Any(i => name.Contains(i, StringComparison.OrdinalIgnoreCase))) continue;
+                var size = GetDirSize(dir);
+                if (size > 0)
+                    cat.Files.Add(new JunkFile { Path = dir, Size = size, IsDirectory = true });
+            }
+        }
+        catch { }
         return cat;
     }
 
