@@ -668,6 +668,16 @@
                               ItemsSource="{Binding FilteredPrograms}"
                               SelectionChanged="Programs_SelectionChanged"
                               MouseDoubleClick="Programs_DoubleClick">
+                        <DataGrid.RowStyle>
+                            <Style TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsRecentlyInstalled}" Value="True">
+                                        <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                        <Setter Property="BorderThickness" Value="3,0,0,0"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DataGrid.RowStyle>
                         <DataGrid.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Header="Uninstall" Tag="&#xE74D;" Click="Uninstall_Click"/>
