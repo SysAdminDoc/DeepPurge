@@ -72,7 +72,7 @@ public static class DataPaths
             Directory.CreateDirectory(dir);
             return dir;
         }
-        var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var appData = UserIdentity.RealLocalAppData;
         var root = Path.Combine(appData, "DeepPurge");
         Directory.CreateDirectory(root);
         return root;

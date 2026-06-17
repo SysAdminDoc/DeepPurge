@@ -1,4 +1,5 @@
 using global::Microsoft.Win32;
+using DeepPurge.Core.App;
 using DeepPurge.Core.Models;
 
 namespace DeepPurge.Core.Registry;
@@ -30,10 +31,12 @@ public static class InstalledProgramScanner
             catch { /* Access denied or other registry errors */ }
         }
 
-        // Scan HKCU
+        // Scan HKCU — use real user's hive when running under SMAA elevation
         try
         {
-            using var hkcuKey = global::Microsoft.Win32.Registry.CurrentUser.OpenSubKey(HkcuUninstallPath);
+            using var hkcuKey = UserIdentity.IsSmaaElevated
+                ? UserIdentity.OpenRealUserHive(HkcuUninstallPath)
+                : global::Microsoft.Win32.Registry.CurrentUser.OpenSubKey(HkcuUninstallPath);
             if (hkcuKey != null)
             {
                 ScanRegistryKey(hkcuKey, HkcuUninstallPath, RegistrySource.HKCU_Uninstall,
