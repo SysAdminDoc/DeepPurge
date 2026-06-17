@@ -477,10 +477,21 @@ public class UninstallEngine
             var keyPath = subPath[..lastBackslash];
             var valueName = subPath[(lastBackslash + 1)..];
             using var key = hive.OpenSubKey(keyPath, writable: true);
+            if (key != null && SafetyGuard.IsRegistrySymlink(key))
+            {
+                Diagnostics.Log.Warn($"Skipping registry symlink: {path}");
+                return;
+            }
             key?.DeleteValue(valueName, throwOnMissingValue: false);
         }
         else
         {
+            using var checkKey = hive.OpenSubKey(subPath);
+            if (checkKey != null && SafetyGuard.IsRegistrySymlink(checkKey))
+            {
+                Diagnostics.Log.Warn($"Skipping registry symlink: {path}");
+                return;
+            }
             hive.DeleteSubKeyTree(subPath, throwOnMissingSubKey: false);
         }
     }
