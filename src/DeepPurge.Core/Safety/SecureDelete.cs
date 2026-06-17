@@ -1,4 +1,6 @@
+using System.Management;
 using System.Security.Cryptography;
+using DeepPurge.Core.Diagnostics;
 
 namespace DeepPurge.Core.Safety;
 
@@ -103,5 +105,80 @@ public static class SecureDelete
         {
             return false;
         }
+    }
+
+    public static async Task<long> WipeFreeSpaceAsync(
+        string drivePath,
+        IProgress<string>? progress = null,
+        CancellationToken ct = default)
+    {
+        var driveRoot = Path.GetPathRoot(drivePath) ?? @"C:\";
+        var isSsd = DetectSsd(driveRoot);
+        progress?.Report(isSsd ? $"SSD detected on {driveRoot} — single-pass fill" : $"HDD detected on {driveRoot} — single-pass fill");
+
+        var tempDir = Path.Combine(driveRoot, ".deeppurge_wipe_" + Guid.NewGuid().ToString("N")[..8]);
+        long totalWritten = 0;
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var fillBuffer = new byte[1024 * 1024];
+            int fileIndex = 0;
+
+            while (true)
+            {
+                ct.ThrowIfCancellationRequested();
+                var filePath = Path.Combine(tempDir, $"wipe_{fileIndex++}.tmp");
+                try
+                {
+                    using var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, fillBuffer.Length, FileOptions.WriteThrough);
+                    while (true)
+                    {
+                        ct.ThrowIfCancellationRequested();
+                        RandomNumberGenerator.Fill(fillBuffer);
+                        fs.Write(fillBuffer, 0, fillBuffer.Length);
+                        totalWritten += fillBuffer.Length;
+                        if (totalWritten % (100L * 1024 * 1024) == 0)
+                            progress?.Report($"Filling free space: {totalWritten / (1024 * 1024)} MB written...");
+                    }
+                }
+                catch (IOException)
+                {
+                    break;
+                }
+            }
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex) { Log.Warn($"WipeFreeSpace: {ex.Message}"); }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(tempDir))
+                    Directory.Delete(tempDir, recursive: true);
+            }
+            catch { }
+        }
+
+        progress?.Report($"Free space wipe complete: {totalWritten / (1024 * 1024)} MB overwritten");
+        return totalWritten;
+    }
+
+    private static bool DetectSsd(string driveRoot)
+    {
+        try
+        {
+            var driveLetter = driveRoot.TrimEnd('\\').TrimEnd(':');
+            using var searcher = new ManagementObjectSearcher(
+                $"SELECT MediaType FROM MSFT_PhysicalDisk WHERE DeviceID IN " +
+                $"(SELECT DiskNumber FROM MSFT_Partition WHERE DriveLetter='{driveLetter}')");
+            searcher.Scope = new ManagementScope(@"\\.\ROOT\Microsoft\Windows\Storage");
+            foreach (var obj in searcher.Get())
+            {
+                var mediaType = Convert.ToInt32(obj["MediaType"]);
+                return mediaType == 4; // 4 = SSD, 3 = HDD
+            }
+        }
+        catch { }
+        return false;
     }
 }
