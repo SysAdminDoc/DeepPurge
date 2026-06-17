@@ -39,10 +39,18 @@ public class InstalledProgram : INotifyPropertyChanged
         set { _icon = value; OnPropertyChanged(); }
     }
 
+    private bool _isProtected;
+
     public bool IsSelected
     {
         get => _isSelected;
         set { _isSelected = value; OnPropertyChanged(); }
+    }
+
+    public bool IsProtected
+    {
+        get => _isProtected;
+        set { _isProtected = value; OnPropertyChanged(); }
     }
 
     public string EstimatedSizeDisplay
