@@ -1,5 +1,6 @@
 using global::Microsoft.Win32;
 using DeepPurge.Core.Data;
+using DeepPurge.Core.Diagnostics;
 using DeepPurge.Core.Models;
 
 namespace DeepPurge.Core.Registry;
@@ -264,11 +265,11 @@ public class RegistryLeftoverScanner
                                     }
                                 }
                             }
-                            catch { }
+                            catch (Exception ex) { Log.Warn($"Registry scan: {ex.Message}"); }
                         }
                     }
                 }
-                catch { }
+                catch (Exception ex) { Log.Warn($"Registry scan: {ex.Message}"); }
             }
         }
     }
@@ -317,10 +318,10 @@ public class RegistryLeftoverScanner
                         });
                     }
                 }
-                catch { }
+                catch (Exception ex) { Log.Warn($"Registry scan: {ex.Message}"); }
             }
         }
-        catch { }
+        catch (Exception ex) { Log.Warn($"Registry scan: {ex.Message}"); }
     }
 
     private void ScanAppPaths(InstalledProgram program, List<LeftoverItem> leftovers)
@@ -354,7 +355,7 @@ public class RegistryLeftoverScanner
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { Log.Warn($"Registry scan: {ex.Message}"); }
         }
     }
 
@@ -391,10 +392,10 @@ public class RegistryLeftoverScanner
                         });
                     }
                 }
-                catch { }
+                catch (Exception ex) { Log.Warn($"Registry scan: {ex.Message}"); }
             }
         }
-        catch { }
+        catch (Exception ex) { Log.Warn($"Registry scan: {ex.Message}"); }
     }
 
     private void ScanStartupEntries(List<LeftoverItem> leftovers)
@@ -430,7 +431,7 @@ public class RegistryLeftoverScanner
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { Log.Warn($"Registry scan: {ex.Message}"); }
         }
     }
 
@@ -463,10 +464,10 @@ public class RegistryLeftoverScanner
                         });
                     }
                 }
-                catch { }
+                catch (Exception ex) { Log.Warn($"Registry scan: {ex.Message}"); }
             }
         }
-        catch { }
+        catch (Exception ex) { Log.Warn($"Registry scan: {ex.Message}"); }
     }
 
     private void ScanFirewallRules(InstalledProgram program, List<LeftoverItem> leftovers)
@@ -497,7 +498,7 @@ public class RegistryLeftoverScanner
                 }
             }
         }
-        catch { }
+        catch (Exception ex) { Log.Warn($"Registry scan: {ex.Message}"); }
     }
 
     private void ScanMuiCache(InstalledProgram program, List<LeftoverItem> leftovers)
@@ -527,7 +528,7 @@ public class RegistryLeftoverScanner
                 }
             }
         }
-        catch { }
+        catch (Exception ex) { Log.Warn($"Registry scan: {ex.Message}"); }
     }
 
     private void ScanShellExtensions(InstalledProgram program, List<LeftoverItem> leftovers)
@@ -562,7 +563,7 @@ public class RegistryLeftoverScanner
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { Log.Warn($"Registry scan: {ex.Message}"); }
         }
     }
 
@@ -599,7 +600,7 @@ public class RegistryLeftoverScanner
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { Log.Warn($"Registry scan: {ex.Message}"); }
         }
     }
 
@@ -622,7 +623,7 @@ public class RegistryLeftoverScanner
                     guid.Replace("{", "").Replace("}", "").Replace("-", ""),
                     "HKLM", leftovers, 2);
             }
-            catch { }
+            catch (Exception ex) { Log.Warn($"Registry scan: {ex.Message}"); }
         }
     }
 
@@ -657,7 +658,7 @@ public class RegistryLeftoverScanner
                 }
             }
         }
-        catch { }
+        catch (Exception ex) { Log.Warn($"Registry scan: {ex.Message}"); }
     }
 
     private static bool RegistryKeyExists(string path)

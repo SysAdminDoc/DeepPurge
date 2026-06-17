@@ -45,8 +45,9 @@ public static class SystemRestoreManager
         {
             using var searcher = new ManagementObjectSearcher("root\\default",
                 "SELECT * FROM SystemRestorePoint");
-            foreach (ManagementObject obj in searcher.Get())
+            foreach (ManagementBaseObject baseObj in searcher.Get())
             {
+                using var obj = baseObj;
                 var desc = obj["Description"]?.ToString() ?? "";
                 var seq = Convert.ToInt32(obj["SequenceNumber"]);
                 var creationStr = obj["CreationTime"]?.ToString() ?? "";
