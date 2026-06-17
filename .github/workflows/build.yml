@@ -21,7 +21,7 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Restore
-        run: dotnet restore DeepPurge.sln
+        run: dotnet restore DeepPurge.sln --locked-mode
 
       - name: Build
         run: dotnet build DeepPurge.sln -c Release --no-restore
