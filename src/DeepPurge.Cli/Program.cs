@@ -6,6 +6,7 @@ using DpDiag = DeepPurge.Core.Diagnostics;
 
 using DeepPurge.Core.App;
 using DeepPurge.Core.Cleaning;
+using DeepPurge.Core.Export;
 using DeepPurge.Core.Diagnostics;
 using DeepPurge.Core.Drivers;
 using DeepPurge.Core.FileSystem;
@@ -55,7 +56,7 @@ public static class Program
                 "uninstall"       => await CmdUninstallAsync(args, cts.Token),
                 "repair"          => await CmdRepairAsync(args, cts.Token),
                 "drivers"         => await CmdDriversAsync(args, cts.Token),
-                "startup-impact"  => CmdStartupImpact(),
+                "startup-impact"  => CmdStartupImpact(args),
                 "shortcuts"       => CmdShortcuts(args),
                 "duplicates"      => await CmdDuplicatesAsync(args, cts.Token),
                 "snapshot"        => await CmdSnapshotAsync(args, cts.Token),
@@ -206,7 +207,18 @@ public static class Program
     {
         var pkgs = await new DriverStoreScanner().EnumerateAsync(ct);
         var oldOnly = a.HasFlag("old");
-        foreach (var p in pkgs.Where(p => !oldOnly || p.IsOldVersion))
+        var filtered = pkgs.Where(p => !oldOnly || p.IsOldVersion).ToList();
+
+        var exportPath = a.GetOption("export");
+        if (exportPath != null)
+        {
+            var fmt = ParseExportFormat(a);
+            GridExporter.ExportDrivers(filtered, exportPath, fmt);
+            Console.WriteLine($"Exported {filtered.Count} drivers to {exportPath}");
+            return 0;
+        }
+
+        foreach (var p in filtered)
         {
             var tag = p.IsOldVersion ? "OLD" : "   ";
             Console.WriteLine($"[{tag}] {p.PublishedName,-12} {p.OriginalName,-28} {p.ProviderName,-22} {p.DriverVersion,-30} {FormatBytes(p.SizeBytes)}");
@@ -215,7 +227,7 @@ public static class Program
         return 0;
     }
 
-    private static int CmdStartupImpact()
+    private static int CmdStartupImpact(ParsedArgs a)
     {
         var impacts = new StartupImpactCalculator().CalculateForCurrentUser();
         if (impacts.Count == 0)
@@ -224,7 +236,17 @@ public static class Program
             Console.Error.WriteLine("Possible causes: ran without admin, or the system has not booted since WDI was enabled.");
             return 1;
         }
-        foreach (var e in impacts.Values.OrderByDescending(e => (int)e.Impact).ThenByDescending(e => e.DiskBytes))
+        var sorted = impacts.Values.OrderByDescending(e => (int)e.Impact).ThenByDescending(e => e.DiskBytes).ToList();
+
+        var exportPath = a.GetOption("export");
+        if (exportPath != null)
+        {
+            GridExporter.ExportStartupImpact(sorted, exportPath, ParseExportFormat(a));
+            Console.WriteLine($"Exported {sorted.Count} entries to {exportPath}");
+            return 0;
+        }
+
+        foreach (var e in sorted)
             Console.WriteLine($"{e.Impact,-6} {e.ProcessName,-32} disk={FormatBytes(e.DiskBytes)} cpu={e.CpuMs}ms");
         return 0;
     }
@@ -234,6 +256,16 @@ public static class Program
         var scanner = new ShortcutRepairScanner();
         var shortcuts = scanner.ScanAll();
         var broken = shortcuts.Where(s => s.Status == ShortcutStatus.Broken).ToList();
+
+        var exportPath = a.GetOption("export");
+        if (exportPath != null)
+        {
+            var exportSet = a.HasFlag("all") ? shortcuts : broken;
+            GridExporter.ExportShortcuts(exportSet, exportPath, ParseExportFormat(a));
+            Console.WriteLine($"Exported {exportSet.Count} shortcuts to {exportPath}");
+            return 0;
+        }
+
         foreach (var s in broken) Console.WriteLine($"BROKEN  {s.Path}  ->  {s.TargetPath}");
         Console.WriteLine($"# {broken.Count} broken of {shortcuts.Count} total");
         if (a.HasFlag("delete") || a.HasFlag("recycle"))
@@ -251,6 +283,15 @@ public static class Program
             : new[] { Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) };
         var finder = new DuplicateFinder();
         var groups = await finder.FindAsync(roots, progress: new Progress<string>(Console.Error.WriteLine), ct: ct);
+
+        var exportPath = a.GetOption("export");
+        if (exportPath != null)
+        {
+            GridExporter.ExportDuplicates(groups, exportPath, ParseExportFormat(a));
+            Console.WriteLine($"Exported {groups.Count} groups to {exportPath}");
+            return 0;
+        }
+
         foreach (var g in groups)
         {
             Console.WriteLine($"[{FormatBytes(g.WastedBytes)} wasted, {g.Paths.Count} copies @ {FormatBytes(g.FileSize)}]");
@@ -413,6 +454,12 @@ public static class Program
         return $"{b,6:F1} {u[i]}";
     }
 
+    private static ExportFormat ParseExportFormat(ParsedArgs a)
+    {
+        var fmt = a.GetOption("format")?.ToLowerInvariant();
+        return fmt == "json" ? ExportFormat.Json : ExportFormat.Csv;
+    }
+
     private static int Fail(string msg) { Console.Error.WriteLine(msg); return 2; }
 
     private static bool IsHelp(string a) => a is "--help" or "-h" or "help" or "/?";
@@ -428,10 +475,10 @@ public static class Program
         Console.WriteLine("  uninstall <name> [--silent]              Uninstall a program");
         Console.WriteLine("  clean [junk|evidence ...] [--dry-run] [--secure]");
         Console.WriteLine("  repair <sfc|dism-scan|dism-restore|dism-cleanup|dism-resetbase|chkdsk|fontcache|iconcache>");
-        Console.WriteLine("  drivers [--old]                          List third-party drivers in DriverStore");
-        Console.WriteLine("  startup-impact                           Show boot-time cost per process");
-        Console.WriteLine("  shortcuts [--recycle]                    Scan Desktop/Start Menu for broken .lnk");
-        Console.WriteLine("  duplicates [roots...]                    Find duplicate files");
+        Console.WriteLine("  drivers [--old] [--export file --format csv|json]");
+        Console.WriteLine("  startup-impact [--export file --format csv|json]");
+        Console.WriteLine("  shortcuts [--recycle] [--all] [--export file --format csv|json]");
+        Console.WriteLine("  duplicates [roots...] [--export file --format csv|json]");
         Console.WriteLine("  snapshot trace <name> <installer> [--args \"...\"]");
         Console.WriteLine("  winapp2 <path.ini> [--dry-run]           Run community cleaner definitions");
         Console.WriteLine("  schedule list");
@@ -468,7 +515,7 @@ public sealed class ParsedArgs
     // when you add a new command that needs them.
     private static readonly HashSet<string> ValueOptions = new(StringComparer.OrdinalIgnoreCase)
     {
-        "name", "freq", "time", "day", "args",
+        "name", "freq", "time", "day", "args", "export", "format",
     };
 
     public bool HasFlag(string name) => Flags.Contains(name);
