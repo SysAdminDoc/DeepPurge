@@ -231,6 +231,98 @@ public class InstallSnapshotEngine
     }
 
     // ═══════════════════════════════════════════════════════
+    //  USN JOURNAL TRACE (v2 — catches every filesystem change)
+    // ═══════════════════════════════════════════════════════
+
+    public async Task<InstallDelta> TraceInstallV2Async(
+        string programName,
+        string installerPath,
+        string? installerArgs = null,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(programName))
+            throw new ArgumentException("programName is required", nameof(programName));
+        if (string.IsNullOrWhiteSpace(installerPath) || !File.Exists(installerPath))
+            throw new FileNotFoundException("installer not found", installerPath);
+
+        var volumeRoot = Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles)) ?? @"C:\";
+
+        UsnJournalReader.EnsureJournalSize(volumeRoot);
+        long startUsn = UsnJournalReader.GetCurrentUsn(volumeRoot);
+        bool useUsn = startUsn >= 0;
+
+        var beforeReg = await CaptureRegistryOnlyAsync(ct);
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = installerPath,
+            Arguments = installerArgs ?? "",
+            UseShellExecute = true,
+        };
+        try
+        {
+            using var p = Process.Start(psi);
+            if (p != null)
+            {
+                await p.WaitForExitAsync(ct);
+                try { await Task.Delay(5000, ct); } catch (OperationCanceledException) { }
+            }
+        }
+        catch (Exception ex) { Log.Warn($"Installer launch failed: {ex.Message}"); }
+
+        var delta = new InstallDelta();
+
+        if (useUsn)
+        {
+            var usnChanges = UsnJournalReader.ReadChangesSince(volumeRoot, startUsn);
+            foreach (var c in usnChanges)
+            {
+                if (c.Reason == UsnChangeReason.Created || c.Reason == UsnChangeReason.Modified)
+                {
+                    try
+                    {
+                        var fi = new FileInfo(c.Path);
+                        if (fi.Exists) delta.AddedFiles.Add(new SnapshotEntry(c.Path, fi.Length, fi.LastWriteTimeUtc));
+                    }
+                    catch { }
+                }
+                else if (c.Reason == UsnChangeReason.Deleted)
+                {
+                    delta.RemovedFiles.Add(c.Path);
+                }
+            }
+        }
+        else
+        {
+            Log.Warn("USN journal unavailable — falling back to snapshot diff");
+            var before = await CaptureAsync(programName, installerPath, ct);
+            var after = await CaptureAsync(programName, installerPath, ct);
+            var fsDiff = Diff(before, after);
+            delta.AddedFiles = fsDiff.AddedFiles;
+            delta.RemovedFiles = fsDiff.RemovedFiles;
+        }
+
+        var afterReg = await CaptureRegistryOnlyAsync(ct);
+        var beforeKeys = new HashSet<string>(beforeReg.Select(k => k.Path), StringComparer.OrdinalIgnoreCase);
+        var afterKeys = new HashSet<string>(afterReg.Select(k => k.Path), StringComparer.OrdinalIgnoreCase);
+        foreach (var k in afterReg) if (!beforeKeys.Contains(k.Path)) delta.AddedRegistryKeys.Add(k.Path);
+        foreach (var k in beforeReg) if (!afterKeys.Contains(k.Path)) delta.RemovedRegistryKeys.Add(k.Path);
+
+        SaveManifest(programName, delta);
+        return delta;
+    }
+
+    private async Task<List<RegistryKeyEntry>> CaptureRegistryOnlyAsync(CancellationToken ct)
+    {
+        var keysBag = new ConcurrentBag<RegistryKeyEntry>();
+        var regTasks = RegRoots
+            .Select(t => Task.Run(() => EnumerateRegKeys(t.Hive, t.Sub, keysBag, maxDepth: 3, ct), ct))
+            .ToArray();
+        await Task.WhenAll(regTasks);
+        return keysBag.ToList();
+    }
+
+    // ═══════════════════════════════════════════════════════
 
     private static string ManifestPath(string programName)
         => Path.Combine(SnapshotDir, $"{SanitizeFilename(programName)}.manifest.json");

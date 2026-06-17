@@ -328,7 +328,14 @@ public partial class MainViewModel
         SnapshotStatus = $"Capturing baseline for {programName}...";
         try
         {
-            var delta = await new InstallSnapshotEngine().TraceInstallAsync(programName, installerPath, args);
+            var engine = new InstallSnapshotEngine();
+            var useV2 = UsnJournalReader.IsSupported(@"C:\");
+            SnapshotStatus = useV2
+                ? $"Tracing {programName} via USN journal..."
+                : $"Capturing baseline for {programName}...";
+            var delta = useV2
+                ? await engine.TraceInstallV2Async(programName, installerPath, args)
+                : await engine.TraceInstallAsync(programName, installerPath, args);
             _dispatcher.Invoke(() =>
             {
                 var parts = new List<string>
