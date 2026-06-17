@@ -27,6 +27,17 @@ public class SafetyGuardTests
     }
 
     [Theory]
+    [InlineData(@"C:\Users\Public\..\..\..\Windows\System32\config\SAM")]
+    [InlineData(@"C:\Temp\..\Windows\System32")]
+    [InlineData(@"C:\Users\alice\..\..\bootmgr")]
+    [InlineData(@"..")]
+    [InlineData(@"C:\safe\path\..\..\Windows")]
+    public void Blocks_path_traversal(string path)
+    {
+        Assert.False(SafetyGuard.IsPathSafeToDelete(path), $"Should reject traversal path: {path}");
+    }
+
+    [Theory]
     [InlineData(@"C:\Users\alice\AppData\Local\Temp\setup.tmp")]
     [InlineData(@"D:\some\user\file.txt")]
     [InlineData(@"C:\ProgramData\MyApp\cache.dat")]
