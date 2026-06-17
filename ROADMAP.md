@@ -3,34 +3,6 @@
 Living plan. Items sit here until they ship or get dropped; dropping is a valid outcome.
 Blocked items live in `Roadmap_Blocked.md`.
 
-## v0.10 — deeper install intelligence
-
-- [ ] **Install monitor 2.0** — replace the curated-roots walk with USN journal
-      + registry ETW so we catch every filesystem / registry change during the
-      installer run instead of just the high-signal directories
-- [ ] **Install monitor UI** — a "Track This Installer" button that wraps the
-      trace-and-diff flow with progress, preview, and keep/discard
-- [ ] **Upgrade-aware snapshots** — Diff.RemovedFiles wiring into the UI so
-      patches and overwrites show up, not just fresh installs
-- [ ] Parse `winapp2.ini` `SpecialDetect=DET_CHROME` etc. so applicability
-      detection matches BleachBit for browser-specific rules
-
-## v0.11 — reporting + automation
-
-- [ ] **CSV / JSON export** on every panel with a grid (drivers, shortcuts,
-      duplicates, startup impact) — sysadmin deliverable
-- [ ] **Intune / SCCM detection scripts** generated from the CLI (`deeppurgecli
-      detection-script --program X`) — enterprise deployment enabler
-- [ ] **Daily digest** email/toast summarising scheduled-cleaning runs
-- [ ] **History tab** showing prior uninstall / cleanup activity from the log
-
-## v0.12 — accessibility + polish
-
-- [ ] Localization: `.resx` + Crowdin submission for top 10 UI strings
-- [ ] High-contrast theme pass
-- [ ] Screen-reader narration on new v0.9 panels
-- [ ] Replace in-window toast with Windows toast notifications for completed scans
-
 ## Ideas / not committed
 
 Things worth considering but not on a timeline:
@@ -41,6 +13,8 @@ Things worth considering but not on a timeline:
   to recommend batch-uninstall candidates on factory images
 - **Portable app detection** — BCU-style folder scan for unregistered apps
 - **Tray icon** — background scheduled cleaning with tray notifications
+- **Registry ETW tracing** — add `Microsoft.Diagnostics.Tracing.TraceEvent` for
+  real-time registry change capture alongside USN journal filesystem tracking
 - **Android companion** — nope, scope creep, documented here only to flag it
 
 ## What we will NOT ship
