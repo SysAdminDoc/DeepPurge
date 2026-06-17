@@ -212,6 +212,17 @@ public static class SafetyGuard
             normalized.StartsWith(parent, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>Returns true if the path is a reparse point (symlink, junction, mount point). Callers must NOT recurse into reparse points during deletion.</summary>
+    public static bool IsReparsePoint(string path)
+    {
+        try
+        {
+            var attr = File.GetAttributes(path);
+            return (attr & FileAttributes.ReparsePoint) != 0;
+        }
+        catch { return false; }
+    }
+
     /// <summary>Get a human-readable safety assessment</summary>
     public static (bool Safe, string Reason) AssessOperation(string operationType, string target)
     {
