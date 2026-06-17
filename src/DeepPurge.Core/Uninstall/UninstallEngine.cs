@@ -23,7 +23,7 @@ public class UninstallEngine
     private readonly BackupManager _backupManager = new();
 
     private static readonly HashSet<int> UninstallerSuccessCodes = new() { 0, 1641, 3010 };
-    private static readonly TimeSpan UninstallerTimeout = TimeSpan.FromMinutes(10);
+    public static TimeSpan UninstallerTimeout { get; set; } = TimeSpan.FromMinutes(30);
 
     public async Task<UninstallResult> UninstallAsync(InstalledProgram program, ScanMode scanMode,
         bool createRestorePoint = true, bool runBuiltInUninstaller = true, bool silent = false,

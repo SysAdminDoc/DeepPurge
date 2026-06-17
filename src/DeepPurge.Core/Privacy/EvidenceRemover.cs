@@ -66,6 +66,7 @@ public static class EvidenceRemover
             ScanDeliveryOptimization(),
             ScanWindowsErrorReporting(),
             ScanFontCache(),
+            ScanUsbDeviceHistory(),
         };
         cats.RemoveAll(c => c.Items.Count == 0);
         return cats;
@@ -443,6 +444,49 @@ public static class EvidenceRemover
                 SizeBytes = GetDirSize(sysFont),
                 IsDirectory = true,
             });
+        return cat;
+    }
+
+    private static TraceCategory ScanUsbDeviceHistory()
+    {
+        var cat = new TraceCategory
+        {
+            Name = "USB Device History",
+            Description = "Registry records of previously connected USB devices, SetupAPI logs",
+        };
+
+        try
+        {
+            using var usbstorKey = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
+                @"SYSTEM\CurrentControlSet\Enum\USBSTOR");
+            if (usbstorKey != null)
+            {
+                foreach (var deviceClass in usbstorKey.GetSubKeyNames())
+                {
+                    using var classKey = usbstorKey.OpenSubKey(deviceClass);
+                    if (classKey == null) continue;
+                    foreach (var serial in classKey.GetSubKeyNames())
+                    {
+                        cat.Items.Add(new TraceItem
+                        {
+                            Path = $@"HKLM\SYSTEM\CurrentControlSet\Enum\USBSTOR\{deviceClass}\{serial}",
+                            SizeBytes = 0,
+                            IsDirectory = false,
+                        });
+                    }
+                }
+            }
+        }
+        catch { }
+
+        var setupApiLog = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+            "inf", "setupapi.dev.log");
+        AddFile(cat, setupApiLog);
+
+        var setupApiAppLog = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+            "inf", "setupapi.app.log");
+        AddFile(cat, setupApiAppLog);
+
         return cat;
     }
 

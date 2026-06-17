@@ -164,9 +164,12 @@ public static class Program
 
     private static async Task<int> CmdUninstallAsync(ParsedArgs a, CancellationToken ct)
     {
-        if (a.Positional.Count == 0) return Fail("usage: deeppurgecli uninstall <name-or-id> [--silent]");
+        if (a.Positional.Count == 0) return Fail("usage: deeppurgecli uninstall <name-or-id> [--silent] [--timeout <minutes>]");
         bool silent = a.HasFlag("silent");
         var nameArg = a.Positional[0];
+        var timeoutStr = a.GetOption("timeout");
+        if (timeoutStr != null && int.TryParse(timeoutStr, out var mins))
+            UninstallEngine.UninstallerTimeout = TimeSpan.FromMinutes(mins);
 
         var items = await Task.Run(() => InstalledProgramScanner.GetAllInstalledPrograms(), ct);
         var match = items.FirstOrDefault(p =>
@@ -570,7 +573,7 @@ public sealed class ParsedArgs
     // when you add a new command that needs them.
     private static readonly HashSet<string> ValueOptions = new(StringComparer.OrdinalIgnoreCase)
     {
-        "name", "freq", "time", "day", "args", "export", "format", "program",
+        "name", "freq", "time", "day", "args", "export", "format", "program", "timeout",
     };
 
     public bool HasFlag(string name) => Flags.Contains(name);

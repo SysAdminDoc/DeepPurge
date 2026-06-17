@@ -74,22 +74,46 @@ public static class PackageManagerScanner
 
     public static List<WingetEntry> QueryWinget(CancellationToken ct = default)
     {
-        var result = new List<WingetEntry>();
-        string output;
         try
         {
-            output = RunProcess(
-                "winget.exe",
-                "list --disable-interactivity --accept-source-agreements",
-                ct);
+            var jsonOutput = RunProcess("winget.exe",
+                "list --disable-interactivity --accept-source-agreements --output json", ct);
+            if (!string.IsNullOrWhiteSpace(jsonOutput) && jsonOutput.TrimStart().StartsWith('['))
+                return ParseWingetJson(jsonOutput);
         }
-        catch
-        {
-            return result;
-        }
+        catch { }
 
-        if (string.IsNullOrWhiteSpace(output)) return result;
-        return ParseWingetTable(output);
+        try
+        {
+            var tableOutput = RunProcess("winget.exe",
+                "list --disable-interactivity --accept-source-agreements", ct);
+            if (!string.IsNullOrWhiteSpace(tableOutput)) return ParseWingetTable(tableOutput);
+        }
+        catch { }
+        return new();
+    }
+
+    internal static List<WingetEntry> ParseWingetJson(string json)
+    {
+        var entries = new List<WingetEntry>();
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            foreach (var item in doc.RootElement.EnumerateArray())
+            {
+                var name = item.TryGetProperty("Name", out var n) ? n.GetString() ?? "" : "";
+                var id = item.TryGetProperty("Id", out var i) ? i.GetString() ?? "" : "";
+                var version = item.TryGetProperty("InstalledVersion", out var v)
+                    ? v.GetString() ?? ""
+                    : item.TryGetProperty("Version", out var v2) ? v2.GetString() ?? "" : "";
+                var available = item.TryGetProperty("AvailableVersion", out var a) ? a.GetString() ?? "" : "";
+                var source = item.TryGetProperty("Source", out var s) ? s.GetString() ?? "" : "";
+                if (name.Length > 0 && id.Length > 0)
+                    entries.Add(new WingetEntry(id, name, version, available, source));
+            }
+        }
+        catch { }
+        return entries;
     }
 
     /// <summary>
