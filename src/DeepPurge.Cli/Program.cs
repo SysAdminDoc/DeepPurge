@@ -316,7 +316,11 @@ public static class Program
         var extraArgs = a.GetOption("args");
 
         var engine = new InstallSnapshotEngine();
-        var delta = await engine.TraceInstallAsync(name, installer, extraArgs, ct);
+        var useV2 = !a.HasFlag("legacy") && UsnJournalReader.IsSupported(@"C:\");
+        if (useV2) Console.WriteLine("[v2 mode: USN journal + registry snapshot]");
+        var delta = useV2
+            ? await engine.TraceInstallV2Async(name, installer, extraArgs, ct)
+            : await engine.TraceInstallAsync(name, installer, extraArgs, ct);
         if (delta.IsUpgrade) Console.WriteLine("[upgrade detected — showing diff against prior version]");
         Console.WriteLine($"Added files:      {delta.AddedFiles.Count,5} ({FormatBytes(delta.TotalAddedBytes)})");
         Console.WriteLine($"Added regkeys:    {delta.AddedRegistryKeys.Count,5}");
