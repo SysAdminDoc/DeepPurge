@@ -9,6 +9,7 @@ using DeepPurge.Core.Cleaning;
 using DeepPurge.Core.Export;
 using DeepPurge.Core.Diagnostics;
 using DeepPurge.Core.Drivers;
+using DeepPurge.Core.Firewall;
 using DeepPurge.Core.FileSystem;
 using DeepPurge.Core.InstallMonitor;
 using DeepPurge.Core.Privacy;
@@ -62,6 +63,7 @@ public static class Program
                 "snapshot"        => await CmdSnapshotAsync(args, cts.Token),
                 "winapp2"         => await CmdWinapp2Async(args, cts.Token),
                 "schedule"        => CmdSchedule(args),
+                "orphans"         => CmdOrphans(args),
                 "check-update"    => await CmdCheckUpdateAsync(cts.Token),
                 "detection-script"=> CmdDetectionScript(args),
                 "doctor"          => CmdDoctor(),
@@ -481,6 +483,42 @@ if ($app) {{
         return fails > 0 ? 1 : 0;
     }
 
+    private static int CmdOrphans(ParsedArgs a)
+    {
+        Console.WriteLine("Scanning for orphaned artifacts...");
+
+        var services = DeepPurge.Core.Services.ServiceScanner.GetAllServices(orphanedOnly: true);
+        var tasks = DeepPurge.Core.Tasks.ScheduledTaskScanner.GetAllTasks().Where(t => t.IsOrphaned).ToList();
+        var firewall = FirewallRuleScanner.GetAllRules(orphanedOnly: true);
+        var paths = DeepPurge.Core.Shell.PathCleaner.ScanPathEntries(orphanedOnly: true);
+
+        Console.WriteLine();
+        Console.WriteLine($"=== Orphaned Services ({services.Count}) ===");
+        foreach (var s in services)
+            Console.WriteLine($"  {s.Name,-30} {s.DisplayName,-40} {s.ImagePath}");
+
+        Console.WriteLine();
+        Console.WriteLine($"=== Orphaned Scheduled Tasks ({tasks.Count}) ===");
+        foreach (var t in tasks)
+            Console.WriteLine($"  {t.Name,-40} {t.Action}");
+
+        Console.WriteLine();
+        Console.WriteLine($"=== Orphaned Firewall Rules ({firewall.Count}) ===");
+        foreach (var r in firewall)
+            Console.WriteLine($"  {r.DisplayName,-50} {r.Program}");
+
+        Console.WriteLine();
+        Console.WriteLine($"=== Orphaned PATH Entries ({paths.Count}) ===");
+        foreach (var p in paths)
+            Console.WriteLine($"  [{p.Source}] {p.Directory}");
+
+        var total = services.Count + tasks.Count + firewall.Count + paths.Count;
+        Console.WriteLine();
+        Console.WriteLine($"# Total: {total} orphaned artifacts ({services.Count} services, " +
+                         $"{tasks.Count} tasks, {firewall.Count} firewall, {paths.Count} PATH)");
+        return 0;
+    }
+
     private static async Task<int> CmdCheckUpdateAsync(CancellationToken ct)
     {
         var cur = (typeof(Program).Assembly.GetName().Version ?? new Version(0, 9, 0)).ToString(3);
@@ -541,6 +579,7 @@ if ($app) {{
         Console.WriteLine("  schedule list");
         Console.WriteLine("  schedule add --name N --time HH:MM [--freq daily|weekly|monthly] [--day Mon] [--args \"...\"]");
         Console.WriteLine("  schedule remove --name N");
+        Console.WriteLine("  orphans                                  Scan for orphaned services, tasks, firewall rules, PATH entries");
         Console.WriteLine("  detection-script --program \"Name\" [--export file.ps1]   Generate Intune/SCCM detection script");
         Console.WriteLine("  check-update                             Check GitHub for a newer release");
         Console.WriteLine("  doctor                                   Run environment self-test + report");

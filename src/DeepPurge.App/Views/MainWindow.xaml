@@ -470,6 +470,20 @@
                                 </StackPanel>
                             </RadioButton>
 
+                            <RadioButton GroupName="nav" Tag="Orphans" Checked="NavButton_Checked" Style="{StaticResource NavRadioButton}">
+                                <DockPanel>
+                                    <Border DockPanel.Dock="Right" Style="{StaticResource NavBadge}"
+                                            Visibility="{Binding OrphanBadge, Converter={StaticResource BadgeVisConverter}}">
+                                        <TextBlock Text="{Binding OrphanBadge}" Style="{StaticResource NavBadgeText}"
+                                                   Foreground="{DynamicResource PeachBrush}"/>
+                                    </Border>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="&#xE7BA;" Style="{StaticResource NavIcon}"/>
+                                        <TextBlock Text="Orphaned Artifacts" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </DockPanel>
+                            </RadioButton>
+
                             <TextBlock Text="SAFETY" Style="{StaticResource SectionLabel}"/>
                             <RadioButton GroupName="nav" Tag="Restore" Checked="NavButton_Checked" Style="{StaticResource NavRadioButton}">
                                 <StackPanel Orientation="Horizontal">
@@ -1038,6 +1052,72 @@
                                 <DataGridTextColumn Binding="{Binding Match}" Header="MATCH" Width="95"/>
                             </DataGrid.Columns>
                         </DataGrid>
+                    </Grid>
+
+                    <!-- ORPHANED ARTIFACTS (unified panel) -->
+                    <Grid x:Name="panelOrphans" Visibility="Collapsed">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <Border Grid.Row="0" Padding="24,16,24,8">
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Content="Scan" Click="OrphanScan_Click"
+                                        Style="{DynamicResource AccentButton}" Margin="10,0,0,0" Padding="22,8"/>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Orphaned Artifacts" FontSize="18" FontWeight="Bold"
+                                               Foreground="{DynamicResource TextBrush}"/>
+                                    <TextBlock Text="{Binding OrphanSummary}" FontSize="11"
+                                               Foreground="{DynamicResource SubtextBrush}" Margin="0,4,0,0"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="24,8,24,16">
+                            <StackPanel>
+                                <!-- Firewall Rules -->
+                                <TextBlock Text="ORPHANED FIREWALL RULES" FontSize="10" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource Subtext0Brush}" Margin="0,8,0,6"/>
+                                <DataGrid AutoGenerateColumns="False" HeadersVisibility="Column"
+                                          ItemsSource="{Binding OrphanedFirewallRules}"
+                                          MaxHeight="280" IsReadOnly="False">
+                                    <DataGrid.Columns>
+                                        <DataGridCheckBoxColumn Binding="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" Width="36"
+                                                                HeaderTemplate="{StaticResource MasterCheckboxHeader}"/>
+                                        <DataGridTextColumn Binding="{Binding DisplayName}" Header="RULE" Width="*" IsReadOnly="True"/>
+                                        <DataGridTextColumn Binding="{Binding Program}" Header="PROGRAM" Width="280" IsReadOnly="True"/>
+                                        <DataGridTextColumn Binding="{Binding Direction}" Header="DIR" Width="60" IsReadOnly="True"/>
+                                        <DataGridTextColumn Binding="{Binding Action}" Header="ACTION" Width="65" IsReadOnly="True"/>
+                                        <DataGridTextColumn Binding="{Binding Status}" Header="STATUS" Width="80" IsReadOnly="True"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                                <Button Content="Delete Selected Firewall Rules" Click="DeleteOrphanedFirewallRules_Click"
+                                        Style="{DynamicResource AccentButton}" HorizontalAlignment="Left"
+                                        Padding="16,6" Margin="0,8,0,16"/>
+
+                                <!-- PATH Entries -->
+                                <TextBlock Text="ORPHANED PATH ENTRIES" FontSize="10" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource Subtext0Brush}" Margin="0,8,0,6"/>
+                                <DataGrid AutoGenerateColumns="False" HeadersVisibility="Column"
+                                          ItemsSource="{Binding OrphanedPathEntries}"
+                                          MaxHeight="240" IsReadOnly="False">
+                                    <DataGrid.Columns>
+                                        <DataGridCheckBoxColumn Binding="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" Width="36"
+                                                                HeaderTemplate="{StaticResource MasterCheckboxHeader}"/>
+                                        <DataGridTextColumn Binding="{Binding Directory}" Header="DIRECTORY" Width="*" IsReadOnly="True"/>
+                                        <DataGridTextColumn Binding="{Binding Source}" Header="SCOPE" Width="70" IsReadOnly="True"/>
+                                        <DataGridTextColumn Binding="{Binding Status}" Header="STATUS" Width="80" IsReadOnly="True"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                                <Button Content="Remove Selected PATH Entries" Click="RemoveOrphanedPathEntries_Click"
+                                        Style="{DynamicResource AccentButton}" HorizontalAlignment="Left"
+                                        Padding="16,6" Margin="0,8,0,16"/>
+
+                                <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource Subtext0Brush}" Margin="0,8,0,0"
+                                           Text="Orphaned services and scheduled tasks are already shown in their respective panels above. This panel adds firewall rules and PATH entries that reference deleted programs."/>
+                            </StackPanel>
+                        </ScrollViewer>
                     </Grid>
 
                     <!-- BACKUPS -->

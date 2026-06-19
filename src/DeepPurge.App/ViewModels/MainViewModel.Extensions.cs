@@ -11,6 +11,8 @@ using DeepPurge.Core.InstallMonitor;
 using DeepPurge.Core.Repair;
 using DeepPurge.Core.Safety;
 using DeepPurge.Core.Schedule;
+using DeepPurge.Core.Firewall;
+using DeepPurge.Core.Shell;
 using DeepPurge.Core.Shortcuts;
 using DeepPurge.Core.Startup;
 using DeepPurge.Core.Updates;
@@ -495,6 +497,89 @@ public partial class MainViewModel
     public string PortableStatusDisplay => DataPaths.IsPortable
         ? "ON — settings live next to the exe in the Data\\ folder."
         : "OFF — settings live in %LocalAppData%\\DeepPurge\\. Drop a file named 'DeepPurge.portable' next to the exe and restart to switch.";
+
+    // ═══════════════════════════════════════════════════════
+    //  ORPHANED ARTIFACTS (unified panel)
+    // ═══════════════════════════════════════════════════════
+    public ObservableCollection<FirewallRuleEntry> OrphanedFirewallRules { get; } = new();
+    public ObservableCollection<PathEntry> OrphanedPathEntries { get; } = new();
+    [ObservableProperty] private string _orphanBadge = "";
+    [ObservableProperty] private string _orphanSummary = "";
+
+    [RelayCommand]
+    private async Task ScanOrphansAsync()
+    {
+        StatusText = "Scanning for orphaned artifacts (services, tasks, firewall, PATH)...";
+        try
+        {
+            // Run all four orphan scans in parallel.
+            var fwTask = Task.Run(() => FirewallRuleScanner.GetAllRules(orphanedOnly: true));
+            var pathTask = Task.Run(() => PathCleaner.ScanPathEntries(orphanedOnly: true));
+            var svcTask = Task.Run(() => Core.Services.ServiceScanner.GetAllServices(orphanedOnly: true));
+            var taskTask = Task.Run(() => Core.Tasks.ScheduledTaskScanner.GetAllTasks()
+                .Where(t => t.IsOrphaned).ToList());
+
+            await Task.WhenAll(fwTask, pathTask, svcTask, taskTask);
+
+            var fwRules = fwTask.Result;
+            var pathEntries = pathTask.Result;
+            var orphanedSvcs = svcTask.Result;
+            var orphanedTasks = taskTask.Result;
+
+            _dispatcher.Invoke(() =>
+            {
+                OrphanedFirewallRules.Clear();
+                foreach (var r in fwRules) OrphanedFirewallRules.Add(r);
+
+                OrphanedPathEntries.Clear();
+                foreach (var p in pathEntries) OrphanedPathEntries.Add(p);
+
+                // Services and tasks already have panels — update their collections too.
+                // (The existing Apply* methods handle full replacement, but orphan-only
+                // results should merge: we flag the orphaned count on the Orphans panel.)
+                var total = orphanedSvcs.Count + orphanedTasks.Count + fwRules.Count + pathEntries.Count;
+                OrphanBadge = total > 0 ? total.ToString() : "";
+                OrphanSummary = $"{orphanedSvcs.Count} services, {orphanedTasks.Count} tasks, " +
+                                $"{fwRules.Count} firewall rules, {pathEntries.Count} PATH entries";
+                StatusText = $"Orphan scan: {total} orphaned artifacts — {OrphanSummary}";
+            });
+        }
+        catch (Exception ex)
+        {
+            Log.Error("ScanOrphansAsync", ex);
+            StatusText = $"Orphan scan failed: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private void DeleteOrphanedFirewallRules()
+    {
+        try
+        {
+            var selected = OrphanedFirewallRules.Where(r => r.IsSelected).ToList();
+            var n = FirewallRuleScanner.DeleteRules(selected);
+            foreach (var r in selected.Where(r => r.IsSelected))
+                OrphanedFirewallRules.Remove(r);
+            ActivityLog.Record("orphans", $"Deleted {n} orphaned firewall rule(s)", itemCount: n);
+            StatusText = $"Deleted {n} orphaned firewall rule(s).";
+        }
+        catch (Exception ex) { Log.Error("DeleteOrphanedFirewallRules", ex); StatusText = $"Delete failed: {ex.Message}"; }
+    }
+
+    [RelayCommand]
+    private void RemoveOrphanedPathEntries()
+    {
+        try
+        {
+            var selected = OrphanedPathEntries.Where(p => p.IsSelected).ToList();
+            var n = PathCleaner.RemoveOrphanedEntries(selected);
+            foreach (var p in selected.Where(p => p.IsSelected))
+                OrphanedPathEntries.Remove(p);
+            ActivityLog.Record("orphans", $"Removed {n} orphaned PATH entr(ies)", itemCount: n);
+            StatusText = $"Removed {n} orphaned PATH entr(ies).";
+        }
+        catch (Exception ex) { Log.Error("RemoveOrphanedPathEntries", ex); StatusText = $"Remove failed: {ex.Message}"; }
+    }
 
     // ═══════════════════════════════════════════════════════
     //  UPDATE CHECK

@@ -108,7 +108,7 @@ public partial class MainWindow : Window
         dgPrograms, panelForced, dgWindowsApps, dgJunk, dgEvidence,
         dgEmptyFolders, panelDisk, dgAutorun, dgBrowserExt, dgContextMenu,
         dgServices, dgTasks, dgRestore, panelLeftovers,
-        panelHunter, panelBackups,
+        panelHunter, panelOrphans, panelBackups,
         // v0.9.0 system-tools panels
         dgDrivers, dgStartupImpact, dgShortcuts, dgDuplicates,
         panelWinapp2, panelRepair, panelSchedule, panelInstallMonitor, dgHistory, panelAbout,
@@ -190,6 +190,10 @@ public partial class MainWindow : Window
                 break;
             case "Hunter":
                 panelHunter.Visibility = Visibility.Visible; txtPanelTitle.Text = "Registry Hunter";
+                break;
+            case "Orphans":
+                panelOrphans.Visibility = Visibility.Visible; txtPanelTitle.Text = "Orphaned Artifacts";
+                MaybeAutoLoad("Orphans", () => _vm.ScanOrphansCommand.Execute(null));
                 break;
             case "Backups":
                 panelBackups.Visibility = Visibility.Visible; txtPanelTitle.Text = "Registry Backups";
@@ -991,6 +995,15 @@ public partial class MainWindow : Window
     }
 
     private void OpenBackupFolder_Click(object sender, RoutedEventArgs e) => _vm.OpenBackupFolder();
+
+    private void OrphanScan_Click(object sender, RoutedEventArgs e)
+        => _vm.ScanOrphansCommand.Execute(null);
+
+    private void DeleteOrphanedFirewallRules_Click(object sender, RoutedEventArgs e)
+        => _vm.DeleteOrphanedFirewallRulesCommand.Execute(null);
+
+    private void RemoveOrphanedPathEntries_Click(object sender, RoutedEventArgs e)
+        => _vm.RemoveOrphanedPathEntriesCommand.Execute(null);
 
     /// <summary>
     /// Context-menu action: push the program's upgrade through winget.
