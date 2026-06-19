@@ -88,6 +88,21 @@ public static class SafetyGuard
         @"\Microsoft\VisualStudio\",
     };
 
+    /// <summary>
+    /// Firewall rule display-name prefixes that must never be deleted.
+    /// These are Windows Defender / Core Networking / system rules.
+    /// </summary>
+    private static readonly string[] ProtectedFirewallPrefixes =
+    {
+        "Core Networking",
+        "Windows Defender",
+        "Remote Desktop",
+        "File and Printer Sharing",
+        "Network Discovery",
+        "@FirewallAPI.dll",
+        "@%SystemRoot%",
+    };
+
     // ═══════════════════════════════════════════════════════
     //  VALIDATION METHODS
     // ═══════════════════════════════════════════════════════
@@ -160,6 +175,30 @@ public static class SafetyGuard
         if (string.IsNullOrWhiteSpace(taskPath)) return false;
         return !ProtectedTaskPaths.Any(p =>
             taskPath.StartsWith(p, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>Returns true if the firewall rule is safe to delete (not a core Windows rule)</summary>
+    public static bool IsFirewallRuleSafeToDelete(string displayName)
+    {
+        if (string.IsNullOrWhiteSpace(displayName)) return false;
+        return !ProtectedFirewallPrefixes.Any(prefix =>
+            displayName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>Returns true if the PATH entry is safe to remove</summary>
+    public static bool IsPathEntrySafeToRemove(string directory)
+    {
+        if (string.IsNullOrWhiteSpace(directory)) return false;
+        var expanded = Environment.ExpandEnvironmentVariables(directory);
+        var lower = expanded.ToLowerInvariant();
+        // Never remove Windows system paths, .NET runtime paths, or PowerShell paths
+        if (lower.Contains(@"\windows\system32") ||
+            lower.Contains(@"\windows\syswow64") ||
+            lower.Contains(@"\dotnet") ||
+            lower.Contains(@"\powershell") ||
+            lower.Contains(@"\windowsapps"))
+            return false;
+        return true;
     }
 
     /// <summary>Returns true if the autorun entry is safe to delete (not a Windows component)</summary>
@@ -269,6 +308,14 @@ public static class SafetyGuard
             case "DeleteTask":
                 if (!IsTaskSafeToDelete(target))
                     return (false, $"Protected Windows task: {target}");
+                break;
+            case "DeleteFirewallRule":
+                if (!IsFirewallRuleSafeToDelete(target))
+                    return (false, $"Protected Windows firewall rule: {target}");
+                break;
+            case "RemovePathEntry":
+                if (!IsPathEntrySafeToRemove(target))
+                    return (false, $"Protected system PATH entry: {target}");
                 break;
         }
         return (true, "OK");
