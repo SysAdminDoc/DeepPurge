@@ -4,9 +4,9 @@
     "net8.0-windows10.0.17763": {
       "CommunityToolkit.Mvvm": {
         "type": "Direct",
-        "requested": "[8.2.2, )",
-        "resolved": "8.2.2",
-        "contentHash": "r0g0k9tGYdrnz8R7T3x5UiokDffeevzK/2P/9SBL6fqLgN8B157MIi/bVUWI1KAz6ZorZrK9AdABCWUeXZZsvA=="
+        "requested": "[8.4.2, )",
+        "resolved": "8.4.2",
+        "contentHash": "WadCzGEc2U+3e20avRLng4qNtt4zoOGWrdUISqJWrHe3/FSnrYjuM5Sb4yQb09LhkBXrrI4Zt3dLKgRMbItsrg=="
       },
       "System.CodeDom": {
         "type": "Transitive",
