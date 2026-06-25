@@ -89,4 +89,16 @@ public class InstallSnapshotDiffTests
         Assert.Empty(d.AddedFiles);
         Assert.Empty(d.RemovedFiles);
     }
+
+    [Fact]
+    public void Registry_key_comparison_is_case_insensitive()
+    {
+        var before = Snap(keys: new[] { @"HKLM\SOFTWARE\Vendor\App" });
+        var after  = Snap(keys: new[] { @"hklm\software\vendor\app" });
+
+        var d = new InstallSnapshotEngine().Diff(before, after);
+
+        Assert.Empty(d.AddedRegistryKeys);
+        Assert.Empty(d.RemovedRegistryKeys);
+    }
 }

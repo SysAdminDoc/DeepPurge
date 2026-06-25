@@ -86,6 +86,28 @@ Signer name :               Microsoft Windows Hardware Compatibility Publisher
     }
 
     [Fact]
+    public void Parses_labels_with_space_before_colon()
+    {
+        const string spaced = @"Microsoft PnP Utility
+
+Published name :            oem99.inf
+Driver package provider :   Acme
+Class :                     Ports
+Driver date and version :   02/05/2010 7.1.30.51
+Signer name :               Microsoft Windows Hardware Compatibility Publisher
+
+";
+        var list = Parse(spaced);
+
+        Assert.Single(list);
+        Assert.Equal("oem99.inf", list[0].PublishedName);
+        Assert.Equal("Acme", list[0].ProviderName);
+        Assert.Equal("Ports", list[0].ClassName);
+        Assert.Equal("02/05/2010 7.1.30.51", list[0].DriverVersion);
+        Assert.Equal(new Version(7, 1, 30, 51), list[0].ParsedVersion);
+    }
+
+    [Fact]
     public void Empty_output_returns_empty_list()
     {
         Assert.Empty(Parse(""));

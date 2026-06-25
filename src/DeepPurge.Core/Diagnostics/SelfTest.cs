@@ -55,7 +55,11 @@ public static class SelfTest
                 : new("Elevation", SelfTestStatus.Warn, "Not elevated — autorun / services / WDI reads may be empty",
                       Hint: "Relaunch from an elevated shell (Run as administrator).");
         }
-        catch (Exception ex) { return new("Elevation", SelfTestStatus.Fail, ex.Message); }
+        catch (Exception ex)
+        {
+            return new("Elevation", SelfTestStatus.Fail, ex.Message,
+                Hint: "Run from an interactive Windows user session so the current identity can be inspected.");
+        }
     }
 
     private static SelfTestResult CheckOsVersion()
@@ -64,7 +68,8 @@ public static class SelfTest
         var supported = v.Major >= 10;
         return supported
             ? new("OS version", SelfTestStatus.Ok,   $"Windows {v}")
-            : new("OS version", SelfTestStatus.Fail, $"Needs Windows 10+; running {v}");
+            : new("OS version", SelfTestStatus.Fail, $"Needs Windows 10+; running {v}",
+                Hint: "Run DeepPurge on Windows 10 or Windows 11.");
     }
 
     private static SelfTestResult CheckDataPaths()
@@ -75,7 +80,11 @@ public static class SelfTest
             var mode = DataPaths.IsPortable ? "portable" : "installed";
             return new("Data paths", SelfTestStatus.Ok, $"{mode} → {DataPaths.Root}");
         }
-        catch (Exception ex) { return new("Data paths", SelfTestStatus.Fail, ex.Message); }
+        catch (Exception ex)
+        {
+            return new("Data paths", SelfTestStatus.Fail, ex.Message,
+                Hint: "Fix the profile/AppData path permissions, or enable portable mode from a writable folder.");
+        }
     }
 
     private static SelfTestResult CheckLogsWritable()
@@ -86,7 +95,11 @@ public static class SelfTest
             File.WriteAllText(probe, "ok"); File.Delete(probe);
             return new("Logs writable", SelfTestStatus.Ok, DataPaths.Logs);
         }
-        catch (Exception ex) { return new("Logs writable", SelfTestStatus.Fail, ex.Message); }
+        catch (Exception ex)
+        {
+            return new("Logs writable", SelfTestStatus.Fail, ex.Message,
+                Hint: "Create the Logs folder and grant write permission, or move the portable build to a writable folder.");
+        }
     }
 
     private static SelfTestResult CheckPnpUtil()
@@ -96,7 +109,8 @@ public static class SelfTest
             "pnputil.exe");
         return File.Exists(path)
             ? new("pnputil.exe",  SelfTestStatus.Ok, path)
-            : new("pnputil.exe",  SelfTestStatus.Fail, "Not found — Driver Store tool disabled");
+            : new("pnputil.exe",  SelfTestStatus.Fail, "Not found — Driver Store tool disabled",
+                Hint: "Restore %SystemRoot%\\System32\\pnputil.exe with DISM /Online /Cleanup-Image /RestoreHealth.");
     }
 
     private static SelfTestResult CheckWdiStartupInfo()
@@ -126,7 +140,11 @@ public static class SelfTest
             return new("WDI StartupInfo", SelfTestStatus.Warn, "Access denied",
                 Hint: "Relaunch elevated — WDI logs are admin-only.");
         }
-        catch (Exception ex) { return new("WDI StartupInfo", SelfTestStatus.Fail, ex.Message); }
+        catch (Exception ex)
+        {
+            return new("WDI StartupInfo", SelfTestStatus.Fail, ex.Message,
+                Hint: "Relaunch elevated and reboot once if no WDI startup trace has been generated yet.");
+        }
     }
 
     private static SelfTestResult CheckRegistryAccess()
@@ -137,9 +155,14 @@ public static class SelfTest
                 @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall");
             return k != null
                 ? new("Registry access", SelfTestStatus.Ok,   "HKLM\\...\\Uninstall readable")
-                : new("Registry access", SelfTestStatus.Warn, "HKLM\\...\\Uninstall returned null");
+                : new("Registry access", SelfTestStatus.Warn, "HKLM\\...\\Uninstall returned null",
+                    Hint: "Verify HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall exists on this Windows image.");
         }
-        catch (Exception ex) { return new("Registry access", SelfTestStatus.Fail, ex.Message); }
+        catch (Exception ex)
+        {
+            return new("Registry access", SelfTestStatus.Fail, ex.Message,
+                Hint: "Relaunch elevated and confirm registry access is not blocked by policy.");
+        }
     }
 
     private static SelfTestResult CheckShortcutsRoots()
@@ -156,9 +179,16 @@ public static class SelfTest
             {
                 if (!string.IsNullOrEmpty(d) && Directory.Exists(d)) found++;
             }
-            return new("Shortcut roots", SelfTestStatus.Ok, $"{found}/3 roots accessible");
+            return found > 0
+                ? new("Shortcut roots", SelfTestStatus.Ok, $"{found}/3 roots accessible")
+                : new("Shortcut roots", SelfTestStatus.Warn, "0/3 roots accessible",
+                    Hint: "Run under a normal user profile with Desktop and Start Menu folders available.");
         }
-        catch (Exception ex) { return new("Shortcut roots", SelfTestStatus.Fail, ex.Message); }
+        catch (Exception ex)
+        {
+            return new("Shortcut roots", SelfTestStatus.Fail, ex.Message,
+                Hint: "Check profile shell-folder permissions and rerun under the affected user account.");
+        }
     }
 
     private static SelfTestResult CheckWinget()
@@ -173,7 +203,8 @@ public static class SelfTest
     {
         return ProbeExe("schtasks.exe", "/?")
             ? new("schtasks", SelfTestStatus.Ok,   "Available")
-            : new("schtasks", SelfTestStatus.Fail, "schtasks.exe missing — schedule feature broken");
+            : new("schtasks", SelfTestStatus.Fail, "schtasks.exe missing — schedule feature broken",
+                Hint: "Restore %SystemRoot%\\System32\\schtasks.exe and verify the Task Scheduler service is enabled.");
     }
 
     private static SelfTestResult CheckDriverStoreRepo()
@@ -193,7 +224,7 @@ public static class SelfTest
         return File.Exists(path)
             ? new("winapp2.ini", SelfTestStatus.Ok,   $"{new FileInfo(path).Length / 1024} KB cached")
             : new("winapp2.ini", SelfTestStatus.Warn, "Not downloaded yet",
-                  Hint: "Open the Community Cleaners panel, or run 'deeppurgecli winapp2' once to populate the cache.");
+                  Hint: $"Open the Community Cleaners panel, or place winapp2.ini in {DataPaths.Cleaners}.");
     }
 
     private static SelfTestResult CheckSnapshotDir()
@@ -205,7 +236,11 @@ public static class SelfTest
                 : 0;
             return new("Snapshots dir", SelfTestStatus.Ok, $"{count} snapshots in {DataPaths.Snapshots}");
         }
-        catch (Exception ex) { return new("Snapshots dir", SelfTestStatus.Fail, ex.Message); }
+        catch (Exception ex)
+        {
+            return new("Snapshots dir", SelfTestStatus.Fail, ex.Message,
+                Hint: "Create the Snapshots folder and grant write permission, or enable portable mode from a writable folder.");
+        }
     }
 
     private static bool ProbeExe(string file, string args)
