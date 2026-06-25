@@ -141,13 +141,6 @@ Blocked items live in `Roadmap_Blocked.md`.
   Acceptance: `dotnet publish -r win-arm64` produces a working single-file exe. CI publishes both `win-x64` and `win-arm64` artifacts. GitHub Release includes both.
   Complexity: M
 
-- [ ] P1 — **Version-aware shared-path protection in leftover scanner**
-  Why: Uninstalling one version of multi-version software (e.g., Blender 4.4) can destroy shared settings used by another version (Blender 4.2). The leftover scanner doesn't distinguish version-specific from shared paths.
-  Evidence: BCU #758 (Blender settings data loss). Uninstalr's relevance-filtering avoids this by attributing files to specific installs.
-  Touches: `Core/FileSystem/FileLeftoverScanner.cs`, `Core/Registry/RegistryLeftoverScanner.cs`, `Core/Data/LeftoverSignatureDb.cs`
-  Acceptance: Before flagging a leftover path, the scanner checks if any other installed program shares the same parent directory (via `InstalledProgramScanner`). Shared paths are downgraded from Safe to Risky confidence. Test case: two versions of same app installed, uninstall one, verify shared paths are not flagged as Safe.
-  Complexity: M
-
 - [ ] P1 — **Restart Manager locked-file detection**
   Why: Uninstallers frequently fail because files are locked by running processes. The Windows Restart Manager API (`rstrtmgr.dll`) can identify which processes hold locks and optionally gracefully shut them down.
   Evidence: BCU #129 (delete locked files on reboot). Restart Manager API docs (`RmStartSession`, `RmRegisterResources`, `RmGetList`).

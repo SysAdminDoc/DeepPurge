@@ -22,6 +22,7 @@ public class FileLeftoverScanner
     private string _installPath = "";
     // Other installed programs' folders — used for cross-reference exclusion
     private HashSet<string> _otherProgramFolders = new(StringComparer.OrdinalIgnoreCase);
+    private HashSet<string> _sharedParentDirs = new(StringComparer.OrdinalIgnoreCase);
 
     private static readonly HashSet<string> SystemProtectedFolders = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -210,24 +211,34 @@ public class FileLeftoverScanner
     private void BuildCrossReference(InstalledProgram targetProgram)
     {
         _otherProgramFolders.Clear();
+        _sharedParentDirs.Clear();
         try
         {
             var allPrograms = Registry.InstalledProgramScanner.GetAllInstalledPrograms();
+            var targetInstallParent = !string.IsNullOrEmpty(targetProgram.InstallLocation)
+                ? Path.GetDirectoryName(targetProgram.InstallLocation.TrimEnd('\\'))
+                : null;
+
             foreach (var prog in allPrograms)
             {
-                // Skip the target program itself
                 if (prog.RegistryPath == targetProgram.RegistryPath) continue;
                 if (prog.DisplayName == targetProgram.DisplayName) continue;
 
-                // Add the display name as a known "other program" folder name
                 if (!string.IsNullOrEmpty(prog.DisplayName))
                     _otherProgramFolders.Add(prog.DisplayName);
 
-                // Add the install folder name
                 if (!string.IsNullOrEmpty(prog.InstallLocation))
                 {
                     var folder = Path.GetFileName(prog.InstallLocation.TrimEnd('\\'));
                     if (!string.IsNullOrEmpty(folder)) _otherProgramFolders.Add(folder);
+
+                    var otherParent = Path.GetDirectoryName(prog.InstallLocation.TrimEnd('\\'));
+                    if (!string.IsNullOrEmpty(targetInstallParent) &&
+                        !string.IsNullOrEmpty(otherParent) &&
+                        otherParent.Equals(targetInstallParent, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _sharedParentDirs.Add(otherParent);
+                    }
                 }
             }
         }
@@ -260,6 +271,17 @@ public class FileLeftoverScanner
         if (!string.IsNullOrEmpty(_installPath) &&
             fullPath.StartsWith(_installPath, StringComparison.OrdinalIgnoreCase))
             return LeftoverConfidence.Safe;
+
+        // RULE 5: If this path's parent directory is shared with another installed
+        // program (e.g., Blender 4.2 and 4.4 both under "Blender Foundation"),
+        // downgrade to Risky to prevent deleting shared settings.
+        if (_sharedParentDirs.Count > 0)
+        {
+            var parentDir = Path.GetDirectoryName(fullPath);
+            if (!string.IsNullOrEmpty(parentDir) &&
+                _sharedParentDirs.Any(shared => parentDir.StartsWith(shared, StringComparison.OrdinalIgnoreCase)))
+                return LeftoverConfidence.Risky;
+        }
 
         // RULE 1: Primary term match (high confidence)
         if (_primaryTerms.Any(term => name.Equals(term, StringComparison.OrdinalIgnoreCase)))
