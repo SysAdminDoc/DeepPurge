@@ -30,8 +30,16 @@ public partial class MainWindow : Window
         _vm = new MainViewModel();
         DataContext = _vm;
 
-        foreach (var name in ThemeManager.ThemeNames) cmbTheme.Items.Add(name);
-        cmbTheme.SelectedIndex = ThemeManager.CurrentThemeIndex;
+        try
+        {
+            foreach (var name in ThemeManager.ThemeNames) cmbTheme.Items.Add(name);
+            cmbTheme.SelectedIndex = ThemeManager.CurrentThemeIndex;
+        }
+        catch
+        {
+            cmbTheme.Items.Add("Default");
+            cmbTheme.SelectedIndex = 0;
+        }
 
         Loaded += OnWindowLoaded;
     }

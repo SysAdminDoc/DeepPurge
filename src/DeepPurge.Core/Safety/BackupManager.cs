@@ -7,7 +7,7 @@ namespace DeepPurge.Core.Safety;
 
 public class BackupManager
 {
-    private static readonly string BackupRoot = DataPaths.Backups;
+    private static string BackupRoot => DataPaths.Backups;
 
     // Allow the subset of chars Windows registry keys actually permit in paths.
     // Anything else is rejected rather than sanitized — if we saw a weird key,

@@ -27,8 +27,10 @@ public static class ThemeManager
         new("High Contrast",    "HighContrast.xaml",    "HighContrast"),
     };
 
-    // Routed through DataPaths — picks up portable-mode redirection automatically.
-    private static readonly string SettingsFile = DataPaths.ThemeFile;
+    // Deferred — must NOT eagerly evaluate DataPaths during class load. A
+    // TypeInitializationException from the DataPaths/UserIdentity P/Invoke
+    // chain would permanently break this class and prevent the app from starting.
+    private static string SettingsFile => DataPaths.ThemeFile;
 
     private static int _currentIndex;
     private static int _lastDarkIndex;

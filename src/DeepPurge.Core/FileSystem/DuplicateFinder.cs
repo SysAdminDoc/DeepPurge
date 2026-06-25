@@ -37,7 +37,7 @@ public class DuplicateFinder
 {
     private const int FirstChunkBytes = 1 * 1024 * 1024;
     private const long MinFileBytes   = 4 * 1024;
-    private static readonly string CachePath = Path.Combine(DataPaths.Root, "hash-cache.json");
+    private static string CachePath => Path.Combine(DataPaths.Root, "hash-cache.json");
     private ConcurrentDictionary<string, HashCacheEntry> _cache = new(StringComparer.OrdinalIgnoreCase);
 
     public async Task<List<DuplicateGroup>> FindAsync(
