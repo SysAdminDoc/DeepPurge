@@ -96,12 +96,6 @@ Blocked items live in `Roadmap_Blocked.md`.
   Acceptance: Steam (libraryfolders.vdf), Epic (LauncherInstalled.dat), GOG (Galaxy DB) apps appear in the unified programs list with platform badges.
   Complexity: M
 
-- [ ] P3 — **Expert/safe mode toggle**
-  Why: BleachBit's expert mode hides dangerous operations from novice users. Reduces support burden and builds trust.
-  Evidence: BleachBit 6.0 expert mode; FluentCleaner's anti-bloat philosophy.
-  Touches: `App/ViewModels/MainViewModel.cs`, `App/Views/MainWindow.xaml`, `Core/App/DataPaths.cs` (persist setting)
-  Acceptance: Default mode hides: secure delete toggle, advanced leftover scan, registry hunter, service deletion. Expert mode (toggle in settings) reveals all.
-  Complexity: S
 
 - [ ] P3 — **Junk growth history tracker**
   Why: Show users the trend of junk accumulation over time. Compelling retention feature.
