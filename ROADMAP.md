@@ -19,19 +19,6 @@ Blocked items live in `Roadmap_Blocked.md`.
 
 ### P2 — Quality, reliability, developer experience
 
-- [ ] P2 — **Mutation testing on safety-critical code**
-  Why: 116 tests for ~14k LOC is thin. SafetyGuard and deletion logic are safety-critical — need verification that tests actually catch regressions.
-  Evidence: Stryker.NET 4.14.2; mutation testing best practice for safety-critical paths.
-  Touches: `tests/`, `.github/workflows/build.yml`
-  Acceptance: Stryker runs in CI on `SafetyGuard.cs`, `SecureDelete.cs`, `UninstallEngine.cs`. Mutation score >80% on these files.
-  Complexity: S
-
-- [ ] P2 — **Snapshot testing for ViewModels and exports**
-  Why: ViewModel state shapes and export formats should be regression-tested without hand-writing assertions.
-  Evidence: Verify.Xunit 31.12.5; snapshot testing pattern.
-  Touches: `tests/`, new snapshot `.verified.txt` files
-  Acceptance: Verify tests for MainViewModel state transitions, GridExporter CSV/JSON output, ProgramExporter formats. Snapshot diffs caught in CI.
-  Complexity: S
 
 
 - [ ] P2 — **winget COM API migration**
