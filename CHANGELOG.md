@@ -4,6 +4,9 @@ All notable changes to DeepPurge will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **Target .NET 10 LTS** — All 4 projects migrated from `net8.0-windows10.0.17763.0` to `net10.0-windows10.0.17763.0`. .NET 10 is LTS through Nov 2028 (.NET 8 EOL was Nov 2026). CommunityToolkit.Mvvm upgraded from 8.2.2 to 8.4.2 (adds partial property support). CI workflows updated to .NET 10 SDK. Fixed SYSLIB0057: X509Certificate2 constructor replaced with X509CertificateLoader.
+
 ### Security
 - **DLL search order hardening** — `SetDllDirectory("")` called in static constructor before any other code, removing the current directory from the DLL search path. Mitigates BleachBit-class CVE-2025-32780 DLL hijack attacks against elevated system utilities. `IncludeNativeLibrariesForSelfExtract` enabled in csproj.
 - **Scheduled-task creation hardening (CVE-2025-33067)** — Tasks now run as the current interactive user instead of SYSTEM, mitigating the Batch Logon privilege escalation vector.

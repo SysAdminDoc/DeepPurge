@@ -111,7 +111,7 @@ public static class DigitalSignatureInspector
     {
         try
         {
-            using var cert = new System.Security.Cryptography.X509Certificates.X509Certificate2(filePath);
+            using var cert = System.Security.Cryptography.X509Certificates.X509CertificateLoader.LoadCertificateFromFile(filePath);
             var subject = cert.Subject;
             // "CN=Microsoft Corporation, O=Microsoft Corporation, ..." → "Microsoft Corporation"
             var cnIdx = subject.IndexOf("CN=", StringComparison.OrdinalIgnoreCase);
