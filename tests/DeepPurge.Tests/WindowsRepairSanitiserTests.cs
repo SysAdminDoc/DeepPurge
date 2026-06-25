@@ -46,6 +46,7 @@ public class WindowsRepairSanitiserTests
     [InlineData("..\\..\\evil",         "....evil")]  // '.' is valid in IDs; traversal slashes stripped, harmless
     [InlineData("`rm -rf`",             "rm-rf")]
     [InlineData("\"Microsoft.Foo\"",    "Microsoft.Foo")]
+    [InlineData("Microsoft.Foo\r\nStart-Process calc", "Microsoft.FooStart-Processcalc")]
     public void Winget_id_strips_shell_metacharacters(string input, string expected)
     {
         Assert.Equal(expected, SanitizeToken(input));
@@ -88,6 +89,7 @@ public class WindowsRepairSanitiserTests
 
     [Theory]
     [InlineData("{not-a-guid}")]
+    [InlineData("00000000-0000-0000-0000-000000000000")]
     [InlineData("")]
     [InlineData("& del /q *")]
     [InlineData("{000-000-000-000-000}")]
