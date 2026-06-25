@@ -33,12 +33,6 @@ Blocked items live in `Roadmap_Blocked.md`.
   Acceptance: Verify tests for MainViewModel state transitions, GridExporter CSV/JSON output, ProgramExporter formats. Snapshot diffs caught in CI.
   Complexity: S
 
-- [ ] P2 — **System Slimming module**
-  Why: Wise's unique curated checklist of removable Windows components (wallpapers, sample media, IME packs, help files) with per-item sizes.
-  Evidence: Wise Program Uninstaller feature; Sophia-Script implements similar tweaks.
-  Touches: New `Core/Cleaning/SystemSlimmer.cs`, `App/ViewModels/MainViewModel.Extensions.cs`, `App/Views/MainWindow.xaml`
-  Acceptance: New sidebar panel with checkboxes for ~15 removable Windows components. Each shows current size. Delete through SafetyGuard with dry-run support.
-  Complexity: S
 
 - [ ] P2 — **winget COM API migration**
   Why: `winget list --output json` is not a supported CLI option. The `Microsoft.Management.Deployment` COM API is the official programmatic interface.
@@ -70,13 +64,6 @@ Blocked items live in `Roadmap_Blocked.md`.
   Acceptance: Steam (libraryfolders.vdf), Epic (LauncherInstalled.dat), GOG (Galaxy DB) apps appear in the unified programs list with platform badges.
   Complexity: M
 
-
-- [ ] P3 — **Junk growth history tracker**
-  Why: Show users the trend of junk accumulation over time. Compelling retention feature.
-  Evidence: FluentCleaner innovation — historical log of clean runs with bytes freed per date.
-  Touches: `Core/Diagnostics/ActivityLog.cs` (already records operations), new chart panel in `App/Views/MainWindow.xaml`
-  Acceptance: History panel shows a bar/line chart of bytes freed per clean run over time, sourced from ActivityLog JSONL data.
-  Complexity: S
 
 
 ## Research-Driven Additions (June 2026)

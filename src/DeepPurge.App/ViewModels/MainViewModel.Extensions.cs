@@ -469,6 +469,8 @@ public partial class MainViewModel
     //  ACTIVITY HISTORY
     // ═══════════════════════════════════════════════════════
     public ObservableCollection<ActivityEntry> HistoryEntries { get; } = new();
+    public ObservableCollection<ActivityLog.DailyCleanSummary> CleanHistory { get; } = new();
+    [ObservableProperty] private string _cleanHistorySummary = "";
 
     [RelayCommand]
     private void LoadHistory()
@@ -476,14 +478,82 @@ public partial class MainViewModel
         try
         {
             var entries = ActivityLog.LoadRecent(200);
+            var daily = ActivityLog.GetCleanHistory(90);
             _dispatcher.Invoke(() =>
             {
                 HistoryEntries.Clear();
                 foreach (var e in entries) HistoryEntries.Add(e);
+
+                CleanHistory.Clear();
+                foreach (var d in daily) CleanHistory.Add(d);
+
+                var totalFreed = daily.Sum(d => d.TotalBytesFreed);
+                var totalRuns = daily.Sum(d => d.RunCount);
+                CleanHistorySummary = totalRuns > 0
+                    ? $"{totalRuns} cleanup runs over {daily.Count} days — {FormatBytes(totalFreed)} total freed"
+                    : "No cleanup history yet";
+
                 StatusText = $"{entries.Count} history entries loaded";
             });
         }
         catch (Exception ex) { Log.Error("LoadHistory", ex); }
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        if (bytes <= 0) return "0 B";
+        double kb = bytes / 1024.0;
+        if (kb < 1024) return $"{kb:F0} KB";
+        double mb = kb / 1024.0;
+        return mb < 1024 ? $"{mb:F1} MB" : $"{mb / 1024.0:F2} GB";
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  SYSTEM SLIMMING
+    // ═══════════════════════════════════════════════════════
+    public ObservableCollection<SlimmableComponent> SlimmableComponents { get; } = new();
+    [ObservableProperty] private string _slimSummary = "";
+
+    [RelayCommand]
+    private async Task ScanSlimmableAsync()
+    {
+        IsBusy = true;
+        StatusText = "Scanning removable Windows components...";
+        try
+        {
+            var items = await Task.Run(() => SystemSlimmer.Scan());
+            _dispatcher.Invoke(() =>
+            {
+                SlimmableComponents.Clear();
+                foreach (var c in items) SlimmableComponents.Add(c);
+                var totalSize = items.Sum(c => c.SizeBytes);
+                SlimSummary = $"{items.Count} components found — {FormatBytes(totalSize)} total";
+                StatusText = SlimSummary;
+            });
+        }
+        catch (Exception ex) { StatusText = $"Slim scan failed: {ex.Message}"; Log.Error("ScanSlimmable", ex); }
+        finally { IsBusy = false; }
+    }
+
+    [RelayCommand]
+    private async Task RunSlimAsync()
+    {
+        IsBusy = true;
+        StatusText = "Removing selected Windows components...";
+        try
+        {
+            var selected = SlimmableComponents.Where(c => c.IsSelected).ToList();
+            var opts = new DeleteOptions(DryRun: DryRunEnabled, SecureDelete: false, UseRecycleBin: false);
+            var progress = new Progress<DeleteProgress>(p =>
+                _dispatcher.BeginInvoke(() => StatusText = $"Slimming: {p.CurrentItem} ({p.ItemsProcessed}/{p.ItemsTotal})"));
+            var result = await Task.Run(() => SystemSlimmer.Delete(selected, opts, progress));
+            StatusText = opts.DryRun
+                ? $"Dry-run: would free {FormatBytes(result.BytesFreed)} from {result.ItemsDeleted} components"
+                : $"Freed {FormatBytes(result.BytesFreed)} from {result.ItemsDeleted} components";
+            await ScanSlimmableAsync();
+        }
+        catch (Exception ex) { StatusText = $"Slim failed: {ex.Message}"; Log.Error("RunSlim", ex); }
+        finally { IsBusy = false; }
     }
 
     // ═══════════════════════════════════════════════════════
