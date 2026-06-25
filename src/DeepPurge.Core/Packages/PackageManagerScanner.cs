@@ -34,10 +34,12 @@ public static class PackageManagerScanner
                 StringComparer.OrdinalIgnoreCase);
             return PortableAppScanner.Scan(known);
         }, ct);
+        var gamesTask = Task.Run(() => GamePlatformScanner.ScanAll(), ct);
 
         var winget = await wingetTask.ConfigureAwait(false);
         var scoop  = await scoopTask.ConfigureAwait(false);
         var portables = await portableTask.ConfigureAwait(false);
+        var games = await gamesTask.ConfigureAwait(false);
 
         var lookup = BuildNameLookup(programs);
 
@@ -74,6 +76,7 @@ public static class PackageManagerScanner
         }
 
         PortableAppScanner.InjectIntoPrograms(programs, portables);
+        GamePlatformScanner.InjectIntoPrograms(programs, games);
     }
 
     // ═══════════════════════════════════════════════════════

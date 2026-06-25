@@ -57,13 +57,6 @@ Blocked items live in `Roadmap_Blocked.md`.
   Acceptance: JSON cleaner files in DataPaths.Cleaners are parsed alongside winapp2.ini. Format supports detect/file/registry rules. Ships with 5 example cleaners.
   Complexity: L
 
-- [ ] P3 — **Game platform detection (Steam/Epic/GOG)**
-  Why: Game installations don't follow standard registry patterns. Steam, Epic, GOG use their own manifests.
-  Evidence: BCU issue #912 (Epic Games uninstall); BCU's factory pattern for Steam/Scoop/Chocolatey discovery.
-  Touches: `Core/Packages/PackageManagerScanner.cs` or new `Core/Packages/GamePlatformScanner.cs`
-  Acceptance: Steam (libraryfolders.vdf), Epic (LauncherInstalled.dat), GOG (Galaxy DB) apps appear in the unified programs list with platform badges.
-  Complexity: M
-
 
 
 ## Research-Driven Additions (June 2026)
@@ -75,13 +68,6 @@ Blocked items live in `Roadmap_Blocked.md`.
   Evidence: `grep 'x:Static.*Resources\.' Views/` → 0 matches. `grep 'Properties\.Resources\.' App/` → 0 matches.
   Touches: `App/Views/MainWindow.xaml` (replace ~100 hardcoded string literals with `{x:Static}` bindings), `App/Views/MainWindow.xaml.cs` (programmatic strings), `App/Properties/Resources.resx` (expand from 20 to ~150 strings)
   Acceptance: All user-visible strings in XAML and code-behind reference `Resources.Designer.cs`. Adding a `Resources.de.resx` file produces a German UI.
-  Complexity: M
-
-- [ ] P1 — **ARM64 build target**
-  Why: Windows on ARM is growing (Surface Pro, Snapdragon X Elite/Plus, Qualcomm Oryon). DeepPurge only publishes `win-x64`. P/Invoke-heavy code (MFT structs, USN journal, COM IShellLinkW) needs ARM64 validation.
-  Evidence: BCU issue #841 (ARM64 request). No `win-arm64` in any csproj or workflow.
-  Touches: All 4 `.csproj` files, `.github/workflows/build.yml`, `.github/workflows/release.yml`, `BUILD.bat`, `Build.ps1`. P/Invoke struct validation in `FastDiskAnalyzer.cs`, `UsnJournalReader.cs`, `ShortcutRepairScanner.cs`.
-  Acceptance: `dotnet publish -r win-arm64` produces a working single-file exe. CI publishes both `win-x64` and `win-arm64` artifacts. GitHub Release includes both.
   Complexity: M
 
 
