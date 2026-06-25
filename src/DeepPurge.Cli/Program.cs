@@ -6,6 +6,7 @@ using DpDiag = DeepPurge.Core.Diagnostics;
 
 using DeepPurge.Core.App;
 using DeepPurge.Core.Cleaning;
+using DeepPurge.Core.Data;
 using DeepPurge.Core.Export;
 using DeepPurge.Core.Diagnostics;
 using DeepPurge.Core.Drivers;
@@ -516,6 +517,29 @@ if ($app) {{
         Console.WriteLine();
         Console.WriteLine($"# Total: {total} orphaned artifacts ({services.Count} services, " +
                          $"{tasks.Count} tasks, {firewall.Count} firewall, {paths.Count} PATH)");
+
+        if (a.HasFlag("remnants"))
+        {
+            Console.WriteLine();
+            Console.WriteLine("Scanning for remnants of uninstalled programs (signature DB)...");
+            var installed = new HashSet<string>(
+                InstalledProgramScanner.GetAllInstalledPrograms().Select(p => p.DisplayName),
+                StringComparer.OrdinalIgnoreCase);
+            var orphanResults = LeftoverSignatureDb.ScanForOrphans(installed);
+
+            Console.WriteLine($"\n=== Program Remnants ({orphanResults.Count}) ===");
+            foreach (var r in orphanResults)
+            {
+                Console.Write($"  {r.ProgramName,-35}");
+                if (r.Match.FilePaths.Count > 0) Console.Write($" files:{r.Match.FilePaths.Count}");
+                if (r.Match.RegistryPaths.Count > 0) Console.Write($" reg:{r.Match.RegistryPaths.Count}");
+                Console.WriteLine();
+                foreach (var f in r.Match.FilePaths) Console.WriteLine($"    F  {f}");
+                foreach (var reg in r.Match.RegistryPaths) Console.WriteLine($"    R  {reg}");
+            }
+            total += orphanResults.Count;
+        }
+
         return 0;
     }
 
