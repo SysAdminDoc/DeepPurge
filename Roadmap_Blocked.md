@@ -46,6 +46,29 @@ development passes.
       Windows; CIM migration adds complexity without clear benefit. Revisit if
       the project ever targets cross-platform.
 
+- [ ] **Wire .resx localization into XAML and code-behind**
+      Blocked: requires editing ~100 hardcoded strings in MainWindow.xaml
+      (1616 lines) with `{x:Static}` bindings, expanding Resources.resx from
+      20 to ~150 strings. Needs visual verification that no binding breaks
+      the UI. The infrastructure is ready (Resources.resx, Resources.Designer.cs).
+
+- [ ] **ViewModel decomposition — extract per-panel ViewModels**
+      Blocked: MainViewModel (1666 lines across 2 partials) needs splitting
+      into ~10 per-panel VMs. Requires updating all XAML DataContext bindings
+      and MainWindow.xaml.cs panel switching. Risk of breaking bindings
+      without visual testing. AppSettings infrastructure is ready.
+
+- [ ] **CsWin32 type-safe PInvoke**
+      Blocked: touches the most sensitive P/Invoke code (FastDiskAnalyzer MFT
+      structs, UsnJournalReader, ShortcutRepairScanner COM). Struct alignment
+      bugs could cause data corruption or crashes. Needs a dedicated session
+      with thorough per-API testing. CsWin32 0.3.298 is ready.
+
+- [ ] **winget COM API migration**
+      Blocked: `Microsoft.Management.Deployment` COM requires specific registration
+      that doesn't work reliably from non-MSIX/unpackaged apps. Current CLI parsing
+      approach works. Revisit when winget ships official NuGet interop.
+
 - [ ] **Hunter Mode (drag-to-identify)**
       Blocked: requires new WPF overlay window with Win32 `WindowFromPoint` +
       `GetWindowThreadProcessId` interop and visual/interactive testing.

@@ -8,51 +8,17 @@ Blocked items live in `Roadmap_Blocked.md`.
 ### P1 — High value, competitive differentiation
 
 
-- [ ] P1 — **CsWin32 type-safe PInvoke**
-  Why: Hand-rolled PInvoke in FastDiskAnalyzer (MFT structs), UsnJournalReader, SecureDelete, ShortcutRepairScanner, UninstallEngine risks struct alignment bugs. CsWin32 generates correct marshaling from official SDK metadata.
-  Evidence: Microsoft.Windows.CsWin32 0.3.296; CsWin32 GitHub; hand-rolled `USN_RECORD_V2` with `Pack=1` in FastDiskAnalyzer.
-  Touches: `Core/FileSystem/FastDiskAnalyzer.cs`, `Core/InstallMonitor/UsnJournalReader.cs`, `Core/Safety/SecureDelete.cs`, `Core/Shortcuts/ShortcutRepairScanner.cs`, `Core/Uninstall/UninstallEngine.cs`, new `NativeMethods.txt`
-  Acceptance: All `[DllImport]` declarations replaced by CsWin32-generated equivalents. NativeMethods.txt lists each API. Build clean with no hand-rolled structs.
-  Complexity: L
-
 
 
 ### P2 — Quality, reliability, developer experience
 
 
 
-- [ ] P2 — **winget COM API migration**
-  Why: `winget list --output json` is not a supported CLI option. The `Microsoft.Management.Deployment` COM API is the official programmatic interface.
-  Evidence: microsoft/winget-cli#4965 (feature request still open); winget export uses schema 2.0 JSON.
-  Touches: `Core/Packages/PackageManagerScanner.cs`
-  Acceptance: Use `winget export` for JSON package list or COM API for real-time queries. Remove `ParseWingetTable` fallback.
-  Complexity: M
 
 ### P3 — Polish, differentiation
 
 
 
-
-## Research-Driven Additions (June 2026)
-
-### P1 — High value, competitive parity
-
-- [ ] P1 — **Wire .resx localization into XAML and code-behind**
-  Why: `Properties/Resources.resx` has 20 UI strings with `Resources.Designer.cs` accessor but zero references in XAML or C#. The CHANGELOG claims "Ready for Crowdin submission" but strings aren't consumed. Localization is dead infrastructure.
-  Evidence: `grep 'x:Static.*Resources\.' Views/` → 0 matches. `grep 'Properties\.Resources\.' App/` → 0 matches.
-  Touches: `App/Views/MainWindow.xaml` (replace ~100 hardcoded string literals with `{x:Static}` bindings), `App/Views/MainWindow.xaml.cs` (programmatic strings), `App/Properties/Resources.resx` (expand from 20 to ~150 strings)
-  Acceptance: All user-visible strings in XAML and code-behind reference `Resources.Designer.cs`. Adding a `Resources.de.resx` file produces a German UI.
-  Complexity: M
-
-
-### P2 — Quality, reliability, developer experience
-
-- [ ] P2 — **ViewModel decomposition — extract per-panel ViewModels**
-  Why: MainViewModel is 1,666 lines across 2 partials with 15+ feature areas. Cognitive load, merge conflicts, and testability all suffer. MainWindow code-behind is 1,044 lines with similar monolith issues.
-  Evidence: `wc -l MainViewModel.cs MainViewModel.Extensions.cs` → 1,060 + 606.
-  Touches: `App/ViewModels/MainViewModel.cs`, `App/ViewModels/MainViewModel.Extensions.cs`, new per-panel VM files (DriverPanelViewModel, DuplicatePanelViewModel, etc.), `App/Views/MainWindow.xaml.cs`
-  Acceptance: MainViewModel composes per-panel VMs. Each panel VM is independently testable. MainViewModel drops below 400 lines.
-  Complexity: L
 
 
 
