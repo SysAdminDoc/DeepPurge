@@ -27,9 +27,17 @@ public static class PackageManagerScanner
     {
         var wingetTask = Task.Run(() => QueryWinget(ct), ct);
         var scoopTask  = Task.Run(() => QueryScoop(ct), ct);
+        var portableTask = Task.Run(() =>
+        {
+            var known = new HashSet<string>(
+                programs.Select(p => p.DisplayName),
+                StringComparer.OrdinalIgnoreCase);
+            return PortableAppScanner.Scan(known);
+        }, ct);
 
         var winget = await wingetTask.ConfigureAwait(false);
         var scoop  = await scoopTask.ConfigureAwait(false);
+        var portables = await portableTask.ConfigureAwait(false);
 
         var lookup = BuildNameLookup(programs);
 
@@ -47,9 +55,6 @@ public static class PackageManagerScanner
             }
         }
 
-        // Scoop apps typically don't register with Windows Installer, so they'd
-        // otherwise be invisible. Add them as synthetic entries only when they
-        // don't overlap with an existing program.
         foreach (var s in scoop)
         {
             var norm = Normalize(s.Name);
@@ -62,11 +67,13 @@ public static class PackageManagerScanner
                 Publisher = $"scoop / {s.Bucket}",
                 PackageManager = "scoop",
                 PackageId = s.Name,
-                Source = RegistrySource.HKCU_Uninstall, // best fit; scoop is always user-scope
+                Source = RegistrySource.HKCU_Uninstall,
             };
             programs.Add(synthetic);
             lookup[norm] = synthetic;
         }
+
+        PortableAppScanner.InjectIntoPrograms(programs, portables);
     }
 
     // ═══════════════════════════════════════════════════════

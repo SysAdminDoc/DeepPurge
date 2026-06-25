@@ -42,12 +42,6 @@ Blocked items live in `Roadmap_Blocked.md`.
   Acceptance: 200+ profiles. Matching algorithm enhanced to handle publisher-based grouping. Duplicate Spotify entry removed.
   Complexity: M
 
-- [ ] P1 — **Portable app detection**
-  Why: Only Uninstalr detects portable apps. All 8 other tested tools scored 0. Significant unmet demand.
-  Evidence: Uninstalr 2026 benchmark — portable app detection section; BCU's folder scan concept.
-  Touches: New `Core/Packages/PortableAppScanner.cs`, `Core/Packages/PackageManagerScanner.cs`
-  Acceptance: Scan common portable locations for executables without matching registry entries. Show as "Portable" source in program list.
-  Complexity: M
 
 ### P2 — Quality, reliability, developer experience
 
