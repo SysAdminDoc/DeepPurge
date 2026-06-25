@@ -4,6 +4,9 @@ All notable changes to DeepPurge will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- **Dynamic path resolution in SafetyGuard and all cleaners** — Replaced 71 hardcoded `C:\` paths across 8 files (SafetyGuard, JunkFilesCleaner, FileLeftoverScanner, EvidenceRemover, InstallSnapshotEngine, ServiceScanner, FirewallRuleScanner, PathCleaner) with `Environment.GetFolderPath()` and `Environment.SystemDirectory`. Systems with Windows installed on a non-C: drive now have full safety protection and cleaner coverage. Two new test cases validate the dynamic resolution.
+
 ### Added
 - **Install Monitor 2.0** — USN journal-based filesystem change tracking (`UsnJournalReader`) replaces the before/after snapshot walk. Catches every NTFS file create/modify/rename/delete during an installer run. Falls back to legacy snapshot diff on non-NTFS or when the journal is unavailable. CLI: `--legacy` flag forces the old path.
 - **Install Monitor UI** — "Track This Installer" panel in the SYSTEM TOOLS section with program name, installer path, browse button, and trace workflow. Results display inline with upgrade-aware delta.

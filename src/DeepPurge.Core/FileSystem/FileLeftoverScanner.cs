@@ -5,6 +5,12 @@ namespace DeepPurge.Core.FileSystem;
 
 public class FileLeftoverScanner
 {
+    private static readonly string WinDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+    private static readonly string ProgramFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+    private static readonly string ProgramFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+    private static readonly string ProgramData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+    private static readonly string SystemDrive = Path.GetPathRoot(WinDir)?.TrimEnd('\\') ?? @"C:";
+
     private readonly HashSet<string> _excludedFolders;
 
     // Primary terms: high-confidence, match these directly (full name, folder name, exe name)
@@ -18,9 +24,9 @@ public class FileLeftoverScanner
 
     private static readonly HashSet<string> SystemProtectedFolders = new(StringComparer.OrdinalIgnoreCase)
     {
-        @"C:\Windows", @"C:\Windows\System32", @"C:\Windows\SysWOW64",
-        @"C:\Program Files\Common Files", @"C:\Program Files (x86)\Common Files",
-        @"C:\ProgramData\Microsoft", @"C:\Users\Default",
+        WinDir, Environment.SystemDirectory, Path.Combine(WinDir, "SysWOW64"),
+        Path.Combine(ProgramFiles, "Common Files"), Path.Combine(ProgramFilesX86, "Common Files"),
+        Path.Combine(ProgramData, "Microsoft"), Path.Combine(SystemDrive, "Users", "Default"),
     };
 
     private static readonly HashSet<string> SharedFolderNames = new(StringComparer.OrdinalIgnoreCase)
@@ -367,7 +373,7 @@ public class FileLeftoverScanner
         var tempPaths = new[]
         {
             Path.GetTempPath(),
-            @"C:\Windows\Temp",
+            Path.Combine(WinDir, "Temp"),
         };
 
         foreach (var tempPath in tempPaths)
@@ -499,7 +505,7 @@ public class FileLeftoverScanner
 
     private void ScanPrefetch(InstalledProgram program, List<LeftoverItem> leftovers)
     {
-        var prefetchPath = @"C:\Windows\Prefetch";
+        var prefetchPath = Path.Combine(WinDir, "Prefetch");
         if (!Directory.Exists(prefetchPath)) return;
 
         try
@@ -543,7 +549,7 @@ public class FileLeftoverScanner
 
     private void ScanAllUserProfiles(List<LeftoverItem> leftovers)
     {
-        var usersDir = @"C:\Users";
+        var usersDir = Path.Combine(SystemDrive, "Users");
         if (!Directory.Exists(usersDir)) return;
 
         try

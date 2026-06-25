@@ -52,9 +52,9 @@ public class InstallSnapshotEngine
 
     private static readonly string[] FsRoots =
     {
-        @"C:\Program Files",
-        @"C:\Program Files (x86)",
-        @"C:\ProgramData",
+        Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+        Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
     };
 
     private static readonly (string Hive, string Sub)[] RegRoots =

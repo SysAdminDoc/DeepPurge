@@ -137,8 +137,7 @@ public static class PathCleaner
 
         // Never flag system directories as orphaned.
         var lower = path.ToLowerInvariant();
-        if (lower.StartsWith(SystemRoot.ToLowerInvariant()) ||
-            lower.StartsWith(@"c:\windows", StringComparison.Ordinal))
+        if (lower.StartsWith(SystemRoot.ToLowerInvariant()))
             return false;
 
         // Only flag fully-qualified paths.

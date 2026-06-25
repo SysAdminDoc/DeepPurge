@@ -51,6 +51,9 @@ public static class JunkFilesCleaner
     private static readonly TimeSpan RecentThreshold = TimeSpan.FromHours(1);
     private static readonly TimeSpan LogAge = TimeSpan.FromDays(7);
     private static readonly TimeSpan PrefetchAge = TimeSpan.FromDays(30);
+    private static readonly string WinDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+    private static readonly string ProgramData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+    private static readonly string SystemDrive = Path.GetPathRoot(WinDir)?.TrimEnd('\\') ?? @"C:";
 
     public static List<JunkCategory> ScanForJunk()
     {
@@ -158,8 +161,9 @@ public static class JunkFilesCleaner
     // ─── SYSTEM TEMP ───
     private static JunkCategory ScanSystemTemp()
     {
-        var cat = new JunkCategory { Name = "System Temp Files", Description = @"C:\Windows\Temp" };
-        ScanTempDir(cat, @"C:\Windows\Temp");
+        var winTemp = Path.Combine(WinDir, "Temp");
+        var cat = new JunkCategory { Name = "System Temp Files", Description = winTemp };
+        ScanTempDir(cat, winTemp);
         return cat;
     }
 
@@ -292,7 +296,7 @@ public static class JunkFilesCleaner
             Description = "Downloaded update packages",
             IsSelected = false,
         };
-        AddDirIfExists(cat, @"C:\Windows\SoftwareDistribution\Download");
+        AddDirIfExists(cat, Path.Combine(WinDir, "SoftwareDistribution", "Download"));
         return cat;
     }
 
@@ -303,7 +307,7 @@ public static class JunkFilesCleaner
             Name = "Delivery Optimization Cache",
             Description = "P2P update delivery cache",
         };
-        AddDirIfExists(cat, @"C:\Windows\ServiceProfiles\NetworkService\AppData\Local\Microsoft\Windows\DeliveryOptimization\Cache");
+        AddDirIfExists(cat, Path.Combine(WinDir, "ServiceProfiles", "NetworkService", "AppData", "Local", "Microsoft", "Windows", "DeliveryOptimization", "Cache"));
         return cat;
     }
 
@@ -334,7 +338,7 @@ public static class JunkFilesCleaner
     private static JunkCategory ScanFontCache()
     {
         var cat = new JunkCategory { Name = "Font Cache", Description = "Windows font rendering cache" };
-        AddDirIfExists(cat, @"C:\Windows\ServiceProfiles\LocalService\AppData\Local\FontCache");
+        AddDirIfExists(cat, Path.Combine(WinDir, "ServiceProfiles", "LocalService", "AppData", "Local", "FontCache"));
         return cat;
     }
 
@@ -345,11 +349,12 @@ public static class JunkFilesCleaner
             Name = "Prefetch Files",
             Description = "App launch prefetch data (30+ days old)",
         };
-        if (!Directory.Exists(@"C:\Windows\Prefetch")) return cat;
+        var prefetchDir = Path.Combine(WinDir, "Prefetch");
+        if (!Directory.Exists(prefetchDir)) return cat;
         var cutoff = DateTime.Now - PrefetchAge;
         try
         {
-            foreach (var f in Directory.GetFiles(@"C:\Windows\Prefetch", "*.pf"))
+            foreach (var f in Directory.GetFiles(prefetchDir, "*.pf"))
             {
                 try
                 {
@@ -373,7 +378,7 @@ public static class JunkFilesCleaner
             Description = "System, setup, and application logs (7+ days old)",
         };
         var cutoff = DateTime.Now - LogAge;
-        var paths = new[] { @"C:\Windows\Logs", @"C:\Windows\Panther", @"C:\Windows\inf", @"C:\Windows\Debug" };
+        var paths = new[] { Path.Combine(WinDir, "Logs"), Path.Combine(WinDir, "Panther"), Path.Combine(WinDir, "inf"), Path.Combine(WinDir, "Debug") };
         var exts = new[] { "*.log", "*.etl", "*.old" };
 
         foreach (var p in paths)
@@ -422,9 +427,9 @@ public static class JunkFilesCleaner
         AddDirFilesIfExists(cat,
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CrashDumps"),
             "*.dmp");
-        AddDirFilesIfExists(cat, @"C:\Windows\Minidump", "*.dmp");
-        AddFileIfExists(cat, @"C:\Windows\MEMORY.DMP");
-        AddDirIfExists(cat, @"C:\ProgramData\Microsoft\Windows\WER\ReportArchive");
+        AddDirFilesIfExists(cat, Path.Combine(WinDir, "Minidump"), "*.dmp");
+        AddFileIfExists(cat, Path.Combine(WinDir, "MEMORY.DMP"));
+        AddDirIfExists(cat, Path.Combine(ProgramData, "Microsoft", "Windows", "WER", "ReportArchive"));
         return cat;
     }
 
@@ -435,7 +440,7 @@ public static class JunkFilesCleaner
             Name = "Windows Error Reports",
             Description = "WER error reporting queue and history",
         };
-        AddDirIfExists(cat, @"C:\ProgramData\Microsoft\Windows\WER\ReportQueue");
+        AddDirIfExists(cat, Path.Combine(ProgramData, "Microsoft", "Windows", "WER", "ReportQueue"));
         AddDirIfExists(cat, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Microsoft", "Windows", "WER", "ReportQueue"));
         AddDirIfExists(cat, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -452,16 +457,15 @@ public static class JunkFilesCleaner
             Description = "Windows Installer patch cache, Package Cache",
             IsSelected = false,
         };
-        AddDirIfExists(cat, @"C:\Windows\Installer\$PatchCache$");
-        AddDirIfExists(cat, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-            "Package Cache"));
+        AddDirIfExists(cat, Path.Combine(WinDir, "Installer", "$PatchCache$"));
+        AddDirIfExists(cat, Path.Combine(ProgramData, "Package Cache"));
         try
         {
-            foreach (var dir in Directory.GetDirectories(@"C:\", "$WINDOWS.~*"))
+            foreach (var dir in Directory.GetDirectories(SystemDrive + @"\", "$WINDOWS.~*"))
                 cat.Files.Add(new JunkFile { Path = dir, Size = GetDirSize(dir), IsDirectory = true });
         }
         catch { /* skip */ }
-        AddDirIfExists(cat, @"C:\Windows.old");
+        AddDirIfExists(cat, Path.Combine(SystemDrive, "Windows.old"));
         return cat;
     }
 
@@ -549,8 +553,8 @@ public static class JunkFilesCleaner
             Name = ".NET / NGen Cache",
             Description = "CLR temporary ASP.NET files, HTTP cache",
         };
-        AddDirIfExists(cat, @"C:\Windows\Microsoft.NET\Framework\v4.0.30319\Temporary ASP.NET Files");
-        AddDirIfExists(cat, @"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\Temporary ASP.NET Files");
+        AddDirIfExists(cat, Path.Combine(WinDir, "Microsoft.NET", "Framework", "v4.0.30319", "Temporary ASP.NET Files"));
+        AddDirIfExists(cat, Path.Combine(WinDir, "Microsoft.NET", "Framework64", "v4.0.30319", "Temporary ASP.NET Files"));
         AddDirIfExists(cat, Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Microsoft", "dotnet", "cache"));

@@ -46,6 +46,22 @@ public class SafetyGuardTests
         Assert.True(SafetyGuard.IsPathSafeToDelete(path), $"Should allow {path}");
     }
 
+    [Fact]
+    public void Blocks_dynamic_windows_dir()
+    {
+        var winDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+        Assert.False(SafetyGuard.IsPathSafeToDelete(winDir));
+        Assert.False(SafetyGuard.IsPathSafeToDelete(Path.Combine(winDir, "System32")));
+        Assert.False(SafetyGuard.IsPathSafeToDelete(Path.Combine(winDir, "System32", "ntdll.dll")));
+    }
+
+    [Fact]
+    public void Blocks_dynamic_program_files()
+    {
+        var pf = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        Assert.False(SafetyGuard.IsPathSafeToDelete(Path.Combine(pf, "Windows Defender")));
+    }
+
     [Theory]
     [InlineData(@"HKLM\SYSTEM\CurrentControlSet\Control")]
     [InlineData(@"HKLM\SYSTEM\CurrentControlSet\Enum")]

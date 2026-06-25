@@ -7,13 +7,6 @@ Blocked items live in `Roadmap_Blocked.md`.
 
 ### P1 — High value, competitive differentiation
 
-- [ ] P1 — **Orphaned artifact scanner (services, tasks, firewall rules, PATH)**
-  Why: Uninstalled programs leave orphaned services, scheduled tasks, firewall rules, and PATH entries. No OSS tool covers all four systematically.
-  Evidence: Community reports of orphaned scheduled tasks ("task image is corrupt"); BCU #890 (shell extension detection gap); forum complaints about orphaned update-checker services.
-  Touches: `Core/Services/ServiceScanner.cs`, `Core/Tasks/ScheduledTaskScanner.cs`, new `Core/Firewall/FirewallRuleScanner.cs`, new `Core/Shell/PathCleaner.cs`
-  Acceptance: Scan detects orphaned services (exe missing), orphaned tasks (action exe missing), firewall rules referencing deleted programs, and PATH entries pointing to non-existent directories. Results shown in a unified "Orphans" panel.
-  Complexity: L
-
 - [ ] P1 — **Target .NET 10 LTS + CommunityToolkit.Mvvm 8.4.2**
   Why: .NET 8 EOL Nov 2026. .NET 10 is LTS through Nov 2028. Toolkit 8.4.2 adds partial properties. Includes SearchValues SIMD, FrozenDictionary, native WPF Fluent theme.
   Evidence: .NET 10 release notes; .NET 9 STS EOL Nov 2026; breaking changes audit.
@@ -131,15 +124,6 @@ Blocked items live in `Roadmap_Blocked.md`.
   Complexity: M
 
 ## Research-Driven Additions (June 2026)
-
-### P0 — Root-cause safety fix
-
-- [ ] P0 — **Replace 71 hardcoded `C:\` paths with dynamic resolution**
-  Why: SafetyGuard, JunkFilesCleaner, FileLeftoverScanner, EvidenceRemover, InstallSnapshotEngine, and SecureDelete all assume Windows is on `C:\`. Systems with Windows on another drive bypass all safety protections and all cleaners miss their targets.
-  Evidence: `grep -c '@"C:\\'` returns 71 hits across 6 files. Meanwhile BrowserExtensionScanner, ShortcutRepairScanner, AutorunScanner, ServiceScanner, DriverStoreScanner, and PathCleaner already use `Environment.GetFolderPath()` correctly — the fix pattern exists in the codebase.
-  Touches: `Core/Safety/SafetyGuard.cs` (36 occurrences), `Core/FileSystem/JunkFilesCleaner.cs` (17), `Core/Privacy/EvidenceRemover.cs` (7), `Core/FileSystem/FileLeftoverScanner.cs` (6), `Core/InstallMonitor/InstallSnapshotEngine.cs` (4), `Core/Safety/SecureDelete.cs` (1)
-  Acceptance: Zero hardcoded `C:\` paths in Core. All resolved via `Environment.GetFolderPath()`, `Environment.SystemDirectory`, `Environment.GetEnvironmentVariable("SystemRoot")`, or `Environment.GetEnvironmentVariable("ProgramData")`. SafetyGuard tests updated to validate on any drive letter.
-  Complexity: M
 
 ### P1 — High value, competitive parity
 
