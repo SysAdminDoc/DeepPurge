@@ -137,6 +137,12 @@ public static class SafetyGuard
 
         var normalized = Path.GetFullPath(path).TrimEnd('\\');
 
+        // User-defined exclusion list (global whitelist of protected paths)
+        var excluded = App.AppSettings.Current.ExcludedPaths;
+        if (excluded.Count > 0 && excluded.Any(ex =>
+            normalized.StartsWith(Path.GetFullPath(ex).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)))
+            return false;
+
         // Never delete protected files
         if (ProtectedFiles.Contains(normalized)) return false;
 
