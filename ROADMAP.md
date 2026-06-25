@@ -152,12 +152,6 @@ Blocked items live in `Roadmap_Blocked.md`.
   Acceptance: MainViewModel composes per-panel VMs. Each panel VM is independently testable. MainViewModel drops below 400 lines.
   Complexity: L
 
-- [ ] P2 — **Global path exclusion whitelist**
-  Why: Users need to protect specific directories from all scans/cleanups (e.g., custom data directories inside AppData, development environments). No mechanism exists.
-  Evidence: FluentCleaner's global exclusion whitelist. BCU supports exclusions. No exclusion logic in DeepPurge's SafetyGuard or scanners.
-  Touches: `Core/App/DataPaths.cs` (persist exclusion list), `Core/Safety/SafetyGuard.cs` (check before delete), `Core/FileSystem/FileLeftoverScanner.cs`, `Core/FileSystem/JunkFilesCleaner.cs`, `Core/Privacy/EvidenceRemover.cs`
-  Acceptance: Users can add paths to an exclusion list (persisted in `DataPaths.Config`). All scanners and deletion pipelines skip excluded paths. CLI supports `--exclude <path>`.
-  Complexity: M
 
 - [ ] P2 — **Amcache parsing for remnant discovery**
   Why: `Amcache.hve` tracks every executed binary with SHA1, publisher, install date, and paths. Cross-referencing against installed programs reveals remnant executables that survive uninstall — enabling forensic-style orphan detection without prior monitoring.
