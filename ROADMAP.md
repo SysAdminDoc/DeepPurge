@@ -43,19 +43,6 @@ Blocked items live in `Roadmap_Blocked.md`.
 
 ### P3 — Polish, differentiation
 
-- [ ] P3 — **Health dashboard**
-  Why: CCleaner/IObit pattern. Aggregate system hygiene score across Leftovers, Privacy, Disk Space, Startup Impact. One-click remediation entry point.
-  Evidence: CCleaner Health Check; IObit Software Health (7-point analysis).
-  Touches: New panel in `App/Views/MainWindow.xaml`, `App/ViewModels/MainViewModel.Extensions.cs`
-  Acceptance: Dashboard panel shows 4 category scores (0-100), overall grade, and "Fix" buttons per category that navigate to the relevant cleanup panel.
-  Complexity: M
-
-- [ ] P3 — **Declarative cleaner format (JSON)**
-  Why: Power users should be able to contribute cleaning rules without code changes. BleachBit's CleanerML and Winapp2.ini community model prove this works.
-  Evidence: BleachBit CleanerML; Winapp2 repo (969 stars); Kudu uses "simple JSON files, readable and editable."
-  Touches: New `Core/Cleaning/CleanerDefinition.cs` (parser + executor), DataPaths.Cleaners
-  Acceptance: JSON cleaner files in DataPaths.Cleaners are parsed alongside winapp2.ini. Format supports detect/file/registry rules. Ships with 5 example cleaners.
-  Complexity: L
 
 
 
@@ -81,22 +68,6 @@ Blocked items live in `Roadmap_Blocked.md`.
   Complexity: L
 
 
-- [ ] P2 — **Amcache parsing for remnant discovery**
-  Why: `Amcache.hve` tracks every executed binary with SHA1, publisher, install date, and paths. Cross-referencing against installed programs reveals remnant executables that survive uninstall — enabling forensic-style orphan detection without prior monitoring.
-  Evidence: Ashampoo's "forensic analysis" feature. `InventoryApplication` and `InventoryApplicationFile` registry paths inside Amcache. P/Invoke via `offreg.dll` (`OROpenHive`/`OREnumKey`).
-  Touches: New `Core/Registry/AmcacheParser.cs`, `Core/FileSystem/FileLeftoverScanner.cs`
-  Acceptance: Scan parses `Amcache.hve` to find executables associated with an uninstalled program. Results feed into the leftover scanner as high-confidence matches.
-  Complexity: M
-
-
-### P3 — Polish, differentiation
-
-- [ ] P3 — **Context menu shell integration (right-click uninstall)**
-  Why: Right-click any executable in Explorer → "Uninstall with DeepPurge" resolves the "which entry is this program?" problem without Hunter Mode's complexity.
-  Evidence: BCU #331 (context menu integration). Standard UX pattern in Revo, IObit, HiBit.
-  Touches: New `Core/Shell/ShellExtensionRegistrar.cs`, `App/Views/MainWindow.xaml.cs` (handle deep-link args), CLI (handle `--target <path>` arg)
-  Acceptance: `deeppurgecli register-shell` adds a context menu entry for `.exe` files. Right-click → "Uninstall with DeepPurge" opens the GUI with the program pre-selected. `deeppurgecli unregister-shell` removes it.
-  Complexity: M
 
 
 
