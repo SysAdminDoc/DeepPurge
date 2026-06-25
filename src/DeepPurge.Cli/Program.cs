@@ -18,6 +18,7 @@ using DeepPurge.Core.Registry;
 using DeepPurge.Core.Repair;
 using DeepPurge.Core.Safety;
 using DeepPurge.Core.Schedule;
+using DeepPurge.Core.Shell;
 using DeepPurge.Core.Shortcuts;
 using DeepPurge.Core.Startup;
 using DeepPurge.Core.Uninstall;
@@ -68,6 +69,8 @@ public static class Program
                 "check-update"    => await CmdCheckUpdateAsync(cts.Token),
                 "detection-script"=> CmdDetectionScript(args),
                 "doctor"          => CmdDoctor(),
+                "register-shell"  => CmdRegisterShell(),
+                "unregister-shell"=> CmdUnregisterShell(),
                 _ => Fail($"Unknown command: {cmd}. Run 'deeppurgecli --help' for usage."),
             };
         }
@@ -482,6 +485,33 @@ if ($app) {{
         Console.WriteLine("----------------------------------------");
         Console.WriteLine($"Summary: {results.Count - fails - warns} ok, {warns} warn, {fails} fail");
         return fails > 0 ? 1 : 0;
+    }
+
+    private static int CmdRegisterShell()
+    {
+        var exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+        if (string.IsNullOrEmpty(exePath)) { Console.Error.WriteLine("Could not determine exe path"); return 1; }
+        var guiPath = Path.Combine(Path.GetDirectoryName(exePath)!, "DeepPurge.exe");
+        if (!File.Exists(guiPath)) guiPath = exePath;
+        if (ShellExtensionRegistrar.Register(guiPath))
+        {
+            Console.WriteLine($"Shell extension registered: {guiPath}");
+            Console.WriteLine("Right-click any .exe → 'Uninstall with DeepPurge'");
+            return 0;
+        }
+        Console.Error.WriteLine("Failed to register shell extension");
+        return 1;
+    }
+
+    private static int CmdUnregisterShell()
+    {
+        if (ShellExtensionRegistrar.Unregister())
+        {
+            Console.WriteLine("Shell extension removed.");
+            return 0;
+        }
+        Console.Error.WriteLine("Failed to unregister shell extension");
+        return 1;
     }
 
     private static int CmdOrphans(ParsedArgs a)

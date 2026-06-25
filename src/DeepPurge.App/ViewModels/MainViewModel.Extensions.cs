@@ -509,6 +509,36 @@ public partial class MainViewModel
     }
 
     // ═══════════════════════════════════════════════════════
+    //  HEALTH DASHBOARD
+    // ═══════════════════════════════════════════════════════
+    public ObservableCollection<HealthScore> HealthCategories { get; } = new();
+    [ObservableProperty] private int _healthOverallScore;
+    [ObservableProperty] private string _healthGrade = "";
+    [ObservableProperty] private string _healthSummary = "Run health check to assess system hygiene";
+
+    [RelayCommand]
+    private async Task RunHealthCheckAsync()
+    {
+        IsBusy = true;
+        StatusText = "Running health assessment...";
+        try
+        {
+            var report = await Task.Run(() => HealthScorer.Assess());
+            _dispatcher.Invoke(() =>
+            {
+                HealthCategories.Clear();
+                foreach (var c in report.Categories) HealthCategories.Add(c);
+                HealthOverallScore = report.OverallScore;
+                HealthGrade = report.Grade;
+                HealthSummary = $"Overall: {report.Grade} ({report.OverallScore}/100)";
+                StatusText = HealthSummary;
+            });
+        }
+        catch (Exception ex) { StatusText = $"Health check failed: {ex.Message}"; Log.Error("HealthCheck", ex); }
+        finally { IsBusy = false; }
+    }
+
+    // ═══════════════════════════════════════════════════════
     //  SYSTEM SLIMMING
     // ═══════════════════════════════════════════════════════
     public ObservableCollection<SlimmableComponent> SlimmableComponents { get; } = new();
