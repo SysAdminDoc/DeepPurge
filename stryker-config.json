@@ -1,0 +1,21 @@
+{
+  "$schema": "https://raw.githubusercontent.com/stryker-mutator/stryker-net/master/src/Stryker.Core/Stryker.Core/stryker-config.schema.json",
+  "stryker-config": {
+    "project": "DeepPurge.Core.csproj",
+    "test-projects": ["tests/DeepPurge.Tests/DeepPurge.Tests.csproj"],
+    "mutation-level": "Standard",
+    "thresholds": {
+      "high": 80,
+      "low": 60,
+      "break": 50
+    },
+    "mutate": [
+      "src/DeepPurge.Core/Safety/SafetyGuard.cs",
+      "src/DeepPurge.Core/Safety/SecureDelete.cs",
+      "src/DeepPurge.Core/Uninstall/UninstallEngine.cs",
+      "src/DeepPurge.Core/Safety/DeleteOptions.cs"
+    ],
+    "reporters": ["html", "progress", "cleartext"],
+    "concurrency": 4
+  }
+}

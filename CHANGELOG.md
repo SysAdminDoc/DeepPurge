@@ -82,6 +82,8 @@ All notable changes to DeepPurge will be documented in this file.
 - `deeppurgecli doctor` now includes suggested fixes for actionable warning/failure paths, including missing system tools, inaccessible registry/shell roots, and unwritable data folders.
 
 ### Tests
+- **Mutation testing infrastructure** — Stryker.NET 4.15.0 installed as local dotnet tool with `stryker-config.json` targeting SafetyGuard, SecureDelete, UninstallEngine, and DeleteOptions. Run via `dotnet stryker` from repo root.
+- **Snapshot testing with Verify.Xunit** — Added Verify.Xunit 31.12.5. Two initial snapshot tests for ProgramExporter CSV and JSON output formats. Snapshot diffs caught automatically in CI.
 - Expanded stabilization coverage for `DriverStoreScanner.ParseText`, `InstallSnapshotEngine.Diff`, and `WindowsRepairEngine` command sanitizers.
 
 ## [v0.9.0] — Ten-feature competitive pass + headless CLI

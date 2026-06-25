@@ -1,0 +1,13 @@
+﻿[
+  {
+    "DisplayName": "Test App",
+    "DisplayVersion": "1.0",
+    "Publisher": "Test Corp",
+    "InstallDate": "",
+    "SizeKB": 0,
+    "Size": "",
+    "InstallLocation": "",
+    "UninstallString": "",
+    "Source": "System"
+  }
+]
