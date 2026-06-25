@@ -120,6 +120,7 @@ public class InstalledProgram : INotifyPropertyChanged
                 RegistrySource.HKLM_Uninstall => "System",
                 RegistrySource.HKLM_WOW64_Uninstall => "32-bit",
                 RegistrySource.HKCU_Uninstall => "User",
+                RegistrySource.Portable => "Portable",
                 _ => "",
             };
         }
@@ -135,4 +136,5 @@ public enum RegistrySource
     HKLM_Uninstall,
     HKLM_WOW64_Uninstall,
     HKCU_Uninstall,
+    Portable,
 }
