@@ -7,12 +7,6 @@ Blocked items live in `Roadmap_Blocked.md`.
 
 ### P1 — High value, competitive differentiation
 
-- [ ] P1 — **Target .NET 10 LTS + CommunityToolkit.Mvvm 8.4.2**
-  Why: .NET 8 EOL Nov 2026. .NET 10 is LTS through Nov 2028. Toolkit 8.4.2 adds partial properties. Includes SearchValues SIMD, FrozenDictionary, native WPF Fluent theme.
-  Evidence: .NET 10 release notes; .NET 9 STS EOL Nov 2026; breaking changes audit.
-  Touches: All 4 `.csproj` files (TFM `net10.0-windows10.0.17763.0`), `CommunityToolkit.Mvvm` → 8.4.2, `System.IO.Hashing` → 10.0.9, ViewModels (partial property migration)
-  Acceptance: Build succeeds on net10.0, all tests pass, ViewModels use `[ObservableProperty] public partial` syntax.
-  Complexity: M
 
 - [ ] P1 — **CsWin32 type-safe PInvoke**
   Why: Hand-rolled PInvoke in FastDiskAnalyzer (MFT structs), UsnJournalReader, SecureDelete, ShortcutRepairScanner, UninstallEngine risks struct alignment bugs. CsWin32 generates correct marshaling from official SDK metadata.
