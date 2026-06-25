@@ -68,6 +68,7 @@ public partial class MainViewModel : ObservableObject
     // can flip dry-run or secure-delete before any cleanup call.
     [ObservableProperty] private bool _dryRunEnabled;
     [ObservableProperty] private bool _secureDeleteEnabled;
+    [ObservableProperty] private bool _expertMode = Core.App.AppSettings.Current.ExpertMode;
 
     // Live progress bar for the current long-running delete.
     [ObservableProperty] private double _operationProgress;
@@ -109,6 +110,12 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>Exposed for the view to reuse the same engine instance.</summary>
     public UninstallEngine Engine => _engine;
+
+    partial void OnExpertModeChanged(bool value)
+    {
+        Core.App.AppSettings.Current.ExpertMode = value;
+        Core.App.AppSettings.Current.Save();
+    }
 
     // ═══════════════════════════════════════════════════════
     //  CONSTRUCTOR
