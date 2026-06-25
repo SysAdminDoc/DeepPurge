@@ -54,6 +54,21 @@ public static class ActivityLog
         catch { /* activity logging failures must never throw */ return new(); }
     }
 
+    public record DailyCleanSummary(DateTime Date, long TotalBytesFreed, int RunCount);
+
+    public static List<DailyCleanSummary> GetCleanHistory(int maxDays = 90)
+    {
+        var entries = LoadRecent(MaxEntries);
+        var cutoff = DateTime.UtcNow.AddDays(-maxDays);
+
+        return entries
+            .Where(e => !e.DryRun && e.BytesFreed > 0 && e.TimestampUtc >= cutoff)
+            .GroupBy(e => e.TimestampUtc.Date)
+            .Select(g => new DailyCleanSummary(g.Key, g.Sum(e => e.BytesFreed), g.Count()))
+            .OrderBy(d => d.Date)
+            .ToList();
+    }
+
     public static void Prune()
     {
         try
