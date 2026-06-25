@@ -15,26 +15,6 @@ Blocked items live in `Roadmap_Blocked.md`.
   Acceptance: All `[DllImport]` declarations replaced by CsWin32-generated equivalents. NativeMethods.txt lists each API. Build clean with no hand-rolled structs.
   Complexity: L
 
-- [ ] P1 — **Velopack auto-updater**
-  Why: Current UpdateChecker only detects updates — user must manually download. Velopack provides delta auto-updates from GitHub Releases with PerMachine install mode.
-  Evidence: Velopack 1.2.0 docs; DriverStoreExplorer ships self-update with SHA256 verification.
-  Touches: `Core/Updates/UpdateChecker.cs`, `DeepPurge.App.csproj`, `.github/workflows/release.yml`, `Build.ps1`
-  Acceptance: On update detection, user can click "Install Update" which downloads delta, verifies SHA256, and restarts the app. Release workflow produces Velopack artifacts.
-  Complexity: M
-
-- [ ] P1 — **Hunter Mode (drag-to-identify)**
-  Why: Revo's signature UX feature. Drag crosshair onto any window to identify the owning program and jump to its uninstall entry. No OSS tool replicates this.
-  Evidence: Revo Pro feature page; consistently praised in reviews as unique differentiator.
-  Touches: New `App/Views/HunterWindow.xaml`, `App/ViewModels/MainViewModel.cs`, Win32 `WindowFromPoint` + `GetWindowThreadProcessId`
-  Acceptance: User clicks "Hunter Mode" → overlay appears → drag crosshair onto any window → program identified → jump to its entry in the Programs panel.
-  Complexity: M
-
-- [ ] P1 — **Expand leftover signature database to 200+ profiles**
-  Why: Current 50 profiles cover common apps but benchmark accuracy requires broader coverage. Target: ≥85% accuracy in Uninstalr benchmark.
-  Evidence: Uninstalr 2026 benchmark — HiBit 90%, Total Uninstall 86%; Revo Logs Database covers 12.5k programs. Also fix: duplicate Spotify entry.
-  Touches: `Core/Data/leftover-signatures.json`, `Core/Data/LeftoverSignatureDb.cs`
-  Acceptance: 200+ profiles. Matching algorithm enhanced to handle publisher-based grouping. Duplicate Spotify entry removed.
-  Complexity: M
 
 
 ### P2 — Quality, reliability, developer experience
@@ -123,19 +103,6 @@ Blocked items live in `Roadmap_Blocked.md`.
   Acceptance: `dotnet publish -r win-arm64` produces a working single-file exe. CI publishes both `win-x64` and `win-arm64` artifacts. GitHub Release includes both.
   Complexity: M
 
-- [ ] P1 — **Restart Manager locked-file detection**
-  Why: Uninstallers frequently fail because files are locked by running processes. The Windows Restart Manager API (`rstrtmgr.dll`) can identify which processes hold locks and optionally gracefully shut them down.
-  Evidence: BCU #129 (delete locked files on reboot). Restart Manager API docs (`RmStartSession`, `RmRegisterResources`, `RmGetList`).
-  Touches: New `Core/FileSystem/LockedFileResolver.cs`, `Core/Uninstall/UninstallEngine.cs`
-  Acceptance: When a file deletion fails with `IOException` (sharing violation), DeepPurge identifies the locking process by name/PID and offers: (1) close the process, (2) queue for delete-on-reboot via `MoveFileEx(MOVEFILE_DELAY_UNTIL_REBOOT)`, (3) skip. CLI uses `--force-close` flag.
-  Complexity: M
-
-- [ ] P1 — **ETW registry monitoring for install tracking**
-  Why: Current install monitor captures filesystem changes (USN journal) but not registry changes in real-time. The `Microsoft.Diagnostics.Tracing.TraceEvent` NuGet library can capture every registry create/set/delete via the kernel ETW provider, closing the snapshot-vs-journal gap for registry.
-  Evidence: `KernelTraceEventParser.Keywords.Registry` (0x00020000). Events: RegistryCreate, RegistrySetValue, RegistryDelete. Filters by installer PID.
-  Touches: New `Core/InstallMonitor/RegistryEtwTracer.cs`, `Core/InstallMonitor/InstallSnapshotEngine.cs`, `DeepPurge.Core.csproj` (add `Microsoft.Diagnostics.Tracing.TraceEvent` NuGet)
-  Acceptance: `TraceInstallAsync` captures both filesystem (USN journal) and registry (ETW) changes during install. Registry diff is precise (only installer-PID operations), not snapshot-based. CLI `--legacy` flag falls back to snapshot.
-  Complexity: L
 
 ### P2 — Quality, reliability, developer experience
 
@@ -154,12 +121,6 @@ Blocked items live in `Roadmap_Blocked.md`.
   Acceptance: Scan parses `Amcache.hve` to find executables associated with an uninstalled program. Results feed into the leftover scanner as high-confidence matches.
   Complexity: M
 
-- [ ] P2 — **CIM migration from System.Management (WMI)**
-  Why: `System.Management` (WMI) is deprecated. CIM via `Microsoft.Management.Infrastructure` is faster, scales better, and is the recommended path for .NET 8+. Current WMI usage: SystemRestoreManager, SecureDelete (SSD detection).
-  Evidence: Microsoft deprecation guidance. `Win32_Product` triggers MSI reconfiguration on query.
-  Touches: `Core/Safety/SystemRestoreManager.cs`, `Core/Safety/SecureDelete.cs`, `DeepPurge.Core.csproj` (replace `System.Management` with `Microsoft.Management.Infrastructure`)
-  Acceptance: All WMI calls replaced with CIM equivalents. `Win32_Product` never queried. Build warning-free.
-  Complexity: S
 
 ### P3 — Polish, differentiation
 
