@@ -5,7 +5,7 @@ namespace DeepPurge.Core.App;
 
 public static class ProtectedPrograms
 {
-    private static readonly string FilePath = Path.Combine(DataPaths.Config, "protected-programs.json");
+    private static string FilePath => Path.Combine(DataPaths.Config, "protected-programs.json");
     private static HashSet<string>? _list;
 
     public static HashSet<string> List

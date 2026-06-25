@@ -66,16 +66,25 @@ public static class DataPaths
 
     private static string ResolveRoot()
     {
-        if (_portable.Value)
+        try
         {
-            var dir = Path.Combine(AppContext.BaseDirectory, "Data");
-            Directory.CreateDirectory(dir);
-            return dir;
+            if (_portable.Value)
+            {
+                var dir = Path.Combine(AppContext.BaseDirectory, "Data");
+                Directory.CreateDirectory(dir);
+                return dir;
+            }
+            var appData = UserIdentity.RealLocalAppData;
+            var root = Path.Combine(appData, "DeepPurge");
+            Directory.CreateDirectory(root);
+            return root;
         }
-        var appData = UserIdentity.RealLocalAppData;
-        var root = Path.Combine(appData, "DeepPurge");
-        Directory.CreateDirectory(root);
-        return root;
+        catch
+        {
+            var fallback = Path.Combine(Path.GetTempPath(), "DeepPurge");
+            try { Directory.CreateDirectory(fallback); } catch { }
+            return fallback;
+        }
     }
 
     private static string Ensure(string path)
