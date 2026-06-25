@@ -188,12 +188,6 @@ Blocked items live in `Roadmap_Blocked.md`.
   Acceptance: `deeppurgecli register-shell` adds a context menu entry for `.exe` files. Right-click → "Uninstall with DeepPurge" opens the GUI with the program pre-selected. `deeppurgecli unregister-shell` removes it.
   Complexity: M
 
-- [ ] P3 — **Bundleware / sideload detection**
-  Why: Programs silently installed alongside other software (toolbar bundling, browser hijacker sideloading) are a distinct scan category. Users don't know they exist until they see symptoms.
-  Evidence: IObit's bundleware scanner (paywalled). Uninstalr blog calls out the irony of IObit bundling iTop VPN.
-  Touches: `Core/Registry/InstalledProgramScanner.cs` (flag programs with `InstallDate` matching another program's install within ±5 minutes), `Core/Models/InstalledProgram.cs` (add `IsBundleware` flag)
-  Acceptance: Programs installed within 5 minutes of another program's install get flagged as "Possibly bundled" in the UI. No false positives for system updates.
-  Complexity: S
 
 
 ## Ideas / not committed

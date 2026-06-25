@@ -53,6 +53,8 @@ public class InstalledProgram : INotifyPropertyChanged
         set { _isProtected = value; OnPropertyChanged(); }
     }
 
+    public bool IsSuspectedBundleware { get; set; }
+
     public string EstimatedSizeDisplay
     {
         get

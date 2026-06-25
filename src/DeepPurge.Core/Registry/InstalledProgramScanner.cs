@@ -67,7 +67,44 @@ public static class InstalledProgramScanner
         }
         catch (Exception ex) { Log.Warn($"Failed to enumerate HKU user SIDs: {ex.Message}"); }
 
+        FlagSuspectedBundleware(programs);
         return programs.OrderBy(p => p.DisplayName, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    private static readonly HashSet<string> TrustedPublishers = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Microsoft", "Microsoft Corporation", "Microsoft Windows",
+        "Intel", "Intel Corporation", "Intel(R) Corporation",
+        "NVIDIA", "NVIDIA Corporation",
+        "AMD", "Advanced Micro Devices", "Advanced Micro Devices, Inc.",
+        "Realtek", "Realtek Semiconductor",
+        "Qualcomm", "Broadcom", "Texas Instruments",
+    };
+
+    private static void FlagSuspectedBundleware(List<InstalledProgram> programs)
+    {
+        var byDate = programs
+            .Where(p => !string.IsNullOrEmpty(p.InstallDate) && p.InstallDate.Length == 8)
+            .GroupBy(p => p.InstallDate)
+            .Where(g => g.Count() >= 2);
+
+        foreach (var group in byDate)
+        {
+            var list = group.ToList();
+            var hasNonTrusted = list.Where(p =>
+                !string.IsNullOrEmpty(p.Publisher) &&
+                !TrustedPublishers.Contains(p.Publisher) &&
+                !p.IsSystemComponent).ToList();
+
+            if (hasNonTrusted.Count < 2) continue;
+
+            var publisherGroups = hasNonTrusted.GroupBy(p => p.Publisher, StringComparer.OrdinalIgnoreCase);
+            foreach (var pg in publisherGroups.Where(g => g.Count() == 1))
+            {
+                foreach (var lone in pg)
+                    lone.IsSuspectedBundleware = true;
+            }
+        }
     }
 
     private static void ScanRegistryKey(RegistryKey baseKey, string basePath, RegistrySource source,
