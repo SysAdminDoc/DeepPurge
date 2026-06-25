@@ -189,7 +189,6 @@ public static class FirewallRuleScanner
     {
         var lower = path.ToLowerInvariant();
         return lower.StartsWith(SystemRoot.ToLowerInvariant()) ||
-               lower.StartsWith(@"c:\windows\", StringComparison.Ordinal) ||
                lower.Contains("system32") ||
                lower.Contains("syswow64") ||
                lower.Contains("svchost.exe");

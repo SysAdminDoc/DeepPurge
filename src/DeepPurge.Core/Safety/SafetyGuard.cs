@@ -7,42 +7,63 @@ namespace DeepPurge.Core.Safety;
 public static class SafetyGuard
 {
     // ═══════════════════════════════════════════════════════
+    //  DYNAMIC PATH ROOTS — never hardcode drive letters
+    // ═══════════════════════════════════════════════════════
+
+    private static readonly string WinDir =
+        Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+    private static readonly string Sys32 =
+        Environment.SystemDirectory;
+    private static readonly string SysWow64 =
+        Path.Combine(WinDir, "SysWOW64");
+    private static readonly string ProgramFiles =
+        Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+    private static readonly string ProgramFilesX86 =
+        Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+    private static readonly string ProgramData =
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+    private static readonly string SystemDrive =
+        Path.GetPathRoot(WinDir) ?? @"C:\";
+    internal static readonly string UsersDir =
+        Path.Combine(SystemDrive.TrimEnd('\\'), "Users");
+
+    // ═══════════════════════════════════════════════════════
     //  PROTECTED PATHS — NEVER delete anything under these
     // ═══════════════════════════════════════════════════════
 
     private static readonly HashSet<string> ProtectedDirectories = new(StringComparer.OrdinalIgnoreCase)
     {
-        @"C:\Windows",
-        @"C:\Windows\System32",
-        @"C:\Windows\SysWOW64",
-        @"C:\Windows\WinSxS",
-        @"C:\Windows\Boot",
-        @"C:\Windows\Fonts",
-        @"C:\Windows\Globalization",
-        @"C:\Windows\IME",
-        @"C:\Windows\rescache",
-        @"C:\Windows\Resources",
-        @"C:\Windows\servicing",
-        @"C:\Windows\SystemResources",
-        @"C:\Program Files\Windows Defender",
-        @"C:\Program Files\Windows Security",
-        @"C:\Program Files\Common Files\microsoft shared",
-        @"C:\Program Files (x86)\Common Files",
-        @"C:\ProgramData\Microsoft\Windows",
-        @"C:\ProgramData\Microsoft\Windows Defender",
-        @"C:\Recovery",
-        @"C:\$Recycle.Bin",
+        WinDir,
+        Sys32,
+        SysWow64,
+        Path.Combine(WinDir, "WinSxS"),
+        Path.Combine(WinDir, "Boot"),
+        Path.Combine(WinDir, "Fonts"),
+        Path.Combine(WinDir, "Globalization"),
+        Path.Combine(WinDir, "IME"),
+        Path.Combine(WinDir, "rescache"),
+        Path.Combine(WinDir, "Resources"),
+        Path.Combine(WinDir, "servicing"),
+        Path.Combine(WinDir, "SystemResources"),
+        Path.Combine(ProgramFiles, "Windows Defender"),
+        Path.Combine(ProgramFiles, "Windows Security"),
+        Path.Combine(ProgramFiles, "Common Files", "microsoft shared"),
+        Path.Combine(ProgramFilesX86, "Common Files"),
+        Path.Combine(ProgramData, "Microsoft", "Windows"),
+        Path.Combine(ProgramData, "Microsoft", "Windows Defender"),
+        Path.Combine(SystemDrive.TrimEnd('\\'), "Recovery"),
+        Path.Combine(SystemDrive.TrimEnd('\\'), "$Recycle.Bin"),
     };
 
     private static readonly HashSet<string> ProtectedFiles = new(StringComparer.OrdinalIgnoreCase)
     {
-        @"C:\Windows\System32\config\SYSTEM",
-        @"C:\Windows\System32\config\SOFTWARE",
-        @"C:\Windows\System32\config\SAM",
-        @"C:\Windows\System32\config\SECURITY",
-        @"C:\Windows\System32\config\DEFAULT",
-        @"C:\bootmgr",
-        @"C:\BOOTNXT",
+        Path.Combine(Sys32, "config", "SYSTEM"),
+        Path.Combine(Sys32, "config", "SOFTWARE"),
+        Path.Combine(Sys32, "config", "SAM"),
+        Path.Combine(Sys32, "config", "SECURITY"),
+        Path.Combine(Sys32, "config", "DEFAULT"),
+        Path.Combine(SystemDrive.TrimEnd('\\'), "bootmgr"),
+        Path.Combine(SystemDrive.TrimEnd('\\'), "BOOTNXT"),
     };
 
     private static readonly HashSet<string> ProtectedRegistryRoots = new(StringComparer.OrdinalIgnoreCase)
@@ -126,19 +147,18 @@ public static class SafetyGuard
         if (normalized.Length <= 3) return false; // "C:\" or "C:"
 
         // Never delete the Users folder itself or any user profile root
-        if (normalized.Equals(@"C:\Users", StringComparison.OrdinalIgnoreCase)) return false;
+        if (normalized.Equals(UsersDir, StringComparison.OrdinalIgnoreCase)) return false;
 
         // Don't delete if a parent is a strict protected directory
         foreach (var protectedDir in ProtectedDirectories)
         {
-            // If the path IS the protected dir, block
             if (normalized.Equals(protectedDir, StringComparison.OrdinalIgnoreCase))
                 return false;
         }
 
         // Never delete Windows system files (exe, dll, sys in System32)
-        if (normalized.StartsWith(@"C:\Windows\System32\", StringComparison.OrdinalIgnoreCase) ||
-            normalized.StartsWith(@"C:\Windows\SysWOW64\", StringComparison.OrdinalIgnoreCase))
+        if (normalized.StartsWith(Sys32 + @"\", StringComparison.OrdinalIgnoreCase) ||
+            normalized.StartsWith(SysWow64 + @"\", StringComparison.OrdinalIgnoreCase))
         {
             var ext = Path.GetExtension(normalized).ToLowerInvariant();
             if (ext is ".exe" or ".dll" or ".sys" or ".drv" or ".ocx" or ".cpl" or ".msc")
@@ -205,16 +225,14 @@ public static class SafetyGuard
     public static bool IsAutorunSafeToDelete(string command)
     {
         if (string.IsNullOrWhiteSpace(command)) return false;
-        var lower = command.ToLowerInvariant();
 
-        // Protect Windows components
-        if (lower.Contains(@"c:\windows\system32") ||
-            lower.Contains(@"c:\windows\syswow64") ||
-            lower.Contains("securityhealthsystray") ||
-            lower.Contains("windowsdefender") ||
-            lower.Contains("ctfmon.exe") ||
-            lower.Contains("onedrive") ||
-            lower.Contains("msedge"))
+        if (command.Contains(Sys32, StringComparison.OrdinalIgnoreCase) ||
+            command.Contains(SysWow64, StringComparison.OrdinalIgnoreCase) ||
+            command.Contains("securityhealthsystray", StringComparison.OrdinalIgnoreCase) ||
+            command.Contains("windowsdefender", StringComparison.OrdinalIgnoreCase) ||
+            command.Contains("ctfmon.exe", StringComparison.OrdinalIgnoreCase) ||
+            command.Contains("onedrive", StringComparison.OrdinalIgnoreCase) ||
+            command.Contains("msedge", StringComparison.OrdinalIgnoreCase))
             return false;
 
         return true;
@@ -236,14 +254,14 @@ public static class SafetyGuard
         var safeJunkParents = new[]
         {
             Path.GetTempPath(),
-            @"C:\Windows\Temp",
-            @"C:\Windows\Prefetch",
-            @"C:\Windows\Logs",
-            @"C:\Windows\SoftwareDistribution\Download",
+            Path.Combine(WinDir, "Temp"),
+            Path.Combine(WinDir, "Prefetch"),
+            Path.Combine(WinDir, "Logs"),
+            Path.Combine(WinDir, "SoftwareDistribution", "Download"),
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            @"C:\Windows\Minidump",
-            @"C:\ProgramData\Microsoft\Windows\WER",
+            Path.Combine(WinDir, "Minidump"),
+            Path.Combine(ProgramData, "Microsoft", "Windows", "WER"),
         };
 
         return safeJunkParents.Any(parent =>

@@ -261,8 +261,7 @@ public static class ServiceScanner
         // Shared hosts and anything under %SystemRoot% are never considered orphaned.
         var lower = path.ToLowerInvariant();
         if (lower.Contains("svchost.exe") ||
-            lower.StartsWith(SystemRoot.ToLowerInvariant(), StringComparison.OrdinalIgnoreCase) ||
-            lower.StartsWith(@"c:\windows\", StringComparison.OrdinalIgnoreCase))
+            lower.StartsWith(SystemRoot.ToLowerInvariant(), StringComparison.OrdinalIgnoreCase))
             return false;
 
         // Only flag fully-qualified paths we can actually check.

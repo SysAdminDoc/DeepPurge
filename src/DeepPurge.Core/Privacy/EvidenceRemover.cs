@@ -50,6 +50,8 @@ public class TraceItem
 
 public static class EvidenceRemover
 {
+    private static readonly string WinDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+    private static readonly string ProgramData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
     public static List<TraceCategory> ScanAllTraces()
     {
         var cats = new List<TraceCategory>
@@ -298,7 +300,7 @@ public static class EvidenceRemover
             Description = "System and application log files older than 7 days",
         };
         var cutoff = DateTime.Now.AddDays(-7);
-        var logDirs = new[] { @"C:\Windows\Logs", @"C:\Windows\Panther", @"C:\Windows\debug" };
+        var logDirs = new[] { Path.Combine(WinDir, "Logs"), Path.Combine(WinDir, "Panther"), Path.Combine(WinDir, "debug") };
         var patterns = new[] { "*.log", "*.etl" };
 
         foreach (var dir in logDirs)
@@ -333,7 +335,7 @@ public static class EvidenceRemover
             Description = "Archived Windows Event Log files",
             IsSelected = false,
         };
-        var logDir = @"C:\Windows\System32\winevt\Logs";
+        var logDir = Path.Combine(Environment.SystemDirectory, "winevt", "Logs");
         if (!Directory.Exists(logDir)) return cat;
 
         try
@@ -354,7 +356,7 @@ public static class EvidenceRemover
         var paths = new[]
         {
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CrashDumps"),
-            @"C:\Windows\Minidump",
+            Path.Combine(WinDir, "Minidump"),
         };
         foreach (var p in paths)
         {
@@ -365,7 +367,7 @@ public static class EvidenceRemover
             }
             catch { /* skip */ }
         }
-        AddFile(cat, @"C:\Windows\MEMORY.DMP");
+        AddFile(cat, Path.Combine(WinDir, "MEMORY.DMP"));
         return cat;
     }
 
@@ -377,7 +379,7 @@ public static class EvidenceRemover
             Description = "Windows Update peer-to-peer download cache",
             IsSelected = false,
         };
-        var doPath = @"C:\Windows\SoftwareDistribution\DeliveryOptimization";
+        var doPath = Path.Combine(WinDir, "SoftwareDistribution", "DeliveryOptimization");
         if (Directory.Exists(doPath))
             cat.Items.Add(new TraceItem
             {
@@ -399,7 +401,7 @@ public static class EvidenceRemover
         {
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "Microsoft", "Windows", "WER"),
-            @"C:\ProgramData\Microsoft\Windows\WER",
+            Path.Combine(ProgramData, "Microsoft", "Windows", "WER"),
         };
         foreach (var p in paths)
         {
@@ -437,7 +439,7 @@ public static class EvidenceRemover
                 IsDirectory = true,
             });
 
-        var sysFont = @"C:\Windows\ServiceProfiles\LocalService\AppData\Local\FontCache";
+        var sysFont = Path.Combine(WinDir, "ServiceProfiles", "LocalService", "AppData", "Local", "FontCache");
         if (Directory.Exists(sysFont))
             cat.Items.Add(new TraceItem
             {
