@@ -130,6 +130,121 @@ Blocked items live in `Roadmap_Blocked.md`.
   Acceptance: User can trigger a system-wide orphan scan that uses the signature DB to find remnants of programs not currently installed. Results shown in a dedicated panel with confidence ratings.
   Complexity: M
 
+## Research-Driven Additions (June 2026)
+
+### P0 — Root-cause safety fix
+
+- [ ] P0 — **Replace 71 hardcoded `C:\` paths with dynamic resolution**
+  Why: SafetyGuard, JunkFilesCleaner, FileLeftoverScanner, EvidenceRemover, InstallSnapshotEngine, and SecureDelete all assume Windows is on `C:\`. Systems with Windows on another drive bypass all safety protections and all cleaners miss their targets.
+  Evidence: `grep -c '@"C:\\'` returns 71 hits across 6 files. Meanwhile BrowserExtensionScanner, ShortcutRepairScanner, AutorunScanner, ServiceScanner, DriverStoreScanner, and PathCleaner already use `Environment.GetFolderPath()` correctly — the fix pattern exists in the codebase.
+  Touches: `Core/Safety/SafetyGuard.cs` (36 occurrences), `Core/FileSystem/JunkFilesCleaner.cs` (17), `Core/Privacy/EvidenceRemover.cs` (7), `Core/FileSystem/FileLeftoverScanner.cs` (6), `Core/InstallMonitor/InstallSnapshotEngine.cs` (4), `Core/Safety/SecureDelete.cs` (1)
+  Acceptance: Zero hardcoded `C:\` paths in Core. All resolved via `Environment.GetFolderPath()`, `Environment.SystemDirectory`, `Environment.GetEnvironmentVariable("SystemRoot")`, or `Environment.GetEnvironmentVariable("ProgramData")`. SafetyGuard tests updated to validate on any drive letter.
+  Complexity: M
+
+### P1 — High value, competitive parity
+
+- [ ] P1 — **Wire .resx localization into XAML and code-behind**
+  Why: `Properties/Resources.resx` has 20 UI strings with `Resources.Designer.cs` accessor but zero references in XAML or C#. The CHANGELOG claims "Ready for Crowdin submission" but strings aren't consumed. Localization is dead infrastructure.
+  Evidence: `grep 'x:Static.*Resources\.' Views/` → 0 matches. `grep 'Properties\.Resources\.' App/` → 0 matches.
+  Touches: `App/Views/MainWindow.xaml` (replace ~100 hardcoded string literals with `{x:Static}` bindings), `App/Views/MainWindow.xaml.cs` (programmatic strings), `App/Properties/Resources.resx` (expand from 20 to ~150 strings)
+  Acceptance: All user-visible strings in XAML and code-behind reference `Resources.Designer.cs`. Adding a `Resources.de.resx` file produces a German UI.
+  Complexity: M
+
+- [ ] P1 — **Replace 57 remaining empty catch blocks with Log.Warn**
+  Why: 57 `catch { }` blocks across 20 Core files silently swallow exceptions. Field debugging is impossible — errors vanish without trace. The pattern fix (replace with `catch (Exception ex) { Log.Warn(...); }`) was proven in the round-2 fix that addressed 22 blocks in RegistryLeftoverScanner.
+  Evidence: `grep -c 'catch\s*\{\s*\}'` across Core → 57 hits in 20 files. 204 total catch blocks — 28% are silent.
+  Touches: All 20 affected files in `src/DeepPurge.Core/`
+  Acceptance: Zero `catch { }` blocks in Core. All replaced with `Log.Warn` (for non-fatal) or `Log.Error` (for unexpected). Exceptions that are intentionally ignored get a comment explaining why.
+  Complexity: S
+
+- [ ] P1 — **ARM64 build target**
+  Why: Windows on ARM is growing (Surface Pro, Snapdragon X Elite/Plus, Qualcomm Oryon). DeepPurge only publishes `win-x64`. P/Invoke-heavy code (MFT structs, USN journal, COM IShellLinkW) needs ARM64 validation.
+  Evidence: BCU issue #841 (ARM64 request). No `win-arm64` in any csproj or workflow.
+  Touches: All 4 `.csproj` files, `.github/workflows/build.yml`, `.github/workflows/release.yml`, `BUILD.bat`, `Build.ps1`. P/Invoke struct validation in `FastDiskAnalyzer.cs`, `UsnJournalReader.cs`, `ShortcutRepairScanner.cs`.
+  Acceptance: `dotnet publish -r win-arm64` produces a working single-file exe. CI publishes both `win-x64` and `win-arm64` artifacts. GitHub Release includes both.
+  Complexity: M
+
+- [ ] P1 — **Version-aware shared-path protection in leftover scanner**
+  Why: Uninstalling one version of multi-version software (e.g., Blender 4.4) can destroy shared settings used by another version (Blender 4.2). The leftover scanner doesn't distinguish version-specific from shared paths.
+  Evidence: BCU #758 (Blender settings data loss). Uninstalr's relevance-filtering avoids this by attributing files to specific installs.
+  Touches: `Core/FileSystem/FileLeftoverScanner.cs`, `Core/Registry/RegistryLeftoverScanner.cs`, `Core/Data/LeftoverSignatureDb.cs`
+  Acceptance: Before flagging a leftover path, the scanner checks if any other installed program shares the same parent directory (via `InstalledProgramScanner`). Shared paths are downgraded from Safe to Risky confidence. Test case: two versions of same app installed, uninstall one, verify shared paths are not flagged as Safe.
+  Complexity: M
+
+- [ ] P1 — **Restart Manager locked-file detection**
+  Why: Uninstallers frequently fail because files are locked by running processes. The Windows Restart Manager API (`rstrtmgr.dll`) can identify which processes hold locks and optionally gracefully shut them down.
+  Evidence: BCU #129 (delete locked files on reboot). Restart Manager API docs (`RmStartSession`, `RmRegisterResources`, `RmGetList`).
+  Touches: New `Core/FileSystem/LockedFileResolver.cs`, `Core/Uninstall/UninstallEngine.cs`
+  Acceptance: When a file deletion fails with `IOException` (sharing violation), DeepPurge identifies the locking process by name/PID and offers: (1) close the process, (2) queue for delete-on-reboot via `MoveFileEx(MOVEFILE_DELAY_UNTIL_REBOOT)`, (3) skip. CLI uses `--force-close` flag.
+  Complexity: M
+
+- [ ] P1 — **ETW registry monitoring for install tracking**
+  Why: Current install monitor captures filesystem changes (USN journal) but not registry changes in real-time. The `Microsoft.Diagnostics.Tracing.TraceEvent` NuGet library can capture every registry create/set/delete via the kernel ETW provider, closing the snapshot-vs-journal gap for registry.
+  Evidence: `KernelTraceEventParser.Keywords.Registry` (0x00020000). Events: RegistryCreate, RegistrySetValue, RegistryDelete. Filters by installer PID.
+  Touches: New `Core/InstallMonitor/RegistryEtwTracer.cs`, `Core/InstallMonitor/InstallSnapshotEngine.cs`, `DeepPurge.Core.csproj` (add `Microsoft.Diagnostics.Tracing.TraceEvent` NuGet)
+  Acceptance: `TraceInstallAsync` captures both filesystem (USN journal) and registry (ETW) changes during install. Registry diff is precise (only installer-PID operations), not snapshot-based. CLI `--legacy` flag falls back to snapshot.
+  Complexity: L
+
+### P2 — Quality, reliability, developer experience
+
+- [ ] P2 — **ViewModel decomposition — extract per-panel ViewModels**
+  Why: MainViewModel is 1,666 lines across 2 partials with 15+ feature areas. Cognitive load, merge conflicts, and testability all suffer. MainWindow code-behind is 1,044 lines with similar monolith issues.
+  Evidence: `wc -l MainViewModel.cs MainViewModel.Extensions.cs` → 1,060 + 606.
+  Touches: `App/ViewModels/MainViewModel.cs`, `App/ViewModels/MainViewModel.Extensions.cs`, new per-panel VM files (DriverPanelViewModel, DuplicatePanelViewModel, etc.), `App/Views/MainWindow.xaml.cs`
+  Acceptance: MainViewModel composes per-panel VMs. Each panel VM is independently testable. MainViewModel drops below 400 lines.
+  Complexity: L
+
+- [ ] P2 — **Global path exclusion whitelist**
+  Why: Users need to protect specific directories from all scans/cleanups (e.g., custom data directories inside AppData, development environments). No mechanism exists.
+  Evidence: FluentCleaner's global exclusion whitelist. BCU supports exclusions. No exclusion logic in DeepPurge's SafetyGuard or scanners.
+  Touches: `Core/App/DataPaths.cs` (persist exclusion list), `Core/Safety/SafetyGuard.cs` (check before delete), `Core/FileSystem/FileLeftoverScanner.cs`, `Core/FileSystem/JunkFilesCleaner.cs`, `Core/Privacy/EvidenceRemover.cs`
+  Acceptance: Users can add paths to an exclusion list (persisted in `DataPaths.Config`). All scanners and deletion pipelines skip excluded paths. CLI supports `--exclude <path>`.
+  Complexity: M
+
+- [ ] P2 — **Amcache parsing for remnant discovery**
+  Why: `Amcache.hve` tracks every executed binary with SHA1, publisher, install date, and paths. Cross-referencing against installed programs reveals remnant executables that survive uninstall — enabling forensic-style orphan detection without prior monitoring.
+  Evidence: Ashampoo's "forensic analysis" feature. `InventoryApplication` and `InventoryApplicationFile` registry paths inside Amcache. P/Invoke via `offreg.dll` (`OROpenHive`/`OREnumKey`).
+  Touches: New `Core/Registry/AmcacheParser.cs`, `Core/FileSystem/FileLeftoverScanner.cs`
+  Acceptance: Scan parses `Amcache.hve` to find executables associated with an uninstalled program. Results feed into the leftover scanner as high-confidence matches.
+  Complexity: M
+
+- [ ] P2 — **CIM migration from System.Management (WMI)**
+  Why: `System.Management` (WMI) is deprecated. CIM via `Microsoft.Management.Infrastructure` is faster, scales better, and is the recommended path for .NET 8+. Current WMI usage: SystemRestoreManager, SecureDelete (SSD detection).
+  Evidence: Microsoft deprecation guidance. `Win32_Product` triggers MSI reconfiguration on query.
+  Touches: `Core/Safety/SystemRestoreManager.cs`, `Core/Safety/SecureDelete.cs`, `DeepPurge.Core.csproj` (replace `System.Management` with `Microsoft.Management.Infrastructure`)
+  Acceptance: All WMI calls replaced with CIM equivalents. `Win32_Product` never queried. Build warning-free.
+  Complexity: S
+
+### P3 — Polish, differentiation
+
+- [ ] P3 — **Context menu shell integration (right-click uninstall)**
+  Why: Right-click any executable in Explorer → "Uninstall with DeepPurge" resolves the "which entry is this program?" problem without Hunter Mode's complexity.
+  Evidence: BCU #331 (context menu integration). Standard UX pattern in Revo, IObit, HiBit.
+  Touches: New `Core/Shell/ShellExtensionRegistrar.cs`, `App/Views/MainWindow.xaml.cs` (handle deep-link args), CLI (handle `--target <path>` arg)
+  Acceptance: `deeppurgecli register-shell` adds a context menu entry for `.exe` files. Right-click → "Uninstall with DeepPurge" opens the GUI with the program pre-selected. `deeppurgecli unregister-shell` removes it.
+  Complexity: M
+
+- [ ] P3 — **Bundleware / sideload detection**
+  Why: Programs silently installed alongside other software (toolbar bundling, browser hijacker sideloading) are a distinct scan category. Users don't know they exist until they see symptoms.
+  Evidence: IObit's bundleware scanner (paywalled). Uninstalr blog calls out the irony of IObit bundling iTop VPN.
+  Touches: `Core/Registry/InstalledProgramScanner.cs` (flag programs with `InstallDate` matching another program's install within ±5 minutes), `Core/Models/InstalledProgram.cs` (add `IsBundleware` flag)
+  Acceptance: Programs installed within 5 minutes of another program's install get flagged as "Possibly bundled" in the UI. No false positives for system updates.
+  Complexity: S
+
+- [ ] P3 — **DLL search order hardening**
+  Why: BleachBit CVE-2025-32780 proved that elevated system utilities are DLL hijack targets. An attacker can place a malicious DLL in `%LOCALAPPDATA%\Microsoft\WindowsApps\` and gain SYSTEM when the elevated tool loads it.
+  Evidence: BleachBit CVE-2025-32780, dnSpy .NET DLL hijack research.
+  Touches: `App/App.xaml.cs` (call `SetDllDirectory("")` at startup), `DeepPurge.App.csproj` (add `<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>`)
+  Acceptance: `SetDllDirectory("")` called before any other code. Current directory removed from DLL search path. Verified: placing a test DLL in CWD does not get loaded.
+  Complexity: S
+
+- [ ] P3 — **Scheduled-task creation hardening (CVE-2025-33067)**
+  Why: Task Scheduler privilege escalation via Batch Logon authentication grants SYSTEM to any scheduled task. DeepPurge's ScheduleManager creates tasks via `schtasks.exe`.
+  Evidence: CVE-2025-33067 (June 2025). ScheduleManager uses `schtasks /Create /RU SYSTEM /RL HIGHEST`.
+  Touches: `Core/Schedule/ScheduleManager.cs`
+  Acceptance: Tasks use `TASK_LOGON_INTERACTIVE_TOKEN` (not password-based). `/RL HIGHEST` only when elevation is genuinely needed. Task XML validated against schema before registration.
+  Complexity: S
+
 ## Ideas / not committed
 
 Things worth considering but not on a timeline:
