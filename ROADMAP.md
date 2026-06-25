@@ -78,12 +78,6 @@ Blocked items live in `Roadmap_Blocked.md`.
   Acceptance: History panel shows a bar/line chart of bytes freed per clean run over time, sourced from ActivityLog JSONL data.
   Complexity: S
 
-- [ ] P3 — **Orphan scan without prior uninstall**
-  Why: Scan for remnants of programs already removed by other means. BCU's most-requested enhancement (#736). Ashampoo calls this "forensic analysis."
-  Evidence: BCU #736 (automatic leftover scans without uninstallation); Ashampoo UnInstaller 16 forensic analysis.
-  Touches: `Core/FileSystem/FileLeftoverScanner.cs`, `Core/Data/LeftoverSignatureDb.cs`, new UI panel
-  Acceptance: User can trigger a system-wide orphan scan that uses the signature DB to find remnants of programs not currently installed. Results shown in a dedicated panel with confidence ratings.
-  Complexity: M
 
 ## Research-Driven Additions (June 2026)
 
