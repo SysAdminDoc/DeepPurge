@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using DeepPurge.Core.Diagnostics;
 
 namespace DeepPurge.Core.Browsers;
 
@@ -85,7 +86,7 @@ public static class BrowserExtensionScanner
             foreach (var dir in Directory.GetDirectories(userDataPath, "Profile *"))
                 profiles.Add(dir);
         }
-        catch { }
+        catch (Exception ex) { Log.Warn($"Enumerating browser profiles for {browserName}: {ex.Message}"); }
 
         foreach (var profilePath in profiles)
         {
@@ -134,13 +135,13 @@ public static class BrowserExtensionScanner
 
                                 extensions.Add(ext);
                             }
-                            catch { }
+                            catch (Exception ex) { Log.Warn($"Parsing extension manifest in {versionDir}: {ex.Message}"); }
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { Log.Warn($"Enumerating extension versions for {extId}: {ex.Message}"); }
                 }
             }
-            catch { }
+            catch (Exception ex) { Log.Warn($"Scanning {browserName} extensions in {profilePath}: {ex.Message}"); }
 
             // Check preferences for disabled extensions
             var prefsPath = Path.Combine(profilePath, "Preferences");
@@ -165,7 +166,7 @@ public static class BrowserExtensionScanner
                         }
                     }
                 }
-                catch { }
+                catch (Exception ex) { Log.Warn($"Reading {browserName} preferences in {profilePath}: {ex.Message}"); }
             }
         }
     }
@@ -219,10 +220,10 @@ public static class BrowserExtensionScanner
                         });
                     }
                 }
-                catch { }
+                catch (Exception ex) { Log.Warn($"Parsing Firefox addons.json in {profileDir}: {ex.Message}"); }
             }
         }
-        catch { }
+        catch (Exception ex) { Log.Warn($"Enumerating Firefox profile directories: {ex.Message}"); }
     }
 
     public static bool RemoveExtension(BrowserExtension ext)
@@ -240,7 +241,7 @@ public static class BrowserExtensionScanner
                 return true;
             }
         }
-        catch { }
+        catch (Exception ex) { Log.Warn($"Removing extension '{ext.Name}' at {ext.Path}: {ex.Message}"); }
         return false;
     }
 
@@ -256,8 +257,8 @@ public static class BrowserExtensionScanner
         {
             return new DirectoryInfo(path)
                 .EnumerateFiles("*", SearchOption.AllDirectories)
-                .Sum(fi => { try { return fi.Length; } catch { return 0; } });
+                .Sum(fi => { try { return fi.Length; } catch (Exception ex) { Log.Warn($"Reading file size for {fi.FullName}: {ex.Message}"); return 0; } });
         }
-        catch { return 0; }
+        catch (Exception ex) { Log.Warn($"Calculating directory size for {path}: {ex.Message}"); return 0; }
     }
 }

@@ -1,4 +1,5 @@
 using DeepPurge.Core.Data;
+using DeepPurge.Core.Diagnostics;
 using DeepPurge.Core.Models;
 
 namespace DeepPurge.Core.FileSystem;
@@ -230,7 +231,7 @@ public class FileLeftoverScanner
                 }
             }
         }
-        catch { }
+        catch (Exception ex) { Log.Warn($"Failed to build cross-reference from installed programs: {ex.Message}"); }
     }
 
     // ═══════════════════════════════════════════════════════
@@ -347,7 +348,7 @@ public class FileLeftoverScanner
                 });
             }
         }
-        catch { }
+        catch (Exception ex) { Log.Warn($"Failed to enumerate directories in scan target: {ex.Message}"); }
     }
 
     private void ScanUserDataFolders(List<LeftoverItem> leftovers)
@@ -415,10 +416,10 @@ public class FileLeftoverScanner
                             Details = "Temporary file"
                         });
                     }
-                    catch { }
+                    catch (Exception ex) { Log.Warn($"Failed to read temp file info: {ex.Message}"); }
                 }
             }
-            catch { }
+            catch (Exception ex) { Log.Warn($"Failed to enumerate temp folder: {ex.Message}"); }
         }
     }
 
@@ -467,7 +468,7 @@ public class FileLeftoverScanner
                     });
                 }
             }
-            catch { }
+            catch (Exception ex) { Log.Warn($"Failed to enumerate Start Menu entries: {ex.Message}"); }
         }
     }
 
@@ -499,7 +500,7 @@ public class FileLeftoverScanner
                     });
                 }
             }
-            catch { }
+            catch (Exception ex) { Log.Warn($"Failed to enumerate desktop shortcuts: {ex.Message}"); }
         }
     }
 
@@ -526,7 +527,7 @@ public class FileLeftoverScanner
                 });
             }
         }
-        catch { }
+        catch (Exception ex) { Log.Warn($"Failed to enumerate Prefetch files: {ex.Message}"); }
     }
 
     private void ScanAllDrives(List<LeftoverItem> leftovers)
@@ -577,7 +578,7 @@ public class FileLeftoverScanner
                 }
             }
         }
-        catch { }
+        catch (Exception ex) { Log.Warn($"Failed to enumerate user profile AppData: {ex.Message}"); }
     }
 
     // ═══════════════════════════════════════════════════════

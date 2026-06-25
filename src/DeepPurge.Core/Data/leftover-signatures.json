@@ -29,7 +29,6 @@
   {"name":"Dropbox","aliases":["Dropbox"],"files":["%AppData%\\Dropbox","%LocalAppData%\\Dropbox","%ProgramFiles(x86)%\\Dropbox","%ProgramData%\\Dropbox"],"registry":["HKCU\\Software\\Dropbox","HKLM\\SOFTWARE\\Dropbox"]},
   {"name":"OneDrive","aliases":["OneDrive","Microsoft OneDrive"],"files":["%LocalAppData%\\Microsoft\\OneDrive","%ProgramData%\\Microsoft OneDrive"],"registry":["HKCU\\Software\\Microsoft\\OneDrive"]},
   {"name":"iTunes","aliases":["iTunes","Apple iTunes"],"files":["%AppData%\\Apple Computer\\iTunes","%LocalAppData%\\Apple Computer","%ProgramFiles%\\iTunes","%CommonProgramFiles%\\Apple"],"registry":["HKCU\\Software\\Apple Computer, Inc.\\iTunes","HKLM\\SOFTWARE\\Apple Inc.\\iTunes"]},
-  {"name":"Spotify","aliases":["Spotify"],"files":["%AppData%\\Spotify","%LocalAppData%\\Spotify"],"registry":["HKCU\\Software\\Spotify"]},
   {"name":"OBS Studio","aliases":["OBS","OBS Studio","obs-studio"],"files":["%AppData%\\obs-studio","%ProgramFiles%\\obs-studio"],"registry":["HKLM\\SOFTWARE\\OBS Studio"]},
   {"name":"GIMP","aliases":["GIMP"],"files":["%AppData%\\GIMP","%ProgramFiles%\\GIMP*"],"registry":["HKLM\\SOFTWARE\\GIMP"]},
   {"name":"Audacity","aliases":["Audacity"],"files":["%AppData%\\audacity","%ProgramFiles%\\Audacity"],"registry":["HKLM\\SOFTWARE\\Audacity"]},

@@ -26,7 +26,7 @@ public static class UserIdentity
 
             return !string.Equals(currentSid, consoleSid, StringComparison.OrdinalIgnoreCase);
         }
-        catch { return false; }
+        catch { /* explorer token query is best-effort — fallback to current identity */ return false; }
     }
 
     private static string ResolveRealUserSid()
@@ -39,7 +39,7 @@ public static class UserIdentity
         catch (Exception ex) { Log.Warn($"Console SID resolution failed: {ex.Message}"); }
 
         try { return WindowsIdentity.GetCurrent().User?.Value ?? ""; }
-        catch { return ""; }
+        catch { /* explorer token query is best-effort — fallback to current identity */ return ""; }
     }
 
     private static string ResolveRealLocalAppData()
@@ -86,11 +86,11 @@ public static class UserIdentity
                     }
                     finally { CloseHandle(tokenHandle); }
                 }
-                catch { continue; }
+                catch { /* explorer token query is best-effort — fallback to current identity */ continue; }
                 finally { explorer.Dispose(); }
             }
         }
-        catch { }
+        catch { /* explorer token query is best-effort — fallback to current identity */ }
         return null;
     }
 
@@ -102,7 +102,7 @@ public static class UserIdentity
         {
             return Microsoft.Win32.Registry.Users.OpenSubKey($@"{sid}\{subKey}");
         }
-        catch { return null; }
+        catch { /* explorer token query is best-effort — fallback to current identity */ return null; }
     }
 
     private const uint TOKEN_QUERY = 0x0008;

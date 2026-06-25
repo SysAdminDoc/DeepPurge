@@ -1,5 +1,6 @@
 using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Windows;
 using System.Windows.Threading;
@@ -9,6 +10,15 @@ namespace DeepPurge.App;
 
 public partial class App : Application
 {
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetDllDirectory(string lpPathName);
+
+    static App()
+    {
+        SetDllDirectory("");
+    }
+
     // Single source of truth: the running assembly's version. Avoids the old
     // duplicated-string problem where csproj, manifest, and this hardcoded
     // const could silently disagree after a release bump.

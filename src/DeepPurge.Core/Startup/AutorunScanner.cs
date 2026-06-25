@@ -100,7 +100,7 @@ public static class AutorunScanner
             {
                 try { names.Add(p.ProcessName); }
                 catch { /* exited between enum and access */ }
-                finally { try { p.Dispose(); } catch { } }
+                finally { try { p.Dispose(); } catch { /* Process.Dispose in finally is best-effort */ } }
             }
             return new ProcessNameSet(names);
         }

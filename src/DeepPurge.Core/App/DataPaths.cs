@@ -61,7 +61,7 @@ public static class DataPaths
             var exeDir = AppContext.BaseDirectory;
             return File.Exists(Path.Combine(exeDir, PortableMarker));
         }
-        catch { return false; }
+        catch { /* init-time fallback — Log may not be available yet */ return false; }
     }
 
     private static string ResolveRoot()
@@ -82,14 +82,14 @@ public static class DataPaths
         catch
         {
             var fallback = Path.Combine(Path.GetTempPath(), "DeepPurge");
-            try { Directory.CreateDirectory(fallback); } catch { }
+            try { Directory.CreateDirectory(fallback); } catch { /* init-time fallback — Log may not be available yet */ }
             return fallback;
         }
     }
 
     private static string Ensure(string path)
     {
-        try { Directory.CreateDirectory(path); } catch { }
+        try { Directory.CreateDirectory(path); } catch { /* init-time fallback — Log may not be available yet */ }
         return path;
     }
 }

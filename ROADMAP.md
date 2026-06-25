@@ -134,13 +134,6 @@ Blocked items live in `Roadmap_Blocked.md`.
   Acceptance: All user-visible strings in XAML and code-behind reference `Resources.Designer.cs`. Adding a `Resources.de.resx` file produces a German UI.
   Complexity: M
 
-- [ ] P1 — **Replace 57 remaining empty catch blocks with Log.Warn**
-  Why: 57 `catch { }` blocks across 20 Core files silently swallow exceptions. Field debugging is impossible — errors vanish without trace. The pattern fix (replace with `catch (Exception ex) { Log.Warn(...); }`) was proven in the round-2 fix that addressed 22 blocks in RegistryLeftoverScanner.
-  Evidence: `grep -c 'catch\s*\{\s*\}'` across Core → 57 hits in 20 files. 204 total catch blocks — 28% are silent.
-  Touches: All 20 affected files in `src/DeepPurge.Core/`
-  Acceptance: Zero `catch { }` blocks in Core. All replaced with `Log.Warn` (for non-fatal) or `Log.Error` (for unexpected). Exceptions that are intentionally ignored get a comment explaining why.
-  Complexity: S
-
 - [ ] P1 — **ARM64 build target**
   Why: Windows on ARM is growing (Surface Pro, Snapdragon X Elite/Plus, Qualcomm Oryon). DeepPurge only publishes `win-x64`. P/Invoke-heavy code (MFT structs, USN journal, COM IShellLinkW) needs ARM64 validation.
   Evidence: BCU issue #841 (ARM64 request). No `win-arm64` in any csproj or workflow.
@@ -215,19 +208,6 @@ Blocked items live in `Roadmap_Blocked.md`.
   Acceptance: Programs installed within 5 minutes of another program's install get flagged as "Possibly bundled" in the UI. No false positives for system updates.
   Complexity: S
 
-- [ ] P3 — **DLL search order hardening**
-  Why: BleachBit CVE-2025-32780 proved that elevated system utilities are DLL hijack targets. An attacker can place a malicious DLL in `%LOCALAPPDATA%\Microsoft\WindowsApps\` and gain SYSTEM when the elevated tool loads it.
-  Evidence: BleachBit CVE-2025-32780, dnSpy .NET DLL hijack research.
-  Touches: `App/App.xaml.cs` (call `SetDllDirectory("")` at startup), `DeepPurge.App.csproj` (add `<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>`)
-  Acceptance: `SetDllDirectory("")` called before any other code. Current directory removed from DLL search path. Verified: placing a test DLL in CWD does not get loaded.
-  Complexity: S
-
-- [ ] P3 — **Scheduled-task creation hardening (CVE-2025-33067)**
-  Why: Task Scheduler privilege escalation via Batch Logon authentication grants SYSTEM to any scheduled task. DeepPurge's ScheduleManager creates tasks via `schtasks.exe`.
-  Evidence: CVE-2025-33067 (June 2025). ScheduleManager uses `schtasks /Create /RU SYSTEM /RL HIGHEST`.
-  Touches: `Core/Schedule/ScheduleManager.cs`
-  Acceptance: Tasks use `TASK_LOGON_INTERACTIVE_TOKEN` (not password-based). `/RL HIGHEST` only when elevation is genuinely needed. Task XML validated against schema before registration.
-  Complexity: S
 
 ## Ideas / not committed
 

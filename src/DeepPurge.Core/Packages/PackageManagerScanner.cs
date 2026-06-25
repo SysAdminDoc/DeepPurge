@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using DeepPurge.Core.Diagnostics;
 using DeepPurge.Core.Models;
 
 namespace DeepPurge.Core.Packages;
@@ -81,7 +82,7 @@ public static class PackageManagerScanner
             if (!string.IsNullOrWhiteSpace(jsonOutput) && jsonOutput.TrimStart().StartsWith('['))
                 return ParseWingetJson(jsonOutput);
         }
-        catch { }
+        catch (Exception ex) { Log.Warn($"Winget JSON query failed: {ex.Message}"); }
 
         try
         {
@@ -89,7 +90,7 @@ public static class PackageManagerScanner
                 "list --disable-interactivity --accept-source-agreements", ct);
             if (!string.IsNullOrWhiteSpace(tableOutput)) return ParseWingetTable(tableOutput);
         }
-        catch { }
+        catch (Exception ex) { Log.Warn($"Winget table query failed: {ex.Message}"); }
         return new();
     }
 
@@ -112,7 +113,7 @@ public static class PackageManagerScanner
                     entries.Add(new WingetEntry(id, name, version, available, source));
             }
         }
-        catch { }
+        catch (Exception ex) { Log.Warn($"Winget JSON parse failed: {ex.Message}"); }
         return entries;
     }
 
@@ -227,7 +228,7 @@ public static class PackageManagerScanner
                         if (doc.RootElement.TryGetProperty("bucket", out var b))
                             bucket = b.GetString() ?? "";
                     }
-                    catch { /* keep defaults */ }
+                    catch (Exception ex) { Log.Warn($"Scoop install.json parse failed for '{name}': {ex.Message}"); }
                 }
 
                 if (File.Exists(manifestJson))
@@ -238,14 +239,14 @@ public static class PackageManagerScanner
                         if (doc.RootElement.TryGetProperty("version", out var v))
                             version = v.GetString() ?? "";
                     }
-                    catch { /* keep defaults */ }
+                    catch (Exception ex) { Log.Warn($"Scoop manifest.json parse failed for '{name}': {ex.Message}"); }
                 }
 
                 result.Add(new ScoopEntry(name, version, string.IsNullOrEmpty(bucket) ? "main" : bucket));
             }
         }
         catch (OperationCanceledException) { throw; }
-        catch { /* permission error or weird FS state — return what we have */ }
+        catch (Exception ex) { Log.Warn($"Scoop directory enumeration failed: {ex.Message}"); }
 
         return result;
     }
@@ -307,7 +308,7 @@ public static class PackageManagerScanner
 
         if (!proc.WaitForExit(ProcessTimeoutMs))
         {
-            try { proc.Kill(entireProcessTree: true); } catch { /* already dead */ }
+            try { proc.Kill(entireProcessTree: true); } catch (Exception ex) { Log.Warn($"Process kill failed: {ex.Message}"); }
             return sb.ToString();
         }
         proc.WaitForExit(); // flush async handlers

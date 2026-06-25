@@ -104,7 +104,7 @@ public class WindowsRepairEngine
         }
         catch (OperationCanceledException)
         {
-            try { if (p != null && !p.HasExited) p.Kill(entireProcessTree: true); } catch { }
+            try { if (p != null && !p.HasExited) p.Kill(entireProcessTree: true); } catch { /* Process.Kill during cleanup — process may have already exited */ }
             result.ExitCode = -1;
             log?.Report("[cancelled]");
         }
