@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using DeepPurge.Core.Diagnostics;
 using DeepPurge.Core.Safety;
 
 namespace DeepPurge.Core.FileSystem;
@@ -188,7 +189,7 @@ public static class JunkFilesCleaner
                     if (di.LastWriteTime < cutoff)
                         cat.Files.Add(new JunkFile { Path = dir, Size = GetDirSize(dir), IsDirectory = true });
                 }
-                catch { /* skip */ }
+                catch (Exception ex) { Log.Warn($"Temp dir scan failed for '{dir}': {ex.Message}"); }
             }
             foreach (var file in Directory.EnumerateFiles(basePath, "*", SearchOption.TopDirectoryOnly))
             {
@@ -198,10 +199,10 @@ public static class JunkFilesCleaner
                     if (fi.LastWriteTime < cutoff)
                         cat.Files.Add(new JunkFile { Path = file, Size = fi.Length });
                 }
-                catch { /* skip */ }
+                catch (Exception ex) { Log.Warn($"Temp file scan failed for '{file}': {ex.Message}"); }
             }
         }
-        catch { /* skip */ }
+        catch (Exception ex) { Log.Warn($"Temp directory enumeration failed for '{basePath}': {ex.Message}"); }
     }
 
     // ─── CHROMIUM CACHES ───
@@ -239,7 +240,7 @@ public static class JunkFilesCleaner
             {
                 var profiles = new List<string>();
                 if (Directory.Exists(Path.Combine(basePath, "Default"))) profiles.Add(Path.Combine(basePath, "Default"));
-                try { profiles.AddRange(Directory.GetDirectories(basePath, "Profile *")); } catch { }
+                try { profiles.AddRange(Directory.GetDirectories(basePath, "Profile *")); } catch (Exception ex) { Log.Warn($"Chromium profile enumeration failed for '{basePath}': {ex.Message}"); }
                 if (label.StartsWith("Opera", StringComparison.Ordinal) && profiles.Count == 0) profiles.Add(basePath);
 
                 foreach (var profile in profiles)
@@ -249,7 +250,7 @@ public static class JunkFilesCleaner
                 foreach (var sub in new[] { "ShaderCache", "GrShaderCache", "Safe Browsing" })
                     AddDirIfExists(cat, Path.Combine(basePath, sub));
             }
-            catch { /* skip */ }
+            catch (Exception ex) { Log.Warn($"Chromium cache scan failed for '{basePath}': {ex.Message}"); }
         }
         return cat;
     }
@@ -273,7 +274,7 @@ public static class JunkFilesCleaner
                 foreach (var p in Directory.GetDirectories(roaming))
                     AddDirIfExists(cat, Path.Combine(p, "startupCache"));
         }
-        catch { /* skip */ }
+        catch (Exception ex) { Log.Warn($"Firefox roaming profile scan failed: {ex.Message}"); }
 
         try
         {
@@ -282,7 +283,7 @@ public static class JunkFilesCleaner
                     foreach (var sub in new[] { "cache2", "OfflineCache", "shader-cache" })
                         AddDirIfExists(cat, Path.Combine(p, sub));
         }
-        catch { /* skip */ }
+        catch (Exception ex) { Log.Warn($"Firefox local cache scan failed: {ex.Message}"); }
 
         return cat;
     }
@@ -323,7 +324,7 @@ public static class JunkFilesCleaner
                 foreach (var file in Directory.GetFiles(exp, pattern))
                     AddFileIfExists(cat, file);
         }
-        catch { /* skip */ }
+        catch (Exception ex) { Log.Warn($"Thumbnail cache scan failed: {ex.Message}"); }
         return cat;
     }
 
@@ -362,10 +363,10 @@ public static class JunkFilesCleaner
                     if (fi.LastAccessTime < cutoff)
                         cat.Files.Add(new JunkFile { Path = f, Size = fi.Length });
                 }
-                catch { /* skip */ }
+                catch (Exception ex) { Log.Warn($"Prefetch file scan failed for '{f}': {ex.Message}"); }
             }
         }
-        catch { /* skip */ }
+        catch (Exception ex) { Log.Warn($"Prefetch directory scan failed: {ex.Message}"); }
         return cat;
     }
 
@@ -396,10 +397,10 @@ public static class JunkFilesCleaner
                             if (fi.LastWriteTime < cutoff)
                                 cat.Files.Add(new JunkFile { Path = f, Size = fi.Length });
                         }
-                        catch { /* skip */ }
+                        catch (Exception ex) { Log.Warn($"Log file scan failed for '{f}': {ex.Message}"); }
                     }
                 }
-                catch { /* skip */ }
+                catch (Exception ex) { Log.Warn($"Log file enumeration failed for '{p}' with pattern '{ext}': {ex.Message}"); }
             }
         }
 
@@ -409,10 +410,10 @@ public static class JunkFilesCleaner
             foreach (var f in Directory.EnumerateFiles(Path.GetTempPath(), "dd_*.log"))
             {
                 try { cat.Files.Add(new JunkFile { Path = f, Size = new FileInfo(f).Length }); }
-                catch { /* skip */ }
+                catch (Exception ex) { Log.Warn($"Installer log scan failed for '{f}': {ex.Message}"); }
             }
         }
-        catch { /* skip */ }
+        catch (Exception ex) { Log.Warn($"Installer log enumeration failed: {ex.Message}"); }
 
         return cat;
     }
@@ -464,7 +465,7 @@ public static class JunkFilesCleaner
             foreach (var dir in Directory.GetDirectories(SystemDrive + @"\", "$WINDOWS.~*"))
                 cat.Files.Add(new JunkFile { Path = dir, Size = GetDirSize(dir), IsDirectory = true });
         }
-        catch { /* skip */ }
+        catch (Exception ex) { Log.Warn($"Old Windows installation scan failed: {ex.Message}"); }
         AddDirIfExists(cat, Path.Combine(SystemDrive, "Windows.old"));
         return cat;
     }
@@ -490,7 +491,7 @@ public static class JunkFilesCleaner
                 if (!string.IsNullOrEmpty(p.DisplayName)) installed.Add(p.DisplayName);
             }
         }
-        catch { }
+        catch (Exception ex) { Log.Warn($"Installed program registry scan failed: {ex.Message}"); }
 
         try
         {
@@ -503,7 +504,7 @@ public static class JunkFilesCleaner
                     cat.Files.Add(new JunkFile { Path = dir, Size = size, IsDirectory = true });
             }
         }
-        catch { }
+        catch (Exception ex) { Log.Warn($"Package cache directory scan failed: {ex.Message}"); }
         return cat;
     }
 
@@ -583,14 +584,14 @@ public static class JunkFilesCleaner
         if (!Directory.Exists(recentPath)) return cat;
 
         try { foreach (var f in Directory.GetFiles(recentPath, "*.lnk")) AddFileIfExists(cat, f); }
-        catch { /* skip */ }
+        catch (Exception ex) { Log.Warn($"Recent .lnk files scan failed: {ex.Message}"); }
 
         foreach (var sub in new[] { "AutomaticDestinations", "CustomDestinations" })
         {
             var p = Path.Combine(recentPath, sub);
             if (!Directory.Exists(p)) continue;
             try { foreach (var f in Directory.GetFiles(p)) AddFileIfExists(cat, f); }
-            catch { /* skip */ }
+            catch (Exception ex) { Log.Warn($"Recent jump list scan failed for '{p}': {ex.Message}"); }
         }
         return cat;
     }
@@ -609,7 +610,7 @@ public static class JunkFilesCleaner
                 "Thumbs.db", SearchOption.AllDirectories))
                 AddFileIfExists(cat, f);
         }
-        catch { /* skip */ }
+        catch (Exception ex) { Log.Warn($"Thumbs.db scan failed: {ex.Message}"); }
         return cat;
     }
 
@@ -618,21 +619,21 @@ public static class JunkFilesCleaner
     {
         if (!Directory.Exists(path)) return;
         try { cat.Files.Add(new JunkFile { Path = path, Size = GetDirSize(path), IsDirectory = true }); }
-        catch { /* skip */ }
+        catch (Exception ex) { Log.Warn($"Failed to add directory '{path}': {ex.Message}"); }
     }
 
     private static void AddFileIfExists(JunkCategory cat, string path)
     {
         if (!File.Exists(path)) return;
         try { cat.Files.Add(new JunkFile { Path = path, Size = new FileInfo(path).Length }); }
-        catch { /* skip */ }
+        catch (Exception ex) { Log.Warn($"Failed to add file '{path}': {ex.Message}"); }
     }
 
     private static void AddDirFilesIfExists(JunkCategory cat, string dir, string pattern)
     {
         if (!Directory.Exists(dir)) return;
         try { foreach (var f in Directory.GetFiles(dir, pattern)) AddFileIfExists(cat, f); }
-        catch { /* skip */ }
+        catch (Exception ex) { Log.Warn($"Failed to enumerate files in '{dir}' with pattern '{pattern}': {ex.Message}"); }
     }
 
     private static long GetDirSize(string path)

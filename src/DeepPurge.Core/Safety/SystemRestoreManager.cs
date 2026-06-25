@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Management;
+using DeepPurge.Core.Diagnostics;
 
 namespace DeepPurge.Core.Safety;
 
@@ -91,7 +92,7 @@ public static class SystemRestoreManager
                 });
             }
         }
-        catch { }
+        catch (Exception ex) { Log.Warn($"WMI restore point query failed: {ex.Message}"); }
 
         return points.OrderByDescending(p => p.CreationTime).ToList();
     }
@@ -111,7 +112,7 @@ public static class SystemRestoreManager
             p?.WaitForExit(120000);
             return p?.ExitCode == 0;
         }
-        catch { return false; }
+        catch (Exception ex) { Log.Warn($"Create restore point failed: {ex.Message}"); return false; }
     }
 
     public static bool DeleteRestorePoint(int sequenceNumber)
@@ -129,7 +130,7 @@ public static class SystemRestoreManager
             p?.WaitForExit(30000);
             return p?.ExitCode == 0;
         }
-        catch { return false; }
+        catch (Exception ex) { Log.Warn($"Delete restore point failed: {ex.Message}"); return false; }
     }
 
     public static bool IsRestoreEnabled()
@@ -148,6 +149,6 @@ public static class SystemRestoreManager
             p?.WaitForExit(15000);
             return output?.Contains("True") == true;
         }
-        catch { return false; }
+        catch (Exception ex) { Log.Warn($"Check restore enabled failed: {ex.Message}"); return false; }
     }
 }

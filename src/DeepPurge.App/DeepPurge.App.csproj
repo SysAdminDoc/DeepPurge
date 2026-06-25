@@ -13,6 +13,7 @@
     <Description>DeepPurge - Open source program uninstaller for Windows</Description>
     <ApplicationIcon>..\..\icon.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
 
   <ItemGroup>

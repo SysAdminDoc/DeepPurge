@@ -97,7 +97,7 @@ public class InstallSnapshotEngine
                         var fi = new FileInfo(file);
                         filesBag.Add(new SnapshotEntry(file, fi.Length, fi.LastWriteTimeUtc));
                     }
-                    catch { /* access denied: skip */ }
+                    catch (Exception ex) { Log.Warn($"Snapshot file info '{file}': {ex.Message}"); }
                 }
             }, ct))
             .ToArray();
@@ -284,7 +284,7 @@ public class InstallSnapshotEngine
                         var fi = new FileInfo(c.Path);
                         if (fi.Exists) delta.AddedFiles.Add(new SnapshotEntry(c.Path, fi.Length, fi.LastWriteTimeUtc));
                     }
-                    catch { }
+                    catch (Exception ex) { Log.Warn($"USN file info '{c.Path}': {ex.Message}"); }
                 }
                 else if (c.Reason == UsnChangeReason.Deleted)
                 {
@@ -359,14 +359,14 @@ public class InstallSnapshotEngine
                           .OrderByDescending(f => f.LastWriteTimeUtc)
                           .Skip(MaxSnapshotsPerProgram);
             foreach (var f in mine)
-                try { f.Delete(); } catch { }
+                try { f.Delete(); } catch (Exception ex) { Log.Warn($"Prune per-program snapshot '{f.Name}': {ex.Message}"); }
 
             // Global cap.
             var all = dir.EnumerateFiles("*.snapshot.json.gz")
                          .OrderByDescending(f => f.LastWriteTimeUtc)
                          .Skip(MaxTotalSnapshots);
             foreach (var f in all)
-                try { f.Delete(); } catch { }
+                try { f.Delete(); } catch (Exception ex) { Log.Warn($"Prune global snapshot '{f.Name}': {ex.Message}"); }
         }
         catch (Exception ex) { Log.Warn($"PruneSnapshots: {ex.Message}"); }
     }
@@ -403,7 +403,7 @@ public class InstallSnapshotEngine
                 files = Directory.GetFiles(cur);
                 dirs  = Directory.GetDirectories(cur);
             }
-            catch { continue; }
+            catch (Exception ex) { Log.Warn($"Enumerate directory '{cur}': {ex.Message}"); continue; }
             foreach (var f in files) yield return f;
             foreach (var d in dirs) stack.Push(d);
         }
@@ -433,7 +433,7 @@ public class InstallSnapshotEngine
         if (depth >= maxDepth) return;
 
         string[] subs;
-        try { subs = key.GetSubKeyNames(); } catch { return; }
+        try { subs = key.GetSubKeyNames(); } catch (Exception ex) { Log.Warn($"Registry subkey enumeration '{prefix}': {ex.Message}"); return; }
         foreach (var name in subs)
         {
             try
@@ -441,7 +441,7 @@ public class InstallSnapshotEngine
                 using var child = key.OpenSubKey(name);
                 if (child != null) WalkKey(child, prefix + "\\" + name, bucket, depth + 1, maxDepth, ct);
             }
-            catch { /* perms */ }
+            catch (Exception ex) { Log.Warn($"Registry open subkey '{prefix}\\{name}': {ex.Message}"); }
         }
     }
 }

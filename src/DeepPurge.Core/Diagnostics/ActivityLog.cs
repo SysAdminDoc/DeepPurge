@@ -29,7 +29,7 @@ public static class ActivityLog
                 File.AppendAllText(FilePath, json + Environment.NewLine, System.Text.Encoding.UTF8);
             }
         }
-        catch { }
+        catch { /* activity logging failures must never throw */ }
     }
 
     public static List<ActivityEntry> LoadRecent(int max = 100)
@@ -47,11 +47,11 @@ public static class ActivityLog
                     var e = JsonSerializer.Deserialize<ActivityEntry>(line);
                     if (e != null) entries.Add(e);
                 }
-                catch { }
+                catch { /* activity logging failures must never throw */ }
             }
             return entries.OrderByDescending(e => e.TimestampUtc).Take(max).ToList();
         }
-        catch { return new(); }
+        catch { /* activity logging failures must never throw */ return new(); }
     }
 
     public static void Prune()
@@ -64,6 +64,6 @@ public static class ActivityLog
             var keep = lines.Skip(lines.Length - MaxEntries).ToArray();
             File.WriteAllLines(FilePath, keep, System.Text.Encoding.UTF8);
         }
-        catch { }
+        catch { /* activity logging failures must never throw */ }
     }
 }

@@ -169,8 +169,8 @@ public class ShortcutRepairScanner
         }
         finally
         {
-            if (pf        != null) { try { Marshal.FinalReleaseComObject(pf);        } catch { } }
-            if (shellLink != null) { try { Marshal.FinalReleaseComObject(shellLink); } catch { } }
+            if (pf        != null) { try { Marshal.FinalReleaseComObject(pf);        } catch { /* COM RCW release is best-effort */ } }
+            if (shellLink != null) { try { Marshal.FinalReleaseComObject(shellLink); } catch { /* COM RCW release is best-effort */ } }
         }
     }
 

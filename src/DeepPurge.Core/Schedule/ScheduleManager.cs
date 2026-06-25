@@ -65,7 +65,7 @@ public class ScheduleManager
         // /TR value is a single token — the wrapper path, nothing else. Quoted
         // with literal quotes that schtasks parses cleanly.
         var tr = $"\"{wrapper}\"";
-        var args = $"/Create /F /RU SYSTEM /RL HIGHEST /TN \"{taskName}\" {schedule} /ST {time} /TR \"{tr}\"";
+        var args = $"/Create /F /RU \"{Environment.UserName}\" /RL HIGHEST /TN \"{taskName}\" {schedule} /ST {time} /TR \"{tr}\"";
         var (code, output) = Run("schtasks.exe", args);
         if (code != 0) Log.Warn($"schtasks /Create failed ({code}): {output.Trim()}");
         return code == 0;
@@ -83,7 +83,7 @@ public class ScheduleManager
             var wrapper = WrapperPath(safeName);
             if (File.Exists(wrapper)) File.Delete(wrapper);
         }
-        catch { }
+        catch (Exception ex) { Log.Warn($"Failed to delete wrapper script: {ex.Message}"); }
 
         return code == 0;
     }

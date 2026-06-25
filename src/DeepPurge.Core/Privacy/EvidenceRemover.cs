@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using DeepPurge.Core.Diagnostics;
 using DeepPurge.Core.Safety;
 
 namespace DeepPurge.Core.Privacy;
@@ -174,7 +175,7 @@ public static class EvidenceRemover
                 foreach (var f in Directory.GetFiles(customDir))
                     AddFile(cat, f);
         }
-        catch { /* skip */ }
+        catch (Exception ex) { Log.Warn($"Recent documents scan failed: {ex.Message}"); }
         return cat;
     }
 
@@ -221,7 +222,7 @@ public static class EvidenceRemover
             {
                 foreach (var f in Directory.GetFiles(explorerPath, pattern)) AddFile(cat, f);
             }
-            catch { /* skip */ }
+            catch (Exception ex) { Log.Warn($"Thumbnail cache scan failed for pattern '{pattern}': {ex.Message}"); }
         }
         return cat;
     }
@@ -318,10 +319,10 @@ public static class EvidenceRemover
                             if (fi.LastWriteTime < cutoff)
                                 cat.Items.Add(new TraceItem { Path = f, SizeBytes = fi.Length });
                         }
-                        catch { /* skip */ }
+                        catch (Exception ex) { Log.Warn($"Log file info read failed for '{f}': {ex.Message}"); }
                     }
                 }
-                catch { /* skip */ }
+                catch (Exception ex) { Log.Warn($"Log file enumeration failed in '{dir}': {ex.Message}"); }
             }
         }
         return cat;
@@ -342,7 +343,7 @@ public static class EvidenceRemover
         {
             foreach (var f in Directory.GetFiles(logDir, "Archive-*.evtx")) AddFile(cat, f);
         }
-        catch { /* skip */ }
+        catch (Exception ex) { Log.Warn($"Event log scan failed: {ex.Message}"); }
         return cat;
     }
 
@@ -365,7 +366,7 @@ public static class EvidenceRemover
             {
                 foreach (var f in Directory.GetFiles(p, "*.dmp")) AddFile(cat, f);
             }
-            catch { /* skip */ }
+            catch (Exception ex) { Log.Warn($"Crash report scan failed in '{p}': {ex.Message}"); }
         }
         AddFile(cat, Path.Combine(WinDir, "MEMORY.DMP"));
         return cat;
@@ -416,7 +417,7 @@ public static class EvidenceRemover
                         IsDirectory = true,
                     });
             }
-            catch { /* skip */ }
+            catch (Exception ex) { Log.Warn($"WER scan failed in '{p}': {ex.Message}"); }
         }
         return cat;
     }
@@ -480,7 +481,7 @@ public static class EvidenceRemover
                 }
             }
         }
-        catch { }
+        catch (Exception ex) { Log.Warn($"USB device history scan failed: {ex.Message}"); }
 
         var setupApiLog = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows),
             "inf", "setupapi.dev.log");
@@ -504,7 +505,7 @@ public static class EvidenceRemover
             if (!File.Exists(path)) return;
             cat.Items.Add(new TraceItem { Path = path, SizeBytes = new FileInfo(path).Length });
         }
-        catch { /* skip */ }
+        catch (Exception ex) { Log.Warn($"Failed to add file '{path}': {ex.Message}"); }
     }
 
     private static void RunCommand(string exe, string args)
@@ -523,7 +524,7 @@ public static class EvidenceRemover
             using var p = Process.Start(psi);
             p?.WaitForExit(15000);
         }
-        catch { /* best-effort */ }
+        catch (Exception ex) { Log.Warn($"Command execution failed ({exe} {args}): {ex.Message}"); }
     }
 
     private static long GetDirSize(string path)

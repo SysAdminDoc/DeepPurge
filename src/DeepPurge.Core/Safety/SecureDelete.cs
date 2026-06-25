@@ -95,10 +95,10 @@ public static class SecureDelete
             foreach (var d in dirs)
             {
                 try { if (Directory.Exists(d)) Directory.Delete(d, recursive: false); }
-                catch { /* best-effort */ }
+                catch (Exception ex) { Log.Warn($"Failed to remove subdirectory '{d}': {ex.Message}"); }
             }
 
-            try { Directory.Delete(path, recursive: true); } catch { /* best-effort */ }
+            try { Directory.Delete(path, recursive: true); } catch (Exception ex) { Log.Warn($"Failed to remove root directory '{path}': {ex.Message}"); }
             return !Directory.Exists(path);
         }
         catch
@@ -156,7 +156,7 @@ public static class SecureDelete
                 if (Directory.Exists(tempDir))
                     Directory.Delete(tempDir, recursive: true);
             }
-            catch { }
+            catch (Exception ex) { Log.Warn($"Failed to clean up wipe temp directory '{tempDir}': {ex.Message}"); }
         }
 
         progress?.Report($"Free space wipe complete: {totalWritten / (1024 * 1024)} MB overwritten");
@@ -179,7 +179,7 @@ public static class SecureDelete
                 return mediaType == 4; // 4 = SSD, 3 = HDD
             }
         }
-        catch { }
+        catch (Exception ex) { Log.Warn($"SSD detection failed for '{driveRoot}': {ex.Message}"); }
         return false;
     }
 }

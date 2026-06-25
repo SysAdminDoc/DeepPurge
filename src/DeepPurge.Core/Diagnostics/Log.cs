@@ -27,8 +27,8 @@ public static class Log
                 {
                     // Rotate: rename → .1. Keep at most one previous log.
                     var rotated = path + ".1";
-                    try { if (File.Exists(rotated)) File.Delete(rotated); } catch { }
-                    try { File.Move(path, rotated); } catch { }
+                    try { if (File.Exists(rotated)) File.Delete(rotated); } catch { /* log rotation is best-effort */ }
+                    try { File.Move(path, rotated); } catch { /* log rotation is best-effort */ }
                 }
                 using var sw = new StreamWriter(path, append: true, encoding: System.Text.Encoding.UTF8);
                 sw.Write($"{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss.fff} [{level}] {message}");
@@ -36,6 +36,6 @@ public static class Log
                 sw.WriteLine();
             }
         }
-        catch { /* logging must never crash callers */ }
+        catch { /* logging failures must never throw — recursive Log.Warn would deadlock */ }
     }
 }

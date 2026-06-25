@@ -46,7 +46,7 @@ public static class LeftoverSignatureDb
                         foreach (var d in Directory.GetDirectories(dir, glob))
                             match.FilePaths.Add(d);
                     }
-                    catch { }
+                    catch (Exception ex) { Log.Warn($"Signature glob '{glob}' in '{dir}': {ex.Message}"); }
                 }
             }
             else if (Directory.Exists(expanded) || File.Exists(expanded))

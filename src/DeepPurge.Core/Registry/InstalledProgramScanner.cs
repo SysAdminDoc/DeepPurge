@@ -1,5 +1,6 @@
 using global::Microsoft.Win32;
 using DeepPurge.Core.App;
+using DeepPurge.Core.Diagnostics;
 using DeepPurge.Core.Models;
 
 namespace DeepPurge.Core.Registry;
@@ -28,7 +29,7 @@ public static class InstalledProgramScanner
                 if (baseKey == null) continue;
                 ScanRegistryKey(baseKey, path, source, programs, seen, includeSystemComponents, includeUpdates, "HKLM");
             }
-            catch { /* Access denied or other registry errors */ }
+            catch (Exception ex) { Log.Warn($"Failed to scan HKLM uninstall path '{path}': {ex.Message}"); }
         }
 
         // Scan HKCU — use real user's hive when running under SMAA elevation
@@ -43,7 +44,7 @@ public static class InstalledProgramScanner
                     programs, seen, includeSystemComponents, includeUpdates, "HKCU");
             }
         }
-        catch { }
+        catch (Exception ex) { Log.Warn($"Failed to scan HKCU uninstall registry: {ex.Message}"); }
 
         // Scan all user SIDs for per-user installs
         try
@@ -61,10 +62,10 @@ public static class InstalledProgramScanner
                             programs, seen, includeSystemComponents, includeUpdates, $"HKU\\{sid}");
                     }
                 }
-                catch { }
+                catch (Exception ex) { Log.Warn($"Failed to scan user SID uninstall key '{sid}': {ex.Message}"); }
             }
         }
-        catch { }
+        catch (Exception ex) { Log.Warn($"Failed to enumerate HKU user SIDs: {ex.Message}"); }
 
         return programs.OrderBy(p => p.DisplayName, StringComparer.OrdinalIgnoreCase).ToList();
     }
@@ -115,7 +116,7 @@ public static class InstalledProgramScanner
 
                 programs.Add(program);
             }
-            catch { /* Individual key read failure - skip */ }
+            catch (Exception ex) { Log.Warn($"Failed to read registry subkey '{subKeyName}': {ex.Message}"); }
         }
     }
 
@@ -208,7 +209,7 @@ public static class InstalledProgramScanner
                             paths.Add(sub);
                     }
                 }
-                catch { }
+                catch (Exception ex) { Log.Warn($"Failed to enumerate appdata directory '{appDataDir}': {ex.Message}"); }
             }
 
             foreach (var path in paths.Distinct(StringComparer.OrdinalIgnoreCase))
@@ -219,7 +220,7 @@ public static class InstalledProgramScanner
                         .EnumerateFiles("*", SearchOption.AllDirectories)
                         .Sum(fi => { try { return fi.Length; } catch { return 0L; } });
                 }
-                catch { }
+                catch (Exception ex) { Log.Warn($"Failed to compute size for '{path}': {ex.Message}"); }
             }
 
             if (total > 0) prog.ActualSizeBytes = total;

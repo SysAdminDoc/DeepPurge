@@ -309,7 +309,7 @@ public class DuplicateFinder
             if (headHash.HasValue) entry.HeadHash = headHash.Value;
             if (fullHash.HasValue) { entry.FullHash = fullHash.Value; entry.HasFullHash = true; }
         }
-        catch { }
+        catch (Exception ex) { Log.Warn($"UpdateCache '{path}': {ex.Message}"); }
     }
 
     private void LoadCache()

@@ -4,8 +4,14 @@ All notable changes to DeepPurge will be documented in this file.
 
 ## [Unreleased]
 
+### Security
+- **DLL search order hardening** — `SetDllDirectory("")` called in static constructor before any other code, removing the current directory from the DLL search path. Mitigates BleachBit-class CVE-2025-32780 DLL hijack attacks against elevated system utilities. `IncludeNativeLibrariesForSelfExtract` enabled in csproj.
+- **Scheduled-task creation hardening (CVE-2025-33067)** — Tasks now run as the current interactive user instead of SYSTEM, mitigating the Batch Logon privilege escalation vector.
+
 ### Fixed
 - **Dynamic path resolution in SafetyGuard and all cleaners** — Replaced 71 hardcoded `C:\` paths across 8 files (SafetyGuard, JunkFilesCleaner, FileLeftoverScanner, EvidenceRemover, InstallSnapshotEngine, ServiceScanner, FirewallRuleScanner, PathCleaner) with `Environment.GetFolderPath()` and `Environment.SystemDirectory`. Systems with Windows installed on a non-C: drive now have full safety protection and cleaner coverage. Two new test cases validate the dynamic resolution.
+- **Replace 57 empty catch blocks with Log.Warn** — All `catch { }` blocks across 20 Core files replaced with `Log.Warn` (for non-fatal failures) or explanatory comments (for intentionally-silent catches in Log.cs, ActivityLog.cs, DataPaths.cs, etc.). Field debugging now has a paper trail for every swallowed exception.
+- **Duplicate Spotify entry in leftover-signatures.json** — Removed duplicate Spotify entry (positions 9 and 32). Line 9 retained as it has more complete registry paths.
 
 ### Added
 - **Install Monitor 2.0** — USN journal-based filesystem change tracking (`UsnJournalReader`) replaces the before/after snapshot walk. Catches every NTFS file create/modify/rename/delete during an installer run. Falls back to legacy snapshot diff on non-NTFS or when the journal is unavailable. CLI: `--legacy` flag forces the old path.

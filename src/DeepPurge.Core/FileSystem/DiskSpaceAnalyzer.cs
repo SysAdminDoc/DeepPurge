@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using DeepPurge.Core.Diagnostics;
 
 namespace DeepPurge.Core.FileSystem;
 
@@ -70,7 +71,7 @@ public static class DiskSpaceAnalyzer
                     results.Add(info);
                     totalSize += info.SizeBytes;
                 }
-                catch { }
+                catch (Exception ex) { Log.Warn($"Failed to analyze subdirectory '{dir}': {ex.Message}"); }
             }
 
             // Also count files in root
@@ -78,7 +79,7 @@ public static class DiskSpaceAnalyzer
             int rootFileCount = 0;
             foreach (var f in Directory.GetFiles(rootPath))
             {
-                try { rootFiles += new FileInfo(f).Length; rootFileCount++; } catch { }
+                try { rootFiles += new FileInfo(f).Length; rootFileCount++; } catch (Exception ex) { Log.Warn($"Failed to read file size for '{f}': {ex.Message}"); }
             }
             if (rootFileCount > 0)
             {
@@ -95,7 +96,7 @@ public static class DiskSpaceAnalyzer
                 foreach (var r in results)
                     r.Percentage = r.SizeBytes * 100.0 / totalSize;
         }
-        catch { }
+        catch (Exception ex) { Log.Warn($"Failed to analyze folder '{rootPath}': {ex.Message}"); }
 
         return results.OrderByDescending(r => r.SizeBytes).ToList();
     }
@@ -109,7 +110,7 @@ public static class DiskSpaceAnalyzer
         {
             ScanForLargeFiles(rootPath, minSizeBytes, results, maxResults, 0);
         }
-        catch { }
+        catch (Exception ex) { Log.Warn($"Failed to scan for large files in '{rootPath}': {ex.Message}"); }
 
         return results.OrderByDescending(f => f.SizeBytes).Take(maxResults).ToList();
     }
@@ -150,13 +151,13 @@ public static class DiskSpaceAnalyzer
                     info.SizeBytes += f.Length;
                     info.FileCount++;
                 }
-                catch { }
+                catch (Exception ex) { Log.Warn($"Failed to read file length in '{path}': {ex.Message}"); }
             }
 
             info.FolderCount = dirInfo.EnumerateDirectories("*", new EnumerationOptions
                 { IgnoreInaccessible = true, RecurseSubdirectories = true, MaxRecursionDepth = 10 }).Count();
         }
-        catch { }
+        catch (Exception ex) { Log.Warn($"Failed to enumerate folder '{path}': {ex.Message}"); }
 
         return info;
     }
@@ -185,7 +186,7 @@ public static class DiskSpaceAnalyzer
                         });
                     }
                 }
-                catch { }
+                catch (Exception ex) { Log.Warn($"Failed to read file info for '{f}': {ex.Message}"); }
             }
 
             foreach (var d in Directory.GetDirectories(path))
@@ -197,6 +198,6 @@ public static class DiskSpaceAnalyzer
                 ScanForLargeFiles(d, minSize, results, max, depth + 1);
             }
         }
-        catch { }
+        catch (Exception ex) { Log.Warn($"Failed to scan directory '{path}': {ex.Message}"); }
     }
 }
