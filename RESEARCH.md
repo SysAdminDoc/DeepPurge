@@ -1,143 +1,89 @@
 # Research — DeepPurge
 
 ## Executive Summary
-
-DeepPurge is a production-grade Windows uninstaller and system cleaner (C#/.NET 8 WPF, ~31k LOC, 130 tests, MIT) with strong safety fundamentals (centralized SafetyGuard, USN journal install monitoring, WizTree-speed MFT disk analysis) and a dual GUI+CLI architecture. Its install-monitor flagship (USN journal + snapshot diff) is a genuine differentiator that only commercial tools like Total Uninstall and Revo Pro match — and DeepPurge does it open-source.
-
-The 2026 Uninstalr benchmark reveals most uninstallers find fewer than 65% of leftovers. DeepPurge's signature database (50 profiles) puts it ahead of BCU (61%) and Revo Pro (63%) but well behind the leaders (Uninstalr 94%, HiBit 90%, Total Uninstall 86%). The accuracy gap is addressable: Uninstalr achieves 94% through relevance-filtered remnant attribution (knowing which files belong to which program), not brute-force scanning.
-
-**Critical finding: SafetyGuard and 5 other files hardcode 71 `C:\` paths. Systems with Windows on a different drive bypass all safety protections and all cleaners miss their targets. This is a P0 security bug.**
-
-**Top 10 opportunities in priority order:**
-1. Replace 71 hardcoded `C:\` paths with dynamic resolution via `Environment.GetFolderPath()` / `%SystemRoot%`
-2. Expand leftover signature database to 200+ profiles with publisher-based grouping
-3. Add portable app detection (Uninstalr's unique capability; 8/9 competitors score 0)
-4. Wire existing .resx localization infrastructure into XAML (20 strings exist, 0 consumed)
-5. Migrate to .NET 10 LTS before .NET 8 EOL (Nov 2026)
-6. Add version-aware shared-path protection to prevent deleting shared settings (BCU #758)
-7. Add ARM64 build target for Windows on ARM (Surface Pro, Snapdragon X Elite)
-8. Replace 57 remaining empty `catch { }` blocks with `Log.Warn()` for field debugging
-9. Implement Hunter Mode (drag-crosshair-to-identify) — Revo's signature UX with no OSS equivalent
-10. Add delete-on-reboot for locked files via `PendingFileRenameOperations`
+DeepPurge is a Windows-only, administrator-oriented uninstaller and system cleaner with a broad WPF surface, a headless CLI, safety gating, install snapshots, winapp2 support, driver/startup/shortcut/duplicate panels, and recent net10/ARM64/security work. The strongest direction is not broader feature sprawl; it is making the newest safety and integration surfaces trustworthy end-to-end. Top opportunities: route all GUI cleanup through the same `DeleteOptions` pipeline as CLI cleanup; centralize recursive delete/wipe walking so child junctions/symlinks cannot escape a safe root; repair registry-link detection; remove remaining fixed-drive assumptions; wire locked-file recovery where deletes fail; make the shell context menu launch real work; bring CLI discovery up to GUI parity; expose custom JSON cleaners with schema/tests; make Amcache/BAM discovery truthful; and align build/docs/packaging with .NET 10 and ARM64.
 
 ## Product Map
-
-- **Core workflows:** Uninstall (single/batch/forced/manifest-replay) → leftover scan (signature-matched + heuristic) → backup → delete; System cleanup (junk/evidence/winapp2); Disk analysis (MFT-speed/duplicate/empty); System management (drivers/startup/services/tasks/shortcuts/orphans/firewall/PATH); Install monitoring (USN journal + snapshot diff)
-- **User personas:** Power user cleaning a personal PC; IT technician on USB stick (portable mode); sysadmin scripting via CLI/Intune/SCCM; privacy-conscious user removing traces
-- **Platforms:** Windows 10/11 x64 only. .NET 8 (`net8.0-windows10.0.17763.0`), self-contained ~71MB single-file executables. No ARM64 target.
-- **Distribution:** GitHub Releases (GUI + CLI). winget/Scoop manifests staged but unsubmitted. No code-signing certificate.
-- **Key integrations:** winget (enrichment + upgrade), Scoop (filesystem scan), winapp2.ini (2,500+ community cleaners), pnputil (drivers), schtasks (scheduled cleaning), Windows toast notifications, GitHub Releases API (update checker)
+- Core workflows: uninstall/batch/forced removal; leftover scan and selective deletion; junk/evidence/winapp2 cleanup; disk, duplicate, empty-folder, driver, startup, shortcut, service, task, orphan, repair, schedule, install-monitor, health, shell, and history flows.
+- User personas: power users cleaning personal Windows PCs; IT technicians running portable tools; sysadmins scripting CLI/Intune/SCCM checks; privacy-focused users reviewing traces before deletion.
+- Platforms and distribution: Windows 10/11, `net10.0-windows10.0.17763.0`, WPF GUI plus CLI, self-contained GitHub release assets, winget/Scoop manifests, unsigned by default.
+- Key integrations and data flows: registry uninstall keys/HKU profiles, winget/Scoop/portable/game enrichment, winapp2.ini, `pnputil`, `schtasks`, SFC/DISM/chkdsk, USN journal install tracing, Restart Manager, GitHub Releases, local logs/backups/settings.
 
 ## Competitive Landscape
-
-**Uninstalr** (benchmark leader, 94% accuracy, free, closed-source) — Built by Macecraft (jv16 PowerTools, 20+ years). Achieves accuracy through relevance-filtered remnant attribution, not brute-force scanning. Detects 15 app source types including portable apps (unique — 8/9 competitors score 0). Learn: relevance filtering, portable app detection. Avoid: closed-source model, self-published benchmark.
-
-**BCUninstaller** (19.9k stars, Apache 2.0, C# .NET 8 WinForms) — Factory pattern for multi-source discovery (Registry/Store/Steam/Scoop/Chocolatey). Top community requests: dark mode (#228, 7+ years open — DeepPurge advantage), standalone orphan scan (#736), version-aware shared-path protection (#758), delete-on-reboot (#129). Learn: factory architecture, community engagement. Avoid: WinForms UI debt, 2+ year release gaps eroding trust.
-
-**Win11Debloat** (49.6k stars, MIT, PowerShell) — Most popular project in the space by far. Key innovation: auto-detect previously applied tweaks with one-click revert. Learn: undo/revert pattern, Intune-first enterprise design, massive GitHub traction from PowerShell accessibility. Avoid: PowerShell-only limits extensibility.
-
-**Revo Pro** ($25/yr, 63% accuracy) — Hunter Mode (drag-crosshair-to-identify) is iconic UX with no OSS equivalent. Logs Database (67k trace logs for 12.5k programs) is their accuracy moat. Learn: Hunter Mode UX. Avoid: paid model with worse benchmark accuracy than free alternatives.
-
-**Total Uninstall** ($30 lifetime, 86% benchmark accuracy) — Gold standard for install monitoring. Tree-view snapshot diff visualization is the UX benchmark for this feature. Learn: diff visualization, backup/restore per program. Avoid: no free tier limits adoption.
-
-**BleachBit** (6k stars, GPL, Python/GTK) — Cookie manager with selective retention is #1 requested cleaner feature. Expert mode toggle (hide dangerous ops from novices). Symlink safety guards are a CVE-class fix. Learn: expert mode, symlink safety, CleanerML extensibility. Avoid: GPL incompatibility (DeepPurge is MIT), Python performance.
-
-**FluentCleaner** (2k stars, WinUI 3) — Only 2 months old, 2k stars shows demand for modern-looking cleaners. AI-powered rule explanations (Groq/Llama). Global path exclusion whitelist. Junk growth history tracker. Learn: global exclusions, junk history tracking, modern UI expectations. Avoid: WinUI 3 dependency adds complexity.
-
-**Wise Program Uninstaller** (free) — System Slimming module removes Windows built-in bloat (language packs, optional features, sample media). Distinct from third-party uninstall but serves same user intent. Learn: system slimming category.
+- BCUninstaller: strong bulk uninstall, orphan discovery, and multi-source app detection. Learn from its source-adapter model and community-reported failure modes such as shared Blender settings deletion and locked-file delete-on-reboot requests. Avoid external helper startup stalls like its Everything Search issue.
+- BleachBit and winapp2: strong preview/delete workflow, CleanerML extensibility, and broad community cleaner coverage. Learn from declarative cleaner validation and user review before delete. Avoid GPL code reuse and overly aggressive rules without global exclusions.
+- FluentCleaner: modern OSS cleaner built around winapp2 databases, global exclusions, and custom databases/extensions. Learn from right-click exclusion UX and transparent database management. Avoid AI explanations or remote service dependencies that contradict DeepPurge's local, zero-telemetry posture.
+- Revo Uninstaller Pro and Total Uninstall: commercial benchmarks for install monitoring, forced uninstall, backup/restore, logs, and monitored-program diffs. Learn from monitored install visualizations and recovery flows. Avoid paywall-driven bloat and marketing claims without observable evidence.
+- Uninstalr: useful benchmark pressure around leftover attribution and portable/previously removed app detection. Learn from evidence-first removal previews. Treat self-published benchmarks as directional, not authoritative.
+- Win11Debloat and Sophia Script: strong Windows tuning adoption through auditable scripts and revert guidance. Learn from rollback-first changes and Intune-friendly automation. Avoid broad service-debloat presets that conflict with DeepPurge's conservative safety philosophy.
+- DriverStoreExplorer and Czkawka: focused tools with clear bounded scope: driver-store cleanup and fast duplicate/empty/similar-file scanning. Learn from tight domain workflows. Avoid expanding DeepPurge into unrelated media-similarity cleanup.
 
 ## Security, Privacy, and Reliability
-
-**Hardcoded `C:\` paths — CRITICAL (Verified):** 71 occurrences across 6 files (`SafetyGuard.cs`, `JunkFilesCleaner.cs`, `FileLeftoverScanner.cs`, `EvidenceRemover.cs`, `InstallSnapshotEngine.cs`, `SecureDelete.cs`). SafetyGuard's protected-directory list, all junk/evidence scanner paths, and install-monitor roots assume `C:\Windows`, `C:\Users`, `C:\ProgramData`. Systems with Windows on D:\ or other drives bypass all safety protections entirely. The fix pattern already exists in the codebase — `BrowserExtensionScanner`, `ShortcutRepairScanner`, `AutorunScanner`, `ServiceScanner`, `DriverStoreScanner`, and `PathCleaner` all correctly use `Environment.GetFolderPath()`.
-
-**Silent catch blocks — HIGH (Verified):** 57 empty `catch { }` blocks remain across 20 Core files after the round-2 fix that addressed 22 in RegistryLeftoverScanner. 204 total catch blocks — 28% are silent. Field debugging is impossible when errors are silently swallowed. Pattern: replace with `catch (Exception ex) { Log.Warn(...); }`.
-
-**Duplicate leftover signature — LOW (Verified):** `Data/leftover-signatures.json` has Spotify listed at both position 9 and position 32. Causes double-matching.
-
-**Localization infrastructure unwired — MEDIUM (Verified):** `Properties/Resources.resx` contains 20 UI strings with `Resources.Designer.cs` accessor. Zero references in XAML (`{x:Static}`) or code-behind (`Properties.Resources.`). The infrastructure was built but never connected. CHANGELOG claims "Ready for Crowdin submission" but strings aren't consumed.
-
-**No ARM64 build — MEDIUM:** Only `win-x64` RID published. Windows on ARM (Surface Pro X, Snapdragon X Elite/Plus, Qualcomm Oryon) is growing. The codebase has native P/Invoke (MFT structs, USN journal) that may need ARM64 validation.
-
-**Stale ROADMAP entry — LOW (Verified):** "Orphaned artifact scanner" (P1) shipped in commit `ce5382f` but remains in ROADMAP.md as incomplete.
+- [Verified] GUI junk cleanup bypasses the shared safe-delete pipeline. `src/DeepPurge.App/Views/MainWindow.xaml.cs` `CleanJunk_Click` calls `Directory.Delete(file.Path, true)` and `File.Delete(file.Path)` directly, ignoring footer `DryRunEnabled`, `SecureDeleteEnabled`, progress, activity log, cancellation, and `JunkFilesCleaner.DeleteJunkSafe` in `src/DeepPurge.App/ViewModels/MainViewModel.cs`.
+- [Verified] Recursive destructive paths still rely on `SearchOption.AllDirectories` or `Directory.Delete(..., recursive:true)` in multiple modules (`SecureDelete.cs`, `Winapp2Parser.cs`, `CleanerDefinition.cs`, `SystemSlimmer.cs`, `EvidenceRemover.cs`, `JunkFilesCleaner.cs`, `UninstallEngine.cs`, `BrowserExtensionScanner.cs`). Root-level `IsReparsePoint` checks do not protect child junctions under an otherwise safe directory.
+- [Verified] Registry symbolic-link protection is not implemented according to the comment. `SafetyGuard.IsRegistrySymlink` calls `RegQueryInfoKeyW` with no class buffer and returns `result != 0`; Microsoft documents `RegQueryInfoKey` class output and `RegOpenKeyEx` `REG_OPTION_OPEN_LINK` as the mechanisms relevant to registry links.
+- [Verified] Locked-file recovery exists but is not integrated. `LockedFileResolver.QueueDeleteOnReboot` and `GetLockingProcesses` are unused outside `LockedFileResolver.cs`, so failed file deletes do not offer process attribution or delayed delete despite the changelog claim.
+- [Verified] Context-menu shell integration writes `"DeepPurge.exe" --target "%1"` in `ShellExtensionRegistrar.cs`, but `App.xaml.cs` never reads `StartupEventArgs.Args` and `MainWindow` has no target-selection path.
+- [Verified] Some fixed-drive assumptions remain after the broad dynamic path pass: `WindowsRepairEngine.ResolveCommand` uses `chkdsk.exe C: /scan`; `DeepPurge.Cli.Program.CmdSnapshotAsync` and `MainViewModel.Extensions` probe `UsnJournalReader.IsSupported(@"C:\")`.
+- Missing guardrails: destructive operations need one file-tree primitive, one registry-link primitive, one failed-delete recovery path, and tests that prove dry-run/delete/secure-delete behavior is identical across GUI and CLI.
+- Recovery and rollback needs: use existing backups/restore points for uninstall flows, add user-visible locked-file recovery choices, and require custom cleaners to support dry-run, schema validation, and exclusion review before execution.
 
 ## Architecture Assessment
-
-**SafetyGuard `C:\` assumption:** The central safety choke-point hardcodes `C:\Windows`, `C:\Users`, `C:\Program Files`, etc. Must be migrated to `Environment.GetFolderPath(SpecialFolder.Windows)`, `Environment.SystemDirectory`, `Environment.GetEnvironmentVariable("SystemRoot")`, etc. This is the highest-priority fix in the codebase.
-
-**MainViewModel monolith:** Two partials total ~1,666 lines with 15+ feature areas. Extract per-panel ViewModels (DriverPanelViewModel, DuplicatePanelViewModel, etc.) that MainViewModel composes via dependency injection or manual construction. MainWindow code-behind (1,044 lines) should similarly delegate panel-specific logic.
-
-**InstalledProgramScanner monolith:** Single static method handles all registry sources (HKLM/HKCU/HKU/WoW64). BCU's factory pattern (one class per source) is more extensible and testable. Refactor into `IAppDiscoverySource` implementations.
-
-**LeftoverSignatureDb matching:** Uses `string.Contains` for alias matching — coarse, no publisher-based grouping, no fuzzy matching. Uninstalr's relevance-filtering approach (attribution, not proximity) produces dramatically better results (26 vs 6,972 leftovers).
-
-**Test coverage:** 130 tests in 868 lines for ~31k LOC. 10 test files covering parsers, sanitizers, and SafetyGuard. **Zero tests for destructive operations:** UninstallEngine, FileLeftoverScanner, RegistryLeftoverScanner, SecureDelete, BackupManager, EvidenceRemover, ContextMenuCleaner, ServiceScanner, ScheduledTaskScanner, InstalledProgramScanner. Testing philosophy correctly avoids mocking Windows, but safety-critical logic (SafetyGuard path validation, DeleteOptions threading) could have more unit coverage.
-
-**winget integration fragility:** `PackageManagerScanner.cs` tries `winget list --output json` which is not a supported CLI option. The correct programmatic API is `Microsoft.Management.Deployment` COM or `winget export` for JSON.
+- The biggest boundary issue is business logic in `MainWindow.xaml.cs`. Junk cleanup and several panel actions still perform destructive work in code-behind while safer ViewModel/Core paths exist.
+- `SafetyGuard` is a policy checker, not a deletion primitive. A `SafeFileTree` or similar Core service should own enumeration, child reparse skipping, dry-run sizing, secure delete, recycle/delete-on-reboot fallback, and progress reporting.
+- CLI discovery is behind the GUI. `CmdListAsync` and `CmdUninstallAsync` use only `InstalledProgramScanner.GetAllInstalledPrograms()`, while the GUI enriches through `PackageManagerScanner.EnrichAsync`; README promises a full headless surface.
+- New custom-cleaner and forensic-discovery surfaces are incomplete. `CleanerDefinitionRunner` is not exposed in GUI/CLI/tests, and `AmcacheParser` checks for `Amcache.hve` but reads BAM registry paths and is not called by the orphan flow.
+- Release truth is drifting: project files target .NET 10, but `Build.ps1`, `BUILD.bat`, `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, and `.github/workflows/codeql.yml` still reference .NET 8 or x64-only assumptions; XAML splash/sidebar text still shows `v0.8.1`.
+- Testing gaps: existing roadmap items already cover mutation and snapshot tests. New tests should focus on GUI dry-run wiring, child reparse traversal, registry-link detection, failed-delete recovery, shell `--target`, custom cleaner schema/execution, and Amcache/BAM fixtures.
+- Accessibility, i18n, observability, and packaging: High Contrast and AutomationProperties exist; `.resx` infrastructure exists but is unwired and should become real UI bindings; logs/doctor/crash logs exist but need failed-delete visibility; packaging needs .NET 10/ARM64 truth.
+- Plugin ecosystem, offline resilience, multi-user, and migration: prefer local JSON cleaner definitions over a marketplace; keep all cleaners offline-first; preserve HKCU/HKU awareness rather than adding multi-user administration UX; track net10 support through the Microsoft lifecycle page.
 
 ## Rejected Ideas
-
-- **Multi-pass DoD wipes** (PrivaZer) — Obsolete on SSDs; wastes write cycles. Already in project's "will not ship" list.
-- **Software Updater module** (IObit) — Scope creep; winget handles this. DeepPurge detects upgrades, not performs them.
-- **Generic registry cleaner** (CCleaner) — No legitimate performance benefit; Microsoft's official stance is against them. Only clean registry tied to specific uninstalled programs. Source: Microsoft Q&A, HowToGeek.
-- **MFT/FAT table entry cleanup** (PrivaZer) — Raw disk manipulation too risky for safety-first tool.
-- **Cross-platform support** (BleachBit) — Windows-specific by design (registry, services, drivers, COM).
-- **Video/image similarity detection** (Czkawka) — Scope creep beyond system cleanup; different audience.
-- **AI-powered rule explanations** (FluentCleaner) — External API dependency contradicts zero-telemetry philosophy. Source: FluentCleaner Groq integration.
-- **Country of origin display** (Uninstalr) — Politically charged feature with accuracy concerns.
-- **MSIX distribution** — Sandboxes out HKLM autorun edits; actively harmful for this app.
-- **xUnit v3 migration** — Stryker.NET compatibility issues remain (stryker-net#3117). Stay on v2.
-- **WinUI 3 migration** — WPF is sufficient for a system utility; WinUI 3 adds complexity without proportional benefit. FluentCleaner proves WinUI 3 works but DeepPurge's WPF theme system already delivers dark/light/HC.
-- **Tray icon / background daemon** — Scope creep toward "always-running" software users are trying to remove. Scheduled tasks via CLI are the right pattern.
+- Generic registry cleaner (Microsoft support policy) — contradicts the safety-first philosophy; keep registry deletion tied to specific uninstall/remnant evidence.
+- Multi-pass DoD-style wipes (NIST SP 800-88r2, BleachBit SSD guidance) — already rejected by project policy; single-pass/secure erase guidance is enough for this app's threat model.
+- AI rule explanations (FluentCleaner discussion) — external API dependency and user distrust do not fit a local privacy tool.
+- WinUI rewrite (FluentCleaner) — DeepPurge's WPF theme system is adequate; the gaps are integration and safety, not framework choice.
+- Full extension marketplace (FluentCleaner extensions) — creates trust and supply-chain surface; local signed/schema-validated cleaner files are a better fit.
+- Broad debloat/service-disabling presets (Win11Debloat/Sophia ecosystem) — useful adjacent domain, but DeepPurge should remain cleanup/uninstall/repair focused and avoid fragile Windows feature toggles.
+- Cross-platform or mobile support (BleachBit/Czkawka contrast) — DeepPurge depends on Windows registry, services, drivers, COM, Restart Manager, and admin flows.
+- Software updater module (IObit/Revo) — winget upgrade detection/actions are enough; a parallel updater increases maintenance and trust risk.
 
 ## Sources
-
-**Benchmarks:**
-- https://uninstalr.com/blog/windows-uninstaller-performance-comparison-2026/
-- https://uninstalr.com/blog/uninstalr-2-0-or-why-making-this-windows-software-uninstaller-was-the-hardest-thing-i-have-ever-done/
-
-**OSS Competitors:**
+OSS:
 - https://github.com/BCUninstaller/Bulk-Crap-Uninstaller
+- https://github.com/BCUninstaller/Bulk-Crap-Uninstaller/issues/758
+- https://github.com/BCUninstaller/Bulk-Crap-Uninstaller/issues/129
+- https://github.com/BCUninstaller/Bulk-Crap-Uninstaller/issues/832
 - https://github.com/bleachbit/bleachbit
-- https://github.com/qarmin/czkawka
-- https://github.com/Raphire/Win11Debloat
-- https://github.com/builtbybel/FluentCleaner
-- https://github.com/farag2/Sophia-Script-for-Windows
-- https://github.com/lostindark/DriverStoreExplorer
+- https://docs.bleachbit.org/cml/cleanerml.html
+- https://docs.bleachbit.org/doc/winapp2ini.html
 - https://github.com/MoscaDotTo/Winapp2
+- https://github.com/builtbybel/FluentCleaner
+- https://github.com/builtbybel/FluentCleaner/releases
+- https://github.com/raphire/win11debloat
+- https://github.com/lostindark/DriverStoreExplorer
+- https://github.com/EricZimmerman/AmcacheParser
 
-**Commercial Competitors:**
+Commercial and community:
 - https://www.revouninstaller.com/products/revo-uninstaller-pro/
-- https://www.ashampoo.com/en-us/uninstaller
-- https://uninstalr.com/
+- https://www.revouninstaller.com/revo-uninstaller-pro-full-version-history/
 - https://www.martau.com/document/total-uninstall.php
-- https://www.ccleaner.com/
-- https://www.wisecleaner.com/wise-program-uninstaller.html
-- https://www.hibitsoft.ir/Uninstaller.html
-- https://privazer.com/en/
+- https://www.iobit.com/product-manuals/iu-help/
+- https://uninstalr.com/blog/comparing-windows-uninstallers-and-making-uninstalr/
+- https://github.com/TemporalAgent7/awesome-windows-privacy
 
-**Community Signal:**
-- https://github.com/Klocman/Bulk-Crap-Uninstaller/issues/228 (dark mode, 7yr)
-- https://github.com/Klocman/Bulk-Crap-Uninstaller/issues/758 (shared-path data loss)
-- https://github.com/Klocman/Bulk-Crap-Uninstaller/discussions/287 (orphan scan)
-- https://learn.microsoft.com/en-us/answers/questions/5854721/ (registry cleaners harmful)
-
-**Platform & Ecosystem:**
-- https://learn.microsoft.com/en-us/dotnet/core/compatibility/10.0
-- https://github.com/microsoft/CsWin32
-- https://docs.velopack.io/packaging/overview
-- https://devblogs.microsoft.com/dotnet/announcing-the-dotnet-community-toolkit-840/
-
-**Security:**
-- https://nvd.nist.gov/vuln/detail/CVE-2025-30399
-- https://github.com/dotnet/core/blob/main/release-notes/8.0/cve.md
-- https://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-45491
-- https://www.cvedetails.com/cve/CVE-2025-32780/ (BleachBit DLL hijack)
-- https://gbhackers.com/windows-task-scheduler-flaw/ (CVE-2025-33067)
-- https://cyberpress.org/regpwn-vulnerability/ (RegPwn registry symlink)
-- https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-88r2.pdf
+Platform, security, and dependencies:
+- https://learn.microsoft.com/en-us/windows/win32/fileio/reparse-points
+- https://learn.microsoft.com/en-us/windows/win32/fileio/symbolic-links
+- https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regopenkeyexa
+- https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regqueryinfokeya
+- https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rrp/d5ce9dcc-1f90-4f5a-b076-cc1d2c9b4195
+- https://learn.microsoft.com/en-us/windows/package-manager/winget/
+- https://github.com/microsoft/winget-cli
+- https://learn.microsoft.com/en-us/lifecycle/products/microsoft-net-and-net-core
+- https://learn.microsoft.com/en-us/dotnet/core/rid-catalog
+- https://support.microsoft.com/en-us/topic/microsoft-support-policy-for-the-use-of-registry-cleaning-utilities-0485f4df-9520-3691-2461-7b0fd54e8b3a
+- https://csrc.nist.gov/pubs/sp/800/88/r2/final
 
 ## Open Questions
-
-1. **Relevance-filtered remnant attribution** — Uninstalr achieves 94% accuracy by attributing files to specific programs (not just scanning nearby paths). What heuristics can DeepPurge use? Options: registry installer metadata (InstallSource, InstallLocation, DisplayIcon paths), installer family fingerprinting (NSIS/InnoSetup/MSI log locations), and cross-referencing the signature DB. This is the core technical investment for accuracy parity.
-2. **winget COM API viability** — `Microsoft.Management.Deployment` COM requires specific registration. Does it work from an `asInvoker` CLI exe? Needs live testing.
-3. **ARM64 P/Invoke compatibility** — MFT structs (`USN_RECORD_V2` with `Pack=1`) and COM interop (IShellLinkW) in FastDiskAnalyzer and ShortcutRepairScanner may need ARM64 validation. Unknown risk without hardware.
+None that block prioritization. ARM64 runtime behavior and registry-link fixture creation still need implementation-time validation on Windows.
