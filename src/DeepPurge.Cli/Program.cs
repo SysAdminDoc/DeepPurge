@@ -137,7 +137,7 @@ public static class Program
     {
         bool dryRun = a.HasFlag("dry-run");
         bool secure = a.HasFlag("secure");
-        int minAge = int.TryParse(a.GetValue("min-age"), out var ma) ? ma : 0;
+        int minAge = int.TryParse(a.GetOption("min-age"), out var ma) ? ma : 0;
         var categories = a.Positional.Count > 0 ? a.Positional : new List<string> { "junk", "evidence" };
 
         var opt = new DeleteOptions(DryRun: dryRun, SecureDelete: secure, UseRecycleBin: !secure, MinAgeDays: minAge);
@@ -167,7 +167,7 @@ public static class Program
                 }
                 case "dev":
                 {
-                    var root = a.GetValue("path") ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                    var root = a.GetOption("path") ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
                     var devDirs = await Task.Run(() => DeepPurge.Core.FileSystem.DevDirectoryScanner.Scan(root, ct), ct);
                     foreach (var d in devDirs) Console.WriteLine($"  {d.Type,-16} {FormatBytes(d.SizeBytes),10}  {d.Path}");
                     var s = await Task.Run(() => DeepPurge.Core.FileSystem.DevDirectoryScanner.Delete(devDirs, opt, ProgressSink("dev"), ct), ct);
@@ -316,6 +316,19 @@ public static class Program
             ? a.Positional.ToArray()
             : new[] { Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) };
         var finder = new DuplicateFinder();
+
+        if (a.HasFlag("dirs"))
+        {
+            var dirGroups = await finder.FindDuplicateDirectoriesAsync(roots, progress: new Progress<string>(Console.Error.WriteLine), ct: ct);
+            foreach (var g in dirGroups)
+            {
+                Console.WriteLine($"[{FormatBytes(g.WastedBytes)} wasted, {g.Paths.Count} copies, {g.FileCount} files @ {FormatBytes(g.TotalSize)}]");
+                foreach (var p in g.Paths) Console.WriteLine($"  {p}");
+            }
+            Console.WriteLine($"# {dirGroups.Count} duplicate directory groups, {FormatBytes(dirGroups.Sum(g => g.WastedBytes))} reclaimable");
+            return 0;
+        }
+
         var groups = await finder.FindAsync(roots, progress: new Progress<string>(Console.Error.WriteLine), ct: ct);
 
         var exportPath = a.GetOption("export");

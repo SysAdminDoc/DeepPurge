@@ -14,6 +14,15 @@ public class DuplicateGroup
     public long WastedBytes => Paths.Count <= 1 ? 0 : FileSize * (Paths.Count - 1);
 }
 
+public class DuplicateDirectoryGroup
+{
+    public long TotalSize { get; set; }
+    public int FileCount { get; set; }
+    public int MatchPercent { get; set; }
+    public List<string> Paths { get; set; } = new();
+    public long WastedBytes => Paths.Count <= 1 ? 0 : TotalSize * (Paths.Count - 1);
+}
+
 /// <summary>
 /// Three-stage duplicate finder:
 ///   1. Group files by exact byte-size. Different size = not duplicates.
@@ -310,6 +319,91 @@ public class DuplicateFinder
             if (fullHash.HasValue) { entry.FullHash = fullHash.Value; entry.HasFullHash = true; }
         }
         catch (Exception ex) { Log.Warn($"UpdateCache '{path}': {ex.Message}"); }
+    }
+
+    public async Task<List<DuplicateDirectoryGroup>> FindDuplicateDirectoriesAsync(
+        IEnumerable<string> roots,
+        int minFiles = 2,
+        IProgress<string>? progress = null,
+        CancellationToken ct = default)
+    {
+        LoadCache();
+        var dirs = new List<(string Path, long Size, int FileCount, string Fingerprint)>();
+
+        int scanned = 0;
+        foreach (var root in roots.Where(r => !string.IsNullOrEmpty(r) && Directory.Exists(r)))
+        {
+            foreach (var dir in SafetyGuard.SafeEnumerateDirectories(root))
+            {
+                ct.ThrowIfCancellationRequested();
+                scanned++;
+                if (scanned % 100 == 0) progress?.Report($"Scanning directories: {scanned:N0}...");
+
+                var fingerprint = await ComputeDirectoryFingerprintAsync(dir, ct);
+                if (fingerprint == null || fingerprint.FileCount < minFiles) continue;
+                dirs.Add((dir, fingerprint.TotalSize, fingerprint.FileCount, fingerprint.Hash));
+            }
+        }
+
+        progress?.Report($"Grouping {dirs.Count} directories...");
+
+        var groups = dirs
+            .GroupBy(d => d.Fingerprint)
+            .Where(g => g.Count() >= 2)
+            .Select(g => new DuplicateDirectoryGroup
+            {
+                TotalSize = g.First().Size,
+                FileCount = g.First().FileCount,
+                MatchPercent = 100,
+                Paths = g.Select(d => d.Path).ToList(),
+            })
+            .OrderByDescending(g => g.WastedBytes)
+            .ToList();
+
+        SaveCache();
+        return groups;
+    }
+
+    private record DirectoryFingerprint(string Hash, long TotalSize, int FileCount);
+
+    private async Task<DirectoryFingerprint?> ComputeDirectoryFingerprintAsync(string dir, CancellationToken ct)
+    {
+        try
+        {
+            var entries = new SortedList<string, (long Size, ulong Hash)>(StringComparer.OrdinalIgnoreCase);
+            long totalSize = 0;
+
+            foreach (var file in SafeEnumerate(dir, ct))
+            {
+                ct.ThrowIfCancellationRequested();
+                var relativePath = Path.GetRelativePath(dir, file);
+                long size;
+                try { size = new FileInfo(file).Length; }
+                catch { continue; }
+                totalSize += size;
+
+                var hash = await HashHeadAsync(file, ct);
+                if (hash == null) continue;
+                entries[relativePath] = (size, hash.Value);
+            }
+
+            if (entries.Count == 0) return null;
+
+            var combinedHash = new XxHash3();
+            foreach (var kv in entries)
+            {
+                var nameBytes = System.Text.Encoding.UTF8.GetBytes(kv.Key);
+                combinedHash.Append(nameBytes);
+                combinedHash.Append(BitConverter.GetBytes(kv.Value.Size));
+                combinedHash.Append(BitConverter.GetBytes(kv.Value.Hash));
+            }
+
+            return new DirectoryFingerprint(
+                combinedHash.GetCurrentHashAsUInt64().ToString("X16"),
+                totalSize,
+                entries.Count);
+        }
+        catch { return null; }
     }
 
     private void LoadCache()
