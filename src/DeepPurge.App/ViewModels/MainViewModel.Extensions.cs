@@ -710,6 +710,16 @@ public partial class MainViewModel
     // ═══════════════════════════════════════════════════════
 
     [RelayCommand]
+    private void CopyHistoryToClipboard()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Timestamp\tOperation\tSummary\tBytes Freed\tItems\tDry Run");
+        foreach (var e in HistoryEntries)
+            sb.AppendLine($"{e.TimestampUtc:yyyy-MM-dd HH:mm}\t{e.Operation}\t{e.Summary}\t{FormatBytes(e.BytesFreed)}\t{e.ItemCount}\t{e.DryRun}");
+        SetClipboard(sb.ToString());
+    }
+
+    [RelayCommand]
     private void CopyDriversToClipboard()
     {
         var sb = new System.Text.StringBuilder();

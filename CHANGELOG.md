@@ -9,6 +9,9 @@ All notable changes to DeepPurge will be documented in this file.
 - **Automated deletion rollback from manifest** — `DeletionManifest` now supports `ListManifests()`, `LoadManifest(date)`, and `RestoreFromManifest(date, dryRun)`. Registry deletions are restored via `reg import` from BackupManager's `.reg` exports. Files are flagged for Recycle Bin recovery. Secure-deleted items are reported as unrecoverable. CLI: `deeppurgecli restore [--date YYYY-MM-DD] [--list] [--dry-run]`.
 - **Per-program notes/tags** — `AppSettings.ProgramNotes` dictionary persists notes keyed by program name. `InstalledProgram.Note` property for VM binding. CLI: `deeppurgecli note "Program Name" "keep for compliance"` to set, `--clear` to remove. `list --json` includes notes.
 
+### Added (P3 polish)
+- **Activity history clipboard** — `CopyHistoryToClipboard` command added to History panel context menu. Total clipboard copy coverage is now 10 panels (Programs, Junk, Evidence, Autoruns, Services, Drivers, Startup Impact, Duplicates, Orphans, History).
+
 ### Fixed (P2 consistency)
 - **Error logging parity between GUI and CLI** — `RunInitialScanAsync` catch handler now calls `Log.Error` before setting StatusText, matching all other VM error handlers. Previously the main scan was the only handler that set StatusText without logging.
 

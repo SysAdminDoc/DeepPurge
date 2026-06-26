@@ -1386,6 +1386,11 @@
                               ItemsSource="{Binding HistoryEntries}"
                               AutomationProperties.Name="Activity history"
                               AutomationProperties.HelpText="Prior uninstall, cleanup, and repair activity.">
+                        <DataGrid.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Copy All to Clipboard" Tag="&#xE8C8;" Command="{Binding CopyHistoryToClipboardCommand}"/>
+                            </ContextMenu>
+                        </DataGrid.ContextMenu>
                         <DataGrid.Columns>
                             <DataGridTextColumn Binding="{Binding TimestampUtc, StringFormat={}{0:yyyy-MM-dd HH:mm}}" Header="DATE (UTC)" Width="140"/>
                             <DataGridTextColumn Binding="{Binding Operation}" Header="OPERATION" Width="120"/>
