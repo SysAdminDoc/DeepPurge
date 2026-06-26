@@ -9,6 +9,9 @@ All notable changes to DeepPurge will be documented in this file.
 - **Automated deletion rollback from manifest** — `DeletionManifest` now supports `ListManifests()`, `LoadManifest(date)`, and `RestoreFromManifest(date, dryRun)`. Registry deletions are restored via `reg import` from BackupManager's `.reg` exports. Files are flagged for Recycle Bin recovery. Secure-deleted items are reported as unrecoverable. CLI: `deeppurgecli restore [--date YYYY-MM-DD] [--list] [--dry-run]`.
 - **Per-program notes/tags** — `AppSettings.ProgramNotes` dictionary persists notes keyed by program name. `InstalledProgram.Note` property for VM binding. CLI: `deeppurgecli note "Program Name" "keep for compliance"` to set, `--clear` to remove. `list --json` includes notes.
 
+### Added (P2 CLI)
+- **`--json` output for 5 more CLI commands** — `shortcuts`, `snapshot trace`, `schedule list`, `clean`, and `winapp2` (partial) now support `--json` for machine-parseable scripting. Help text updated.
+
 ### Fixed (P2 UX)
 - **Clipboard commands wired into XAML** — "Copy All to Clipboard" context menu items added to 8 DataGrid panels (Programs, Junk, Evidence, Autoruns, Services, Drivers, Startup Impact, Duplicates). All 9 `CopyXxxToClipboard` VM commands are now reachable via right-click.
 
