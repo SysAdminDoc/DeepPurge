@@ -69,7 +69,7 @@ public static class LockedFileResolver
             uint needed = 0, count = 0, rebootReasons = 0;
             err = RmGetList(sessionHandle, out needed, ref count, null, ref rebootReasons);
 
-            if (err == 234 && needed > 0) // ERROR_MORE_DATA
+            if (err == 234 && needed > 0 && needed <= 1024) // ERROR_MORE_DATA; cap allocation
             {
                 var processes = new RM_PROCESS_INFO[needed];
                 count = needed;
@@ -100,7 +100,11 @@ public static class LockedFileResolver
     {
         try
         {
-            return MoveFileEx(filePath, null, MOVEFILE_DELAY_UNTIL_REBOOT);
+            if (MoveFileEx(filePath, null, MOVEFILE_DELAY_UNTIL_REBOOT))
+                return true;
+            var error = Marshal.GetLastWin32Error();
+            Log.Warn($"MoveFileEx delay-until-reboot failed (Win32 error {error}) for '{filePath}'");
+            return false;
         }
         catch (Exception ex)
         {

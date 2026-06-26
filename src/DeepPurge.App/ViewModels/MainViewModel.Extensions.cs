@@ -331,7 +331,7 @@ public partial class MainViewModel
         try
         {
             var engine = new InstallSnapshotEngine();
-            var useV2 = UsnJournalReader.IsSupported(@"C:\");
+            var useV2 = UsnJournalReader.IsSupported(Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles)) ?? @"C:\");
             SnapshotStatus = useV2
                 ? $"Tracing {programName} via USN journal..."
                 : $"Capturing baseline for {programName}...";

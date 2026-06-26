@@ -4,6 +4,15 @@ All notable changes to DeepPurge will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed (audit pass)
+- **CleanerDefinition path traversal hardening** — `DetectFile` paths with `..` segments are now rejected before environment variable expansion. Empty registry subkey names are blocked to prevent attempting hive-root deletion.
+- **HealthScorer rounding** — `Math.Round` replaces integer truncation for overall score to prevent score-grade boundary misclassification (74.6 now rounds to 75 = B, not truncates to 74 = C).
+- **LockedFileResolver bounds check** — Restart Manager array allocation capped at 1024 entries to prevent unbounded memory allocation from a malicious or corrupted RM response. MoveFileEx failure now logs the Win32 error code.
+- **AmcacheParser resource leak and dead code** — Removed unused `Amcache.hve` path check (the parser reads BAM registry data, not the hive file). Fixed `arpKey` disposal with proper `using` statement. Added path-traversal guard (`..` rejection) on expanded registry values. Added null safety in `FindRemnants` LINQ predicate.
+- **SystemSlimmer progress reporting** — Failed deletions now correctly report `Skipped = true` in progress callbacks instead of `false`.
+- **chkdsk hardcoded C: drive** — `WindowsRepairEngine.ChkDsk` now resolves the system drive dynamically instead of assuming `C:`.
+- **USN journal hardcoded C:\** — CLI and GUI install-monitor USN support checks now probe the actual system volume instead of hardcoded `C:\`.
+
 ### Changed
 - **Target .NET 10 LTS** — All 4 projects migrated from `net8.0-windows10.0.17763.0` to `net10.0-windows10.0.17763.0`. .NET 10 is LTS through Nov 2028 (.NET 8 EOL was Nov 2026). CommunityToolkit.Mvvm upgraded from 8.2.2 to 8.4.2 (adds partial property support). CI workflows updated to .NET 10 SDK. Fixed SYSLIB0057: X509Certificate2 constructor replaced with X509CertificateLoader.
 

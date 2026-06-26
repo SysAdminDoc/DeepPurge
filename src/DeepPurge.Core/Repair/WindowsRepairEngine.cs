@@ -140,7 +140,7 @@ public class WindowsRepairEngine
         RepairOperation.DismRestoreHealth    => ("DISM.exe", "/Online /Cleanup-Image /RestoreHealth"),
         RepairOperation.DismComponentCleanup => ("DISM.exe", "/Online /Cleanup-Image /StartComponentCleanup"),
         RepairOperation.DismResetBase        => ("DISM.exe", "/Online /Cleanup-Image /StartComponentCleanup /ResetBase"),
-        RepairOperation.ChkDsk               => ("chkdsk.exe", "C: /scan"),
+        RepairOperation.ChkDsk               => ("chkdsk.exe", $"{Path.GetPathRoot(Environment.SystemDirectory)?.TrimEnd('\\')} /scan"),
         RepairOperation.WingetRepair         => ("winget.exe", $"repair {SanitizeToken(extra)} --silent"),
         RepairOperation.MsiRepair            => ("msiexec.exe", $"/fa {SanitizeProductCode(extra)} /qn"),
         _ => throw new ArgumentOutOfRangeException(nameof(op)),

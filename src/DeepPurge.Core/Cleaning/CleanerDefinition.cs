@@ -62,6 +62,7 @@ public static class CleanerDefinitionRunner
         foreach (var filePath in rule.DetectFile)
         {
             var expanded = Environment.ExpandEnvironmentVariables(filePath);
+            if (expanded.Contains("..")) return false;
             if (!File.Exists(expanded) && !Directory.Exists(expanded)) return false;
         }
         return true;
@@ -154,7 +155,7 @@ public static class CleanerDefinitionRunner
             try
             {
                 var parts = regPath.Split('\\', 2);
-                if (parts.Length < 2) continue;
+                if (parts.Length < 2 || string.IsNullOrEmpty(parts[1])) continue;
                 var hive = parts[0].ToUpperInvariant() switch
                 {
                     "HKCU" => Microsoft.Win32.Registry.CurrentUser,
