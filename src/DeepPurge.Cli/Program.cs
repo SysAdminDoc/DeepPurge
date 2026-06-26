@@ -210,7 +210,14 @@ public static class Program
             Console.WriteLine($"[{cat}] {(dryRun ? "would free" : "freed")} {FormatBytes(freed)}");
             total += freed;
         }
-        Console.WriteLine($"Total: {FormatBytes(total)} {(dryRun ? "(dry-run)" : "")}");
+        if (a.HasFlag("json"))
+        {
+            WriteJson(new { total, categories = categories, dryRun });
+        }
+        else
+        {
+            Console.WriteLine($"Total: {FormatBytes(total)} {(dryRun ? "(dry-run)" : "")}");
+        }
         if (!dryRun && total > 0)
             DeepPurge.Core.Diagnostics.ActivityLog.Record("CLI Clean", $"{categories.Count} categories", total, categories.Count);
         return 0;
@@ -348,6 +355,13 @@ public static class Program
             return 0;
         }
 
+        if (a.HasFlag("json"))
+        {
+            var exportSet = a.HasFlag("all") ? shortcuts : broken;
+            WriteJson(exportSet.Select(s => new { s.Path, s.TargetPath, Status = s.Status.ToString(), s.Description }));
+            return 0;
+        }
+
         foreach (var s in broken) Console.WriteLine($"BROKEN  {s.Path}  ->  {s.TargetPath}");
         Console.WriteLine($"# {broken.Count} broken of {shortcuts.Count} total");
         if (a.HasFlag("delete") || a.HasFlag("recycle"))
@@ -414,6 +428,17 @@ public static class Program
         var delta = useV2
             ? await engine.TraceInstallV2Async(name, installer, extraArgs, ct)
             : await engine.TraceInstallAsync(name, installer, extraArgs, ct);
+        if (a.HasFlag("json"))
+        {
+            WriteJson(new {
+                delta.IsUpgrade,
+                AddedFiles = delta.AddedFiles.Select(f => new { f.Path, f.SizeBytes }),
+                delta.AddedRegistryKeys, delta.RemovedFiles, delta.RemovedRegistryKeys,
+                delta.TotalAddedBytes,
+            });
+            return 0;
+        }
+
         if (delta.IsUpgrade) Console.WriteLine("[upgrade detected — showing diff against prior version]");
         Console.WriteLine($"Added files:      {delta.AddedFiles.Count,5} ({FormatBytes(delta.TotalAddedBytes)})");
         Console.WriteLine($"Added regkeys:    {delta.AddedRegistryKeys.Count,5}");
@@ -451,7 +476,9 @@ public static class Program
         switch (sub)
         {
             case "list":
-                foreach (var j in mgr.ListJobs()) Console.WriteLine(j);
+                var jobs = mgr.ListJobs();
+                if (a.HasFlag("json")) { WriteJson(jobs); return 0; }
+                foreach (var j in jobs) Console.WriteLine(j);
                 return 0;
 
             case "add":
@@ -948,7 +975,7 @@ if ($app) {{
         Console.WriteLine("  doctor                                   Run environment self-test + report");
         Console.WriteLine();
         Console.WriteLine("Global flags:");
-        Console.WriteLine("  --json                                   Output as JSON (list, drivers, startup-impact, orphans)");
+        Console.WriteLine("  --json                                   Output as JSON (list, drivers, startup-impact, orphans, shortcuts, snapshot, schedule, clean)");
         Console.WriteLine();
         Console.WriteLine("Exit codes: 0 ok | 1 fail | 2 bad args | 13 access denied | 1223 cancelled");
     }
