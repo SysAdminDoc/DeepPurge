@@ -9,18 +9,24 @@ public class AppSettings
     public List<string> ExcludedPaths { get; set; } = new();
 
     private static readonly Lazy<AppSettings> _instance = new(Load);
+    private static readonly object _saveLock = new();
     public static AppSettings Current => _instance.Value;
 
     public void Save()
     {
-        try
+        lock (_saveLock)
         {
-            var dir = Path.GetDirectoryName(DataPaths.SettingsFile);
-            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-            var json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(DataPaths.SettingsFile, json);
+            try
+            {
+                var dir = Path.GetDirectoryName(DataPaths.SettingsFile);
+                if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+                var json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
+                var tmp = DataPaths.SettingsFile + ".tmp";
+                File.WriteAllText(tmp, json);
+                File.Move(tmp, DataPaths.SettingsFile, overwrite: true);
+            }
+            catch (Exception ex) { Log.Warn($"Failed to save settings: {ex.Message}"); }
         }
-        catch (Exception ex) { Log.Warn($"Failed to save settings: {ex.Message}"); }
     }
 
     private static AppSettings Load()
