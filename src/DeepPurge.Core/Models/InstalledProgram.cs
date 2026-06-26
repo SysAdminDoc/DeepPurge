@@ -20,6 +20,7 @@ public class InstalledProgram : INotifyPropertyChanged
     public string DisplayIconPath { get; set; } = string.Empty;
     public long EstimatedSizeKB { get; set; }
     public long ActualSizeBytes { get; set; } = -1;
+    public DateTime? LastUsedDate { get; set; }
     public bool IsSystemComponent { get; set; }
     public bool IsWindowsInstaller { get; set; }
     public string ParentKeyName { get; set; } = string.Empty;
@@ -97,6 +98,8 @@ public class InstalledProgram : INotifyPropertyChanged
             catch { return false; }
         }
     }
+
+    public string LastUsedDisplay => LastUsedDate.HasValue ? LastUsedDate.Value.ToString("yyyy-MM-dd") : "";
 
     public bool HasUninstaller => !string.IsNullOrEmpty(UninstallString);
     public bool HasQuietUninstaller => !string.IsNullOrEmpty(QuietUninstallString);

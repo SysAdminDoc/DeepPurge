@@ -121,11 +121,13 @@ public static class Program
         var items = await Task.Run(() => InstalledProgramScanner.GetAllInstalledPrograms(), ct);
         if (!a.HasFlag("registry-only"))
             await PackageManagerScanner.EnrichAsync(items, ct);
+        PrefetchScanner.EnrichWithLastUsed(items);
         foreach (var p in items.OrderBy(p => p.DisplayName))
         {
             var source = p.SourceDisplay;
             var pkgId = !string.IsNullOrEmpty(p.PackageId) ? $"\t{p.PackageId}" : "";
-            Console.WriteLine($"{p.DisplayName}\t{p.DisplayVersion}\t{p.Publisher}\t{source}{pkgId}");
+            var lastUsed = !string.IsNullOrEmpty(p.LastUsedDisplay) ? $"\t{p.LastUsedDisplay}" : "";
+            Console.WriteLine($"{p.DisplayName}\t{p.DisplayVersion}\t{p.Publisher}\t{source}{pkgId}{lastUsed}");
         }
         Console.WriteLine($"# {items.Count} programs");
         return 0;
