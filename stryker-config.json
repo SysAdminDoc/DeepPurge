@@ -16,6 +16,7 @@
       "src/DeepPurge.Core/Safety/DeleteOptions.cs"
     ],
     "reporters": ["html", "progress", "cleartext"],
-    "concurrency": 4
+    "concurrency": 4,
+    "test-runner": "dotnet test"
   }
 }
