@@ -704,4 +704,50 @@ public partial class MainViewModel
         }
         catch (Exception ex) { Log.Error("CheckForUpdatesAsync", ex); StatusText = $"Update check failed: {ex.Message}"; }
     }
+
+    // ═══════════════════════════════════════════════════════
+    //  CLIPBOARD (extension panels)
+    // ═══════════════════════════════════════════════════════
+
+    [RelayCommand]
+    private void CopyDriversToClipboard()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Published\tOriginal\tProvider\tVersion\tSize\tOld");
+        foreach (var d in DriverPackages)
+            sb.AppendLine($"{d.PublishedName}\t{d.OriginalName}\t{d.ProviderName}\t{d.DriverVersion}\t{FormatBytes(d.SizeBytes)}\t{d.IsOldVersion}");
+        SetClipboard(sb.ToString());
+    }
+
+    [RelayCommand]
+    private void CopyStartupImpactToClipboard()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Process\tImpact\tDisk\tCPU ms");
+        foreach (var e in StartupImpacts)
+            sb.AppendLine($"{e.ProcessName}\t{e.Impact}\t{FormatBytes(e.DiskBytes)}\t{e.CpuMs}");
+        SetClipboard(sb.ToString());
+    }
+
+    [RelayCommand]
+    private void CopyDuplicatesToClipboard()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Size\tWasted\tCopies\tPaths");
+        foreach (var g in DuplicateGroups)
+            sb.AppendLine($"{FormatBytes(g.FileSize)}\t{FormatBytes(g.WastedBytes)}\t{g.Paths.Count}\t{string.Join(" | ", g.Paths)}");
+        SetClipboard(sb.ToString());
+    }
+
+    [RelayCommand]
+    private void CopyOrphansToClipboard()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Type\tName\tDetail");
+        foreach (var s in OrphanedFirewallRules)
+            sb.AppendLine($"Firewall\t{s.DisplayName}\t{s.Program}");
+        foreach (var p in OrphanedPathEntries)
+            sb.AppendLine($"PATH\t{p.Directory}\t{p.Source}");
+        SetClipboard(sb.ToString());
+    }
 }

@@ -785,6 +785,70 @@ public partial class MainViewModel : ObservableObject
         }, ct);
     }
 
+    // ═══════════════════════════════════════════════════════
+    //  CLIPBOARD (TSV copy for all scan panels)
+    // ═══════════════════════════════════════════════════════
+
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    private void CopyProgramsToClipboard()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Name\tVersion\tPublisher\tSource\tSignature\tSize\tInstalled");
+        foreach (var p in FilteredPrograms)
+            sb.AppendLine($"{p.DisplayName}\t{p.DisplayVersion}\t{p.Publisher}\t{p.SourceDisplay}\t{p.SignatureDisplay}\t{p.EstimatedSizeDisplay}\t{p.InstallDateDisplay}");
+        SetClipboard(sb.ToString());
+    }
+
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    private void CopyJunkToClipboard()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Category\tFiles\tSize");
+        foreach (var c in JunkCategories)
+            sb.AppendLine($"{c.Name}\t{c.Files.Count}\t{c.TotalSizeDisplay}");
+        SetClipboard(sb.ToString());
+    }
+
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    private void CopyEvidenceToClipboard()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Category\tItems\tSize");
+        foreach (var c in TraceCategories)
+            sb.AppendLine($"{c.Name}\t{c.ItemCount}\t{c.TotalSizeDisplay}");
+        SetClipboard(sb.ToString());
+    }
+
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    private void CopyServicesToClipboard()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Name\tDisplayName\tImagePath\tSignature");
+        foreach (var s in Services)
+            sb.AppendLine($"{s.Name}\t{s.DisplayName}\t{s.ImagePath}\t{s.SignatureDisplay}");
+        SetClipboard(sb.ToString());
+    }
+
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    private void CopyAutorunsToClipboard()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Name\tCommand\tLocation\tSignature");
+        foreach (var a in Autoruns)
+            sb.AppendLine($"{a.Name}\t{a.Command}\t{a.Location}\t{a.SignatureDisplay}");
+        SetClipboard(sb.ToString());
+    }
+
+    private void SetClipboard(string text)
+    {
+        try
+        {
+            _dispatcher.Invoke(() => System.Windows.Clipboard.SetText(text));
+            StatusText = $"Copied {text.Split('\n').Length - 2} rows to clipboard";
+        }
+        catch (Exception ex) { StatusText = $"Clipboard copy failed: {ex.Message}"; }
+    }
+
     private void StartSignatureEnrichment(IReadOnlyList<InstalledProgram> programs)
     {
         var ct = _cts?.Token ?? CancellationToken.None;
