@@ -30,6 +30,7 @@ public static class CleanerDefinitionRunner
         var rules = new List<CleanerRule>();
         try
         {
+            EnsureBundledCleaners();
             var dir = DataPaths.Cleaners;
             if (!Directory.Exists(dir)) return rules;
 
@@ -178,6 +179,19 @@ public static class CleanerDefinitionRunner
         return new DeleteSummary(cleaned, skipped, freed, options.DryRun);
     }
 
+    private static void EnsureBundledCleaners()
+    {
+        try
+        {
+            var dir = DataPaths.Cleaners;
+            Directory.CreateDirectory(dir);
+            var target = Path.Combine(dir, "bundled-modern-apps.cleaner.json");
+            if (File.Exists(target)) return;
+            File.WriteAllText(target, BundledCleaners.ModernApps, System.Text.Encoding.UTF8);
+        }
+        catch (Exception ex) { Log.Warn($"Bundled cleaner extract: {ex.Message}"); }
+    }
+
     private static bool RegistryKeyExists(string path)
     {
         try
@@ -197,4 +211,171 @@ public static class CleanerDefinitionRunner
         }
         catch { return false; }
     }
+}
+
+internal static class BundledCleaners
+{
+    internal const string ModernApps = """
+[
+  {
+    "Name": "VS Code",
+    "Description": "Visual Studio Code caches and logs",
+    "DetectFile": ["%LOCALAPPDATA%\\Programs\\Microsoft VS Code"],
+    "Files": [
+      { "Path": "%APPDATA%\\Code\\Cache", "Pattern": "*", "Recurse": true, "RemoveSelf": false },
+      { "Path": "%APPDATA%\\Code\\CachedData", "Pattern": "*", "Recurse": true, "RemoveSelf": false },
+      { "Path": "%APPDATA%\\Code\\CachedExtensionVSIXs", "Pattern": "*.vsix", "Recurse": false, "RemoveSelf": false },
+      { "Path": "%APPDATA%\\Code\\logs", "Pattern": "*", "Recurse": true, "RemoveSelf": false },
+      { "Path": "%APPDATA%\\Code\\Service Worker\\CacheStorage", "Pattern": "*", "Recurse": true, "RemoveSelf": false }
+    ]
+  },
+  {
+    "Name": "Cursor",
+    "Description": "Cursor AI editor caches and logs",
+    "DetectFile": ["%LOCALAPPDATA%\\Programs\\cursor"],
+    "Files": [
+      { "Path": "%APPDATA%\\Cursor\\Cache", "Pattern": "*", "Recurse": true, "RemoveSelf": false },
+      { "Path": "%APPDATA%\\Cursor\\CachedData", "Pattern": "*", "Recurse": true, "RemoveSelf": false },
+      { "Path": "%APPDATA%\\Cursor\\logs", "Pattern": "*", "Recurse": true, "RemoveSelf": false },
+      { "Path": "%APPDATA%\\Cursor\\Service Worker\\CacheStorage", "Pattern": "*", "Recurse": true, "RemoveSelf": false }
+    ]
+  },
+  {
+    "Name": "Windsurf",
+    "Description": "Windsurf editor caches and logs",
+    "DetectFile": ["%LOCALAPPDATA%\\Programs\\windsurf"],
+    "Files": [
+      { "Path": "%APPDATA%\\Windsurf\\Cache", "Pattern": "*", "Recurse": true, "RemoveSelf": false },
+      { "Path": "%APPDATA%\\Windsurf\\CachedData", "Pattern": "*", "Recurse": true, "RemoveSelf": false },
+      { "Path": "%APPDATA%\\Windsurf\\logs", "Pattern": "*", "Recurse": true, "RemoveSelf": false }
+    ]
+  },
+  {
+    "Name": "Discord",
+    "Description": "Discord caches and crash reports",
+    "DetectFile": ["%LOCALAPPDATA%\\Discord"],
+    "Files": [
+      { "Path": "%APPDATA%\\discord\\Cache\\Cache_Data", "Pattern": "*", "Recurse": false, "RemoveSelf": false },
+      { "Path": "%APPDATA%\\discord\\Code Cache", "Pattern": "*", "Recurse": true, "RemoveSelf": false },
+      { "Path": "%APPDATA%\\discord\\GPUCache", "Pattern": "*", "Recurse": false, "RemoveSelf": false }
+    ]
+  },
+  {
+    "Name": "Slack",
+    "Description": "Slack caches and logs",
+    "DetectFile": ["%LOCALAPPDATA%\\slack"],
+    "Files": [
+      { "Path": "%APPDATA%\\Slack\\Cache\\Cache_Data", "Pattern": "*", "Recurse": false, "RemoveSelf": false },
+      { "Path": "%APPDATA%\\Slack\\Code Cache", "Pattern": "*", "Recurse": true, "RemoveSelf": false },
+      { "Path": "%APPDATA%\\Slack\\logs", "Pattern": "*.log", "Recurse": false, "RemoveSelf": false },
+      { "Path": "%APPDATA%\\Slack\\Service Worker\\CacheStorage", "Pattern": "*", "Recurse": true, "RemoveSelf": false }
+    ]
+  },
+  {
+    "Name": "Microsoft Teams",
+    "Description": "Teams caches and logs (new Teams app)",
+    "DetectFile": ["%LOCALAPPDATA%\\Packages\\MSTeams_8wekyb3d8bbwe"],
+    "Files": [
+      { "Path": "%LOCALAPPDATA%\\Packages\\MSTeams_8wekyb3d8bbwe\\LocalCache\\Microsoft\\MSTeams\\EBWebView\\Default\\Cache", "Pattern": "*", "Recurse": true, "RemoveSelf": false },
+      { "Path": "%LOCALAPPDATA%\\Packages\\MSTeams_8wekyb3d8bbwe\\LocalCache\\Microsoft\\MSTeams\\EBWebView\\Default\\Code Cache", "Pattern": "*", "Recurse": true, "RemoveSelf": false }
+    ]
+  },
+  {
+    "Name": "Notion",
+    "Description": "Notion desktop caches",
+    "DetectFile": ["%LOCALAPPDATA%\\Programs\\Notion"],
+    "Files": [
+      { "Path": "%APPDATA%\\Notion\\Cache\\Cache_Data", "Pattern": "*", "Recurse": false, "RemoveSelf": false },
+      { "Path": "%APPDATA%\\Notion\\Code Cache", "Pattern": "*", "Recurse": true, "RemoveSelf": false },
+      { "Path": "%APPDATA%\\Notion\\GPUCache", "Pattern": "*", "Recurse": false, "RemoveSelf": false }
+    ]
+  },
+  {
+    "Name": "Obsidian",
+    "Description": "Obsidian caches and crash reports",
+    "DetectFile": ["%LOCALAPPDATA%\\Obsidian"],
+    "Files": [
+      { "Path": "%APPDATA%\\obsidian\\Cache\\Cache_Data", "Pattern": "*", "Recurse": false, "RemoveSelf": false },
+      { "Path": "%APPDATA%\\obsidian\\Code Cache", "Pattern": "*", "Recurse": true, "RemoveSelf": false },
+      { "Path": "%APPDATA%\\obsidian\\GPUCache", "Pattern": "*", "Recurse": false, "RemoveSelf": false }
+    ]
+  },
+  {
+    "Name": "Figma",
+    "Description": "Figma desktop caches",
+    "DetectFile": ["%LOCALAPPDATA%\\Figma"],
+    "Files": [
+      { "Path": "%APPDATA%\\Figma\\Cache\\Cache_Data", "Pattern": "*", "Recurse": false, "RemoveSelf": false },
+      { "Path": "%APPDATA%\\Figma\\Code Cache", "Pattern": "*", "Recurse": true, "RemoveSelf": false },
+      { "Path": "%APPDATA%\\Figma\\GPUCache", "Pattern": "*", "Recurse": false, "RemoveSelf": false }
+    ]
+  },
+  {
+    "Name": "Docker Desktop",
+    "Description": "Docker Desktop logs and caches",
+    "DetectFile": ["%PROGRAMFILES%\\Docker\\Docker"],
+    "Files": [
+      { "Path": "%LOCALAPPDATA%\\Docker\\log", "Pattern": "*.log", "Recurse": true, "RemoveSelf": false },
+      { "Path": "%LOCALAPPDATA%\\Docker\\wsl\\data\\tmp", "Pattern": "*", "Recurse": true, "RemoveSelf": false }
+    ]
+  },
+  {
+    "Name": "Zen Browser",
+    "Description": "Zen Browser caches (Firefox-based)",
+    "DetectFile": ["%APPDATA%\\zen"],
+    "Files": [
+      { "Path": "%LOCALAPPDATA%\\zen\\Profiles", "Pattern": "cache2", "Recurse": true, "RemoveSelf": false },
+      { "Path": "%LOCALAPPDATA%\\zen\\Profiles", "Pattern": "startupCache", "Recurse": true, "RemoveSelf": false }
+    ]
+  },
+  {
+    "Name": "Arc Browser",
+    "Description": "Arc Browser caches (Chromium-based)",
+    "DetectFile": ["%LOCALAPPDATA%\\Arc"],
+    "Files": [
+      { "Path": "%LOCALAPPDATA%\\Arc\\User Data\\Default\\Cache\\Cache_Data", "Pattern": "*", "Recurse": false, "RemoveSelf": false },
+      { "Path": "%LOCALAPPDATA%\\Arc\\User Data\\Default\\Code Cache", "Pattern": "*", "Recurse": true, "RemoveSelf": false },
+      { "Path": "%LOCALAPPDATA%\\Arc\\User Data\\Default\\GPUCache", "Pattern": "*", "Recurse": false, "RemoveSelf": false }
+    ]
+  },
+  {
+    "Name": "Claude Desktop",
+    "Description": "Claude Desktop caches and logs",
+    "DetectFile": ["%APPDATA%\\Claude"],
+    "Files": [
+      { "Path": "%APPDATA%\\Claude\\Cache\\Cache_Data", "Pattern": "*", "Recurse": false, "RemoveSelf": false },
+      { "Path": "%APPDATA%\\Claude\\Code Cache", "Pattern": "*", "Recurse": true, "RemoveSelf": false },
+      { "Path": "%APPDATA%\\Claude\\GPUCache", "Pattern": "*", "Recurse": false, "RemoveSelf": false },
+      { "Path": "%APPDATA%\\Claude\\logs", "Pattern": "*.log", "Recurse": false, "RemoveSelf": false }
+    ]
+  },
+  {
+    "Name": "WSL Caches",
+    "Description": "Windows Subsystem for Linux temp and cache files",
+    "DetectFile": ["%LOCALAPPDATA%\\Packages\\CanonicalGroupLimited.Ubuntu_79rhkp1fndgsc"],
+    "Files": [
+      { "Path": "%LOCALAPPDATA%\\Packages\\CanonicalGroupLimited.Ubuntu_79rhkp1fndgsc\\LocalState\\rootfs\\tmp", "Pattern": "*", "Recurse": true, "RemoveSelf": false }
+    ]
+  },
+  {
+    "Name": "Postman",
+    "Description": "Postman API client caches",
+    "DetectFile": ["%LOCALAPPDATA%\\Postman"],
+    "Files": [
+      { "Path": "%APPDATA%\\Postman\\Cache\\Cache_Data", "Pattern": "*", "Recurse": false, "RemoveSelf": false },
+      { "Path": "%APPDATA%\\Postman\\Code Cache", "Pattern": "*", "Recurse": true, "RemoveSelf": false },
+      { "Path": "%APPDATA%\\Postman\\GPUCache", "Pattern": "*", "Recurse": false, "RemoveSelf": false }
+    ]
+  },
+  {
+    "Name": "Spotify",
+    "Description": "Spotify caches (streaming data, album art)",
+    "DetectFile": ["%APPDATA%\\Spotify"],
+    "Files": [
+      { "Path": "%LOCALAPPDATA%\\Spotify\\Storage", "Pattern": "*", "Recurse": true, "RemoveSelf": false },
+      { "Path": "%LOCALAPPDATA%\\Spotify\\Data", "Pattern": "*", "Recurse": true, "RemoveSelf": false }
+    ]
+  }
+]
+""";
 }

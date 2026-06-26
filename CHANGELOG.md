@@ -9,6 +9,9 @@ All notable changes to DeepPurge will be documented in this file.
 - **Automated deletion rollback from manifest** — `DeletionManifest` now supports `ListManifests()`, `LoadManifest(date)`, and `RestoreFromManifest(date, dryRun)`. Registry deletions are restored via `reg import` from BackupManager's `.reg` exports. Files are flagged for Recycle Bin recovery. Secure-deleted items are reported as unrecoverable. CLI: `deeppurgecli restore [--date YYYY-MM-DD] [--list] [--dry-run]`.
 - **Per-program notes/tags** — `AppSettings.ProgramNotes` dictionary persists notes keyed by program name. `InstalledProgram.Note` property for VM binding. CLI: `deeppurgecli note "Program Name" "keep for compliance"` to set, `--clear` to remove. `list --json` includes notes.
 
+### Added (P3 cleaner ecosystem)
+- **16 bundled cleaner definitions for modern apps** — VS Code, Cursor, Windsurf, Discord, Slack, Microsoft Teams, Notion, Obsidian, Figma, Docker Desktop, Zen Browser, Arc Browser, Claude Desktop, WSL caches, Postman, Spotify. Auto-extracted to `DataPaths.Cleaners/bundled-modern-apps.cleaner.json` on first run. Supplements the stale winapp2.ini (last updated Nov 2025). Users can edit or delete the file.
+
 ### Added (P2 parity)
 - **Copy scan results to clipboard** — 9 new `CopyXxxToClipboard` relay commands across all major scan panels (Programs, Junk, Evidence, Services, Autoruns, Drivers, Startup Impact, Duplicates, Orphans). Copies TSV-formatted text via `System.Windows.Clipboard`. Status bar confirms row count.
 - **Digital signature column on installed programs list** — Programs DataGrid now shows a SIGNATURE column (Signed/Unsigned/Revoked/Untrusted/signer CN) via `DigitalSignatureInspector`. Runs WinVerifyTrust in parallel (8 workers) during initial scan, matching the existing autorun/service pattern. CLI `list --json` includes `signatureDisplay` field. Unsigned or revoked programs are a strong signal for bundleware.
