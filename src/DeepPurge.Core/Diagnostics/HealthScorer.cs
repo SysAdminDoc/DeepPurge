@@ -19,7 +19,7 @@ public static class HealthScorer
             AssessDisk(),
         };
 
-        var overall = cats.Count > 0 ? (int)cats.Average(c => c.Score) : 100;
+        var overall = cats.Count > 0 ? (int)Math.Round(cats.Average(c => c.Score)) : 100;
         var grade = overall switch
         {
             >= 90 => "A",

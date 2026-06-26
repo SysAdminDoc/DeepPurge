@@ -77,22 +77,27 @@ public static class SystemSlimmer
                 continue;
             }
 
+            bool wasSkipped = false;
             try
             {
                 if (Directory.Exists(comp.Path))
                 {
-                    if (SafetyGuard.IsReparsePoint(comp.Path)) { skipped++; continue; }
-                    Directory.Delete(comp.Path, recursive: true);
-                    freed += comp.SizeBytes;
-                    cleaned++;
+                    if (SafetyGuard.IsReparsePoint(comp.Path)) { skipped++; wasSkipped = true; }
+                    else
+                    {
+                        Directory.Delete(comp.Path, recursive: true);
+                        freed += comp.SizeBytes;
+                        cleaned++;
+                    }
                 }
             }
             catch (Exception ex)
             {
                 Log.Warn($"System slimming failed for '{comp.Name}': {ex.Message}");
                 skipped++;
+                wasSkipped = true;
             }
-            progress?.Report(new DeleteProgress(i + 1, selected.Count, freed, comp.Path, false));
+            progress?.Report(new DeleteProgress(i + 1, selected.Count, freed, comp.Path, wasSkipped));
         }
 
         if (!options.DryRun && cleaned > 0)

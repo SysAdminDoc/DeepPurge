@@ -325,7 +325,7 @@ public static class Program
         var extraArgs = a.GetOption("args");
 
         var engine = new InstallSnapshotEngine();
-        var useV2 = !a.HasFlag("legacy") && UsnJournalReader.IsSupported(@"C:\");
+        var useV2 = !a.HasFlag("legacy") && UsnJournalReader.IsSupported(Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles)) ?? @"C:\");
         if (useV2) Console.WriteLine("[v2 mode: USN journal + registry snapshot]");
         var delta = useV2
             ? await engine.TraceInstallV2Async(name, installer, extraArgs, ct)
