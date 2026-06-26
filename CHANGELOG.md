@@ -10,6 +10,7 @@ All notable changes to DeepPurge will be documented in this file.
 - **Per-program notes/tags** — `AppSettings.ProgramNotes` dictionary persists notes keyed by program name. `InstalledProgram.Note` property for VM binding. CLI: `deeppurgecli note "Program Name" "keep for compliance"` to set, `--clear` to remove. `list --json` includes notes.
 
 ### Added (P2 parity)
+- **Copy scan results to clipboard** — 9 new `CopyXxxToClipboard` relay commands across all major scan panels (Programs, Junk, Evidence, Services, Autoruns, Drivers, Startup Impact, Duplicates, Orphans). Copies TSV-formatted text via `System.Windows.Clipboard`. Status bar confirms row count.
 - **Digital signature column on installed programs list** — Programs DataGrid now shows a SIGNATURE column (Signed/Unsigned/Revoked/Untrusted/signer CN) via `DigitalSignatureInspector`. Runs WinVerifyTrust in parallel (8 workers) during initial scan, matching the existing autorun/service pattern. CLI `list --json` includes `signatureDisplay` field. Unsigned or revoked programs are a strong signal for bundleware.
 
 ### Changed (P2 ecosystem)
