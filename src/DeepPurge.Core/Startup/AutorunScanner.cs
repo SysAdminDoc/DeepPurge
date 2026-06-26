@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text;
+using DeepPurge.Core.Safety;
 using DeepPurge.Core.Security;
 using global::Microsoft.Win32;
 
@@ -385,10 +386,10 @@ public static class AutorunScanner
                     return SetRunEntryEnabled(entry, enabled: false);
 
                 case AutorunType.StartupFolder:
-                    if (File.Exists(entry.Command))
+                    if (File.Exists(entry.Command) && SafetyGuard.IsPathSafeToDelete(entry.Command))
                     {
                         var disabledPath = entry.Command + ".disabled";
-                        if (File.Exists(disabledPath)) File.Delete(disabledPath);
+                        if (File.Exists(disabledPath)) SafetyGuard.SafeDeleteFile(disabledPath);
                         File.Move(entry.Command, disabledPath);
                         entry.IsEnabled = false;
                     }
@@ -422,9 +423,11 @@ public static class AutorunScanner
                     return true;
 
                 case AutorunType.StartupFolder:
-                    if (File.Exists(entry.Command)) { File.Delete(entry.Command); return true; }
+                    if (File.Exists(entry.Command) && SafetyGuard.IsPathSafeToDelete(entry.Command))
+                        return SafetyGuard.SafeDeleteFile(entry.Command);
                     var disabled = entry.Command + ".disabled";
-                    if (File.Exists(disabled)) { File.Delete(disabled); return true; }
+                    if (File.Exists(disabled) && SafetyGuard.IsPathSafeToDelete(disabled))
+                        return SafetyGuard.SafeDeleteFile(disabled);
                     return false;
 
                 case AutorunType.Service:

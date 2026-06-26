@@ -119,7 +119,7 @@ public static class FirewallRuleScanner
             var psi = new ProcessStartInfo
             {
                 FileName = "powershell.exe",
-                Arguments = $"-NoProfile -Command \"Remove-NetFirewallRule -Name '{EscapePs(rule.Name)}' -ErrorAction Stop\"",
+                Arguments = $"-NoProfile -EncodedCommand {EncodePsCommand($"Remove-NetFirewallRule -Name '{EscapePs(rule.Name)}' -ErrorAction Stop")}",
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
@@ -195,7 +195,10 @@ public static class FirewallRuleScanner
     }
 
     private static string EscapePs(string s) =>
-        string.IsNullOrEmpty(s) ? "" : s.Replace("'", "''");
+        string.IsNullOrEmpty(s) ? "" : s.Replace("\0", "").Replace("'", "''");
+
+    public static string EncodePsCommand(string script) =>
+        Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(script));
 
     private static string GetStr(JsonElement el, string prop)
     {
