@@ -85,7 +85,7 @@ public static class SystemSlimmer
                     if (SafetyGuard.IsReparsePoint(comp.Path)) { skipped++; wasSkipped = true; }
                     else
                     {
-                        Directory.Delete(comp.Path, recursive: true);
+                        SafetyGuard.SafeDeleteDirectory(comp.Path);
                         freed += comp.SizeBytes;
                         cleaned++;
                     }

@@ -4,6 +4,10 @@ All notable changes to DeepPurge will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed (P0 safety)
+- **GUI junk cleanup routed through shared pipeline** — `CleanJunk_Click` in MainWindow now delegates to `MainViewModel.CleanJunkAsync` instead of deleting files directly. Dry Run, Secure Delete, progress reporting, cancellation, and ActivityLog recording are now honored for all GUI junk cleanup paths.
+- **Child-reparse-safe recursive deletion** — New `SafetyGuard.SafeEnumerateFiles`, `SafeEnumerateDirectories`, and `SafeDeleteDirectory` primitives skip child junctions/symlinks during recursive operations. All destructive recursive callers updated: `SecureDelete.WipeDirectory`, `Winapp2Parser`, `CleanerDefinition`, `UninstallEngine.DeleteFileItem`, `EvidenceRemover`, `JunkFilesCleaner`, and `SystemSlimmer`. Prevents a junction under a safe directory from redirecting deletion into unrelated data.
+
 ### Fixed (audit pass)
 - **CleanerDefinition path traversal hardening** — `DetectFile` paths with `..` segments are now rejected before environment variable expansion. Empty registry subkey names are blocked to prevent attempting hive-root deletion.
 - **HealthScorer rounding** — `Math.Round` replaces integer truncation for overall score to prevent score-grade boundary misclassification (74.6 now rounds to 75 = B, not truncates to 74 = C).

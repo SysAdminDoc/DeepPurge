@@ -311,6 +311,83 @@ public static class SafetyGuard
         catch { return false; }
     }
 
+    /// <summary>
+    /// Enumerates files recursively while skipping child reparse points (junctions, symlinks).
+    /// Prevents a junction under a safe directory from redirecting enumeration into unrelated data.
+    /// </summary>
+    public static IEnumerable<string> SafeEnumerateFiles(string root, string pattern = "*")
+    {
+        if (!Directory.Exists(root)) yield break;
+
+        IEnumerable<string> topFiles;
+        try { topFiles = Directory.EnumerateFiles(root, pattern, SearchOption.TopDirectoryOnly); }
+        catch { yield break; }
+        foreach (var f in topFiles) yield return f;
+
+        IEnumerable<string> subDirs;
+        try { subDirs = Directory.EnumerateDirectories(root, "*", SearchOption.TopDirectoryOnly); }
+        catch { yield break; }
+        foreach (var dir in subDirs)
+        {
+            if (IsReparsePoint(dir)) continue;
+            foreach (var f in SafeEnumerateFiles(dir, pattern)) yield return f;
+        }
+    }
+
+    /// <summary>
+    /// Enumerates subdirectories recursively while skipping child reparse points.
+    /// Results are deepest-first (longest path first) for safe bottom-up deletion.
+    /// </summary>
+    public static IEnumerable<string> SafeEnumerateDirectories(string root)
+    {
+        if (!Directory.Exists(root)) yield break;
+
+        IEnumerable<string> subDirs;
+        try { subDirs = Directory.EnumerateDirectories(root, "*", SearchOption.TopDirectoryOnly).ToList(); }
+        catch { yield break; }
+
+        foreach (var dir in subDirs)
+        {
+            if (IsReparsePoint(dir)) continue;
+            foreach (var child in SafeEnumerateDirectories(dir)) yield return child;
+            yield return dir;
+        }
+    }
+
+    /// <summary>
+    /// Recursively deletes a directory tree, skipping child reparse points.
+    /// Safer alternative to Directory.Delete(path, recursive: true).
+    /// </summary>
+    public static bool SafeDeleteDirectory(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path)) return false;
+        if (!IsPathSafeToDelete(path)) return false;
+
+        try
+        {
+            foreach (var file in SafeEnumerateFiles(path))
+            {
+                try { File.Delete(file); }
+                catch (Exception ex) { Diagnostics.Log.Warn($"SafeDelete file '{file}': {ex.Message}"); }
+            }
+
+            foreach (var dir in SafeEnumerateDirectories(path))
+            {
+                try { if (Directory.Exists(dir)) Directory.Delete(dir, recursive: false); }
+                catch (Exception ex) { Diagnostics.Log.Warn($"SafeDelete dir '{dir}': {ex.Message}"); }
+            }
+
+            try { Directory.Delete(path, recursive: false); }
+            catch { /* root may not be empty if some files were locked */ }
+            return !Directory.Exists(path);
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Warn($"SafeDeleteDirectory '{path}': {ex.Message}");
+            return false;
+        }
+    }
+
     /// <summary>Get a human-readable safety assessment</summary>
     public static (bool Safe, string Reason) AssessOperation(string operationType, string target)
     {

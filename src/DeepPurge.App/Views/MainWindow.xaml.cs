@@ -497,33 +497,8 @@ public partial class MainWindow : Window
         var selected = _vm.JunkCategories.Where(c => c.IsSelected && c.Files.Count > 0).ToList();
         if (selected.Count == 0) { _vm.StatusText = "Nothing selected to clean"; return; }
 
-        _vm.IsBusy = true;
-        int cleaned = 0, skipped = 0;
-        try
-        {
-            await Task.Run(() =>
-            {
-                foreach (var cat in selected)
-                {
-                    foreach (var file in cat.Files)
-                    {
-                        if (!SafetyGuard.IsJunkPathSafeToDelete(file.Path)) { skipped++; continue; }
-                        try
-                        {
-                            if (file.IsDirectory && Directory.Exists(file.Path))
-                                Directory.Delete(file.Path, true);
-                            else if (File.Exists(file.Path))
-                                File.Delete(file.Path);
-                            cleaned++;
-                        }
-                        catch { skipped++; }
-                    }
-                }
-            });
-            ShowToast($"Cleaned {cleaned} items" + (skipped > 0 ? $" ({skipped} skipped)" : ""));
-            await _vm.ScanJunkAsync();
-        }
-        finally { _vm.IsBusy = false; }
+        try { await _vm.CleanJunkAsync(selected); }
+        catch (Exception ex) { ShowToast($"Clean error: {ex.Message}", isError: true); }
     }
 
     private async void ScanEvidence_Click(object sender, RoutedEventArgs e) => await _vm.ScanEvidenceAsync();
