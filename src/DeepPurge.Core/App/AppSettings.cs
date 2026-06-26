@@ -31,6 +31,18 @@ public class AppSettings
         }
     }
 
+    public void ExportTo(string path)
+    {
+        var json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
+        File.WriteAllText(path, json, System.Text.Encoding.UTF8);
+    }
+
+    public static AppSettings ImportFrom(string path)
+    {
+        var json = File.ReadAllText(path);
+        return JsonSerializer.Deserialize<AppSettings>(json) ?? throw new InvalidOperationException("Invalid settings file");
+    }
+
     private static AppSettings Load()
     {
         try

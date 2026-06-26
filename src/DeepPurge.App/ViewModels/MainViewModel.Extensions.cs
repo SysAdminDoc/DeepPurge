@@ -37,7 +37,8 @@ public partial class MainViewModel
     private static HttpClient CreateVmHttp()
     {
         var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
-        http.DefaultRequestHeaders.UserAgent.ParseAdd("DeepPurge/0.9 (+https://github.com/SysAdminDoc/DeepPurge)");
+        var ver = typeof(MainViewModel).Assembly.GetName().Version?.ToString(2) ?? "0.9";
+        http.DefaultRequestHeaders.UserAgent.ParseAdd($"DeepPurge/{ver} (+https://github.com/SysAdminDoc/DeepPurge)");
         return http;
     }
 

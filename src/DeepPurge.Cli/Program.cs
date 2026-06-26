@@ -73,6 +73,7 @@ public static class Program
                 "register-shell"  => CmdRegisterShell(),
                 "unregister-shell"=> CmdUnregisterShell(),
                 "cleaners"        => CmdCleaners(args),
+                "settings"        => CmdSettings(args),
                 _ => Fail($"Unknown command: {cmd}. Run 'deeppurgecli --help' for usage."),
             };
         }
@@ -595,6 +596,45 @@ if ($app) {{
         }
     }
 
+    private static int CmdSettings(ParsedArgs a)
+    {
+        var sub = a.Positional.Count > 0 ? a.Positional[0].ToLowerInvariant() : "";
+        switch (sub)
+        {
+            case "export":
+            {
+                var path = a.Positional.Count > 1 ? a.Positional[1] : null;
+                var validated = ValidateExportPath(path);
+                if (path != null && validated == null) return 2;
+                if (validated == null) return Fail("usage: deeppurgecli settings export <path.json>");
+                AppSettings.Current.ExportTo(validated);
+                Console.WriteLine($"Settings exported to {validated}");
+                return 0;
+            }
+            case "import":
+            {
+                var path = a.Positional.Count > 1 ? a.Positional[1] : null;
+                if (string.IsNullOrEmpty(path) || !File.Exists(path))
+                    return Fail("usage: deeppurgecli settings import <path.json>");
+                var imported = AppSettings.ImportFrom(path);
+                imported.Save();
+                Console.WriteLine($"Settings imported from {path} and saved");
+                return 0;
+            }
+            case "show":
+            {
+                var s = AppSettings.Current;
+                Console.WriteLine($"ExpertMode:         {s.ExpertMode}");
+                Console.WriteLine($"MinAgeDaysJunk:     {s.MinAgeDaysJunk}");
+                Console.WriteLine($"MinAgeDaysEvidence: {s.MinAgeDaysEvidence}");
+                Console.WriteLine($"ExcludedPaths:      {(s.ExcludedPaths.Count > 0 ? string.Join("; ", s.ExcludedPaths) : "(none)")}");
+                return 0;
+            }
+            default:
+                return Fail("usage: deeppurgecli settings [show|export <path>|import <path>]");
+        }
+    }
+
     private static int CmdOrphans(ParsedArgs a)
     {
         Console.WriteLine("Scanning for orphaned artifacts...");
@@ -735,6 +775,7 @@ if ($app) {{
         Console.WriteLine("  cleaners list|preview|run [--dry-run]    Manage custom JSON cleaner definitions");
         Console.WriteLine("  register-shell                           Add 'Uninstall with DeepPurge' to .exe right-click menu");
         Console.WriteLine("  unregister-shell                         Remove the shell context menu entry");
+        Console.WriteLine("  settings [show|export <path>|import <path>]  View or transfer settings");
         Console.WriteLine("  detection-script --program \"Name\" [--export file.ps1]   Generate Intune/SCCM detection script");
         Console.WriteLine("  check-update                             Check GitHub for a newer release");
         Console.WriteLine("  doctor                                   Run environment self-test + report");
