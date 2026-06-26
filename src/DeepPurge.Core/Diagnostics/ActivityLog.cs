@@ -36,8 +36,12 @@ public static class ActivityLog
     {
         try
         {
-            if (!File.Exists(FilePath)) return new();
-            var lines = File.ReadAllLines(FilePath);
+            string[] lines;
+            lock (_lock)
+            {
+                if (!File.Exists(FilePath)) return new();
+                lines = File.ReadAllLines(FilePath);
+            }
             var entries = new List<ActivityEntry>(lines.Length);
             foreach (var line in lines)
             {

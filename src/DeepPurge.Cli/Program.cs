@@ -243,7 +243,8 @@ public static class Program
         var oldOnly = a.HasFlag("old");
         var filtered = pkgs.Where(p => !oldOnly || p.IsOldVersion).ToList();
 
-        var exportPath = a.GetOption("export");
+        var exportPath = ValidateExportPath(a.GetOption("export"));
+        if (a.GetOption("export") != null && exportPath == null) return 2;
         if (exportPath != null)
         {
             var fmt = ParseExportFormat(a);
@@ -272,7 +273,8 @@ public static class Program
         }
         var sorted = impacts.Values.OrderByDescending(e => (int)e.Impact).ThenByDescending(e => e.DiskBytes).ToList();
 
-        var exportPath = a.GetOption("export");
+        var exportPath = ValidateExportPath(a.GetOption("export"));
+        if (a.GetOption("export") != null && exportPath == null) return 2;
         if (exportPath != null)
         {
             GridExporter.ExportStartupImpact(sorted, exportPath, ParseExportFormat(a));
@@ -291,7 +293,8 @@ public static class Program
         var shortcuts = scanner.ScanAll();
         var broken = shortcuts.Where(s => s.Status == ShortcutStatus.Broken).ToList();
 
-        var exportPath = a.GetOption("export");
+        var exportPath = ValidateExportPath(a.GetOption("export"));
+        if (a.GetOption("export") != null && exportPath == null) return 2;
         if (exportPath != null)
         {
             var exportSet = a.HasFlag("all") ? shortcuts : broken;
@@ -331,7 +334,8 @@ public static class Program
 
         var groups = await finder.FindAsync(roots, progress: new Progress<string>(Console.Error.WriteLine), ct: ct);
 
-        var exportPath = a.GetOption("export");
+        var exportPath = ValidateExportPath(a.GetOption("export"));
+        if (a.GetOption("export") != null && exportPath == null) return 2;
         if (exportPath != null)
         {
             GridExporter.ExportDuplicates(groups, exportPath, ParseExportFormat(a));
@@ -483,7 +487,8 @@ if ($app) {{
     exit 1
 }}
 ";
-        var exportPath = a.GetOption("export");
+        var exportPath = ValidateExportPath(a.GetOption("export"));
+        if (a.GetOption("export") != null && exportPath == null) return 2;
         if (exportPath != null)
         {
             File.WriteAllText(exportPath, script, System.Text.Encoding.UTF8);
@@ -689,6 +694,19 @@ if ($app) {{
     }
 
     private static int Fail(string msg) { Console.Error.WriteLine(msg); return 2; }
+
+    private static string? ValidateExportPath(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var full = Path.GetFullPath(raw);
+        var cwd = Path.GetFullPath(Environment.CurrentDirectory);
+        var profile = Path.GetFullPath(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+        if (full.StartsWith(cwd, StringComparison.OrdinalIgnoreCase) ||
+            full.StartsWith(profile, StringComparison.OrdinalIgnoreCase))
+            return full;
+        Console.Error.WriteLine($"Export path must be under the current directory or user profile: {raw}");
+        return null;
+    }
 
     private static bool IsHelp(string a) => a is "--help" or "-h" or "help" or "/?";
 

@@ -50,7 +50,17 @@ public partial class MainWindow : Window
 
     private async void OnWindowLoaded(object sender, RoutedEventArgs e)
     {
-        try { await _vm.RunInitialScanAsync(); }
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+            var scan = _vm.RunInitialScanAsync();
+            var completed = await Task.WhenAny(scan, Task.Delay(Timeout.Infinite, cts.Token));
+            if (completed != scan)
+                ShowToast("Initial scan timed out — showing partial results", isWarning: true);
+            else
+                await scan;
+        }
+        catch (OperationCanceledException) { ShowToast("Initial scan timed out — showing partial results", isWarning: true); }
         catch (Exception ex) { ShowToast($"Startup scan error: {ex.Message}", isError: true); }
         finally { FadeOutLoadingOverlay(); }
 

@@ -82,7 +82,7 @@ public static class EmptyFolderScanner
                 if (Directory.Exists(folder.Path) && IsDirectoryEmpty(folder.Path)
                     && SafetyGuard.IsPathSafeToDelete(folder.Path))
                 {
-                    Directory.Delete(folder.Path, recursive: false);
+                    SafetyGuard.SafeDeleteDirectory(folder.Path);
                     deleted++;
                 }
             }
