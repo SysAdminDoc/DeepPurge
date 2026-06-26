@@ -77,6 +77,8 @@ public static class Program
                 "cleaners"        => CmdCleaners(args),
                 "settings"        => CmdSettings(args),
                 "update-winapp2"  => await CmdUpdateWinapp2Async(args, cts.Token),
+                "restore"         => CmdRestore(args),
+                "note"            => CmdNote(args),
                 _ => Fail($"Unknown command: {cmd}. Run 'deeppurgecli --help' for usage."),
             };
         }
@@ -130,10 +132,12 @@ public static class Program
 
         if (a.HasFlag("json"))
         {
+            var notes = AppSettings.Current.ProgramNotes;
             WriteJson(sorted.Select(p => new {
                 p.DisplayName, p.DisplayVersion, p.Publisher,
                 Source = p.SourceDisplay, p.PackageId, p.LastUsedDisplay,
-                p.InstallDate, p.EstimatedSizeKB, p.InstallLocation
+                p.InstallDate, p.EstimatedSizeKB, p.InstallLocation,
+                Note = notes.TryGetValue(p.DisplayName ?? "", out var n) ? n : null,
             }));
             return 0;
         }
@@ -155,6 +159,13 @@ public static class Program
         bool secure = a.HasFlag("secure");
         int minAge = int.TryParse(a.GetOption("min-age"), out var ma) ? ma : 0;
         var categories = a.Positional.Count > 0 ? a.Positional : new List<string> { "junk", "evidence" };
+
+        var keepCookies = a.GetOption("keep-cookies");
+        if (!string.IsNullOrEmpty(keepCookies))
+        {
+            var domains = keepCookies.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            AppSettings.Current.CookieWhitelist = domains.ToList();
+        }
 
         var opt = new DeleteOptions(DryRun: dryRun, SecureDelete: secure, UseRecycleBin: !secure, MinAgeDays: minAge);
         long total = 0;
@@ -660,6 +671,8 @@ if ($app) {{
                 Console.WriteLine($"MinAgeDaysJunk:     {s.MinAgeDaysJunk}");
                 Console.WriteLine($"MinAgeDaysEvidence: {s.MinAgeDaysEvidence}");
                 Console.WriteLine($"ExcludedPaths:      {(s.ExcludedPaths.Count > 0 ? string.Join("; ", s.ExcludedPaths) : "(none)")}");
+                Console.WriteLine($"CookieWhitelist:    {(s.CookieWhitelist.Count > 0 ? string.Join(", ", s.CookieWhitelist) : "(none — cookies will be cleaned)")}");
+                Console.WriteLine($"ProgramNotes:       {(s.ProgramNotes.Count > 0 ? $"{s.ProgramNotes.Count} program(s)" : "(none)")}");
                 return 0;
             }
             default:
@@ -785,6 +798,75 @@ if ($app) {{
         return 1;
     }
 
+    private static int CmdRestore(ParsedArgs a)
+    {
+        var dateStr = a.GetOption("date");
+        bool dryRun = a.HasFlag("dry-run");
+
+        if (string.IsNullOrEmpty(dateStr))
+        {
+            var manifests = DpDiag.DeletionManifest.ListManifests();
+            if (manifests.Count == 0) { Console.WriteLine("No deletion manifests found."); return 0; }
+            Console.WriteLine($"{"Date",-12} {"Entries",8} {"Size",10}");
+            foreach (var m in manifests)
+                Console.WriteLine($"{m.Date:yyyy-MM-dd}  {m.EntryCount,8}  {FormatBytes(m.TotalBytes),10}");
+            Console.WriteLine($"\n# {manifests.Count} manifests. Use --date YYYY-MM-DD to inspect or restore.");
+            return 0;
+        }
+
+        if (!DateTime.TryParse(dateStr, out var date)) return Fail($"Bad date: {dateStr}");
+
+        var entries = DpDiag.DeletionManifest.LoadManifest(date);
+        if (entries.Count == 0) return Fail($"No manifest found for {date:yyyy-MM-dd}");
+
+        Console.WriteLine($"Manifest for {date:yyyy-MM-dd}: {entries.Count} entries");
+
+        if (a.HasFlag("list"))
+        {
+            foreach (var e in entries)
+                Console.WriteLine($"  [{e.Type,-9}] {e.Operation,-15} {FormatBytes(e.SizeBytes),10}  {e.Path}");
+            return 0;
+        }
+
+        var result = DpDiag.DeletionManifest.RestoreFromManifest(date, dryRun);
+        foreach (var d in result.Details) Console.WriteLine($"  {d}");
+        Console.WriteLine();
+        Console.WriteLine($"Registry restored: {result.RegistryRestored}");
+        Console.WriteLine($"Files to check Recycle Bin: {result.FilesRecoverable}");
+        Console.WriteLine($"Unrecoverable (secure-deleted or no backup): {result.Unrecoverable}");
+        if (dryRun) Console.WriteLine("(dry-run — no changes made)");
+        return 0;
+    }
+
+    private static int CmdNote(ParsedArgs a)
+    {
+        if (a.Positional.Count == 0) return Fail("usage: deeppurgecli note <program-name> [note text]\n       deeppurgecli note --clear <program-name>");
+        var programName = a.Positional[0];
+
+        if (a.HasFlag("clear"))
+        {
+            AppSettings.Current.ProgramNotes.Remove(programName);
+            AppSettings.Current.Save();
+            Console.WriteLine($"Note cleared for: {programName}");
+            return 0;
+        }
+
+        if (a.Positional.Count < 2)
+        {
+            if (AppSettings.Current.ProgramNotes.TryGetValue(programName, out var existing))
+                Console.WriteLine($"{programName}: {existing}");
+            else
+                Console.WriteLine($"No note for: {programName}");
+            return 0;
+        }
+
+        var noteText = string.Join(" ", a.Positional.Skip(1));
+        AppSettings.Current.ProgramNotes[programName] = noteText;
+        AppSettings.Current.Save();
+        Console.WriteLine($"Note saved for: {programName}");
+        return 0;
+    }
+
     // ═══════════════════════════════════════════════════════
     //  HELPERS
     // ═══════════════════════════════════════════════════════
@@ -840,7 +922,7 @@ if ($app) {{
         Console.WriteLine("  portable [--enable]                      Query or toggle portable mode");
         Console.WriteLine("  list [--registry-only]                    List installed programs (TSV)");
         Console.WriteLine("  uninstall <name> [--silent]              Uninstall a program");
-        Console.WriteLine("  clean [junk|evidence ...] [--dry-run] [--secure]");
+        Console.WriteLine("  clean [junk|evidence ...] [--dry-run] [--secure] [--keep-cookies domain1,domain2]");
         Console.WriteLine("  repair <sfc|dism-scan|dism-restore|dism-cleanup|dism-resetbase|chkdsk|fontcache|iconcache>");
         Console.WriteLine("  drivers [--old] [--export file --format csv|json]");
         Console.WriteLine("  startup-impact [--export file --format csv|json]");
@@ -859,6 +941,8 @@ if ($app) {{
         Console.WriteLine("  settings [show|export <path>|import <path>]  View or transfer settings");
         Console.WriteLine("  detection-script --program \"Name\" [--export file.ps1]   Generate Intune/SCCM detection script");
         Console.WriteLine("  update-winapp2 [--check-only]            Download latest winapp2.ini from GitHub");
+        Console.WriteLine("  restore [--date YYYY-MM-DD] [--list] [--dry-run]  List or restore from deletion manifests");
+        Console.WriteLine("  note <program> [text]                    Set/view per-program notes (--clear to remove)");
         Console.WriteLine("  check-update                             Check GitHub for a newer release");
         Console.WriteLine("  doctor                                   Run environment self-test + report");
         Console.WriteLine();
@@ -894,6 +978,7 @@ public sealed class ParsedArgs
     private static readonly HashSet<string> ValueOptions = new(StringComparer.OrdinalIgnoreCase)
     {
         "name", "freq", "time", "day", "args", "export", "format", "program", "timeout",
+        "keep-cookies", "date", "min-age", "path",
     };
 
     public bool HasFlag(string name) => Flags.Contains(name);

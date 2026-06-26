@@ -4,6 +4,14 @@ All notable changes to DeepPurge will be documented in this file.
 
 ## [Unreleased]
 
+### Added (P1 trust and safety)
+- **Cookie preservation whitelist** — `AppSettings.CookieWhitelist` lets users specify domains (e.g., `github.com`, `google.com`) to preserve during Evidence cleaning. When the whitelist is non-empty, browser cookie database files (Chrome, Edge, Brave, Firefox, Vivaldi, Opera) are skipped. New "Browser Cookies" scan category in EvidenceRemover auto-deselects when a whitelist is active. CLI: `deeppurgecli clean evidence --keep-cookies github.com,google.com`. Settings export/import includes the whitelist.
+- **Automated deletion rollback from manifest** — `DeletionManifest` now supports `ListManifests()`, `LoadManifest(date)`, and `RestoreFromManifest(date, dryRun)`. Registry deletions are restored via `reg import` from BackupManager's `.reg` exports. Files are flagged for Recycle Bin recovery. Secure-deleted items are reported as unrecoverable. CLI: `deeppurgecli restore [--date YYYY-MM-DD] [--list] [--dry-run]`.
+- **Per-program notes/tags** — `AppSettings.ProgramNotes` dictionary persists notes keyed by program name. `InstalledProgram.Note` property for VM binding. CLI: `deeppurgecli note "Program Name" "keep for compliance"` to set, `--clear` to remove. `list --json` includes notes.
+
+### Fixed (P2 silent catch)
+- **DeletionManifest logging** — replaced the one remaining empty `catch { }` in `DeletionManifest.Record` with `Log.Warn` so manifest write failures leave a paper trail.
+
 ### Fixed (audit pass 2)
 - **HKCR registry hive support** — `CleanerDefinition.Execute` and `LeftoverSignatureDb.ScanForOrphans` now handle HKCR (ClassesRoot) registry paths, matching the detection methods that already supported it. Previously, cleaner rules referencing HKCR would pass applicability checks but silently skip registry cleanup.
 - **Locked-file recovery wired into all delete paths** — `SafeDeleteFile` (with Restart Manager query and delete-on-reboot fallback) now used by JunkFilesCleaner, EvidenceRemover, CleanerDefinition, Winapp2Parser, DuplicateFinder, UninstallEngine, and InstallSnapshotEngine instead of raw `File.Delete`. Files locked by running processes are now diagnosed and queued for reboot cleanup instead of silently skipped.

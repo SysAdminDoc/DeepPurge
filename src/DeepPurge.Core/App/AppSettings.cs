@@ -9,6 +9,8 @@ public class AppSettings
     public List<string> ExcludedPaths { get; set; } = new();
     public int MinAgeDaysJunk { get; set; }
     public int MinAgeDaysEvidence { get; set; }
+    public List<string> CookieWhitelist { get; set; } = new();
+    public Dictionary<string, string> ProgramNotes { get; set; } = new();
 
     private static readonly Lazy<AppSettings> _instance = new(Load);
     private static readonly object _saveLock = new();

@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using DeepPurge.Core.App;
 using DeepPurge.Core.Diagnostics;
 using DeepPurge.Core.Safety;
 
@@ -63,6 +64,7 @@ public static class EvidenceRemover
             ScanWindowsErrorReporting(),
             ScanFontCache(),
             ScanUsbDeviceHistory(),
+            ScanBrowserCookies(),
         };
         cats.RemoveAll(c => c.Items.Count == 0);
         return cats;
@@ -97,6 +99,15 @@ public static class EvidenceRemover
             ct.ThrowIfCancellationRequested();
             var (_, item) = all[i];
             var label = string.IsNullOrEmpty(item.Path) ? item.Command : item.Path;
+
+            if (!item.IsCommand && !string.IsNullOrEmpty(item.Path) &&
+                IsCookiePath(item.Path) && AppSettings.Current.CookieWhitelist.Count > 0)
+            {
+                skipped++;
+                progress?.Report(new DeleteProgress(
+                    i + 1, all.Count, freed, label, Skipped: true));
+                continue;
+            }
 
             if (options.MinAgeDays > 0 && !item.IsCommand && !string.IsNullOrEmpty(item.Path))
             {
@@ -499,6 +510,71 @@ public static class EvidenceRemover
         var setupApiAppLog = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows),
             "inf", "setupapi.app.log");
         AddFile(cat, setupApiAppLog);
+
+        return cat;
+    }
+
+    private static readonly HashSet<string> CookieFileNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Cookies", "Cookies-journal", "cookies.sqlite", "cookies.sqlite-wal", "cookies.sqlite-shm",
+    };
+
+    public static bool IsCookiePath(string path) =>
+        CookieFileNames.Contains(Path.GetFileName(path));
+
+    private static TraceCategory ScanBrowserCookies()
+    {
+        var cat = new TraceCategory
+        {
+            Name = "Browser Cookies",
+            Description = "Cookie databases from Chrome, Edge, Brave, Firefox, Vivaldi, Opera",
+            IsSelected = AppSettings.Current.CookieWhitelist.Count == 0,
+        };
+
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+
+        var chromiumRoots = new[]
+        {
+            Path.Combine(localAppData, "Google", "Chrome", "User Data"),
+            Path.Combine(localAppData, "Microsoft", "Edge", "User Data"),
+            Path.Combine(localAppData, "BraveSoftware", "Brave-Browser", "User Data"),
+            Path.Combine(localAppData, "Vivaldi", "User Data"),
+        };
+
+        foreach (var root in chromiumRoots)
+        {
+            if (!Directory.Exists(root)) continue;
+            try
+            {
+                foreach (var profile in Directory.GetDirectories(root))
+                {
+                    var cookieFile = Path.Combine(profile, "Cookies");
+                    AddFile(cat, cookieFile);
+                    AddFile(cat, cookieFile + "-journal");
+                }
+            }
+            catch (Exception ex) { Log.Warn($"Cookie scan failed in '{root}': {ex.Message}"); }
+        }
+
+        var operaCookies = Path.Combine(appData, "Opera Software", "Opera Stable", "Cookies");
+        AddFile(cat, operaCookies);
+        AddFile(cat, operaCookies + "-journal");
+
+        try
+        {
+            var firefoxProfiles = Path.Combine(appData, "Mozilla", "Firefox", "Profiles");
+            if (Directory.Exists(firefoxProfiles))
+            {
+                foreach (var profile in Directory.GetDirectories(firefoxProfiles))
+                {
+                    AddFile(cat, Path.Combine(profile, "cookies.sqlite"));
+                    AddFile(cat, Path.Combine(profile, "cookies.sqlite-wal"));
+                    AddFile(cat, Path.Combine(profile, "cookies.sqlite-shm"));
+                }
+            }
+        }
+        catch (Exception ex) { Log.Warn($"Firefox cookie scan failed: {ex.Message}"); }
 
         return cat;
     }
