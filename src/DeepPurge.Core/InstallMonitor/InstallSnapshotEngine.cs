@@ -250,6 +250,8 @@ public class InstallSnapshotEngine
         UsnJournalReader.EnsureJournalSize(volumeRoot);
         long startUsn = UsnJournalReader.GetCurrentUsn(volumeRoot);
         bool useUsn = startUsn >= 0;
+        bool useSysmon = SysmonReader.IsAvailable();
+        var sysmonStart = DateTime.UtcNow;
 
         var beforeReg = await CaptureRegistryOnlyAsync(ct);
 
@@ -307,6 +309,19 @@ public class InstallSnapshotEngine
         var afterKeys = new HashSet<string>(afterReg.Select(k => k.Path), StringComparer.OrdinalIgnoreCase);
         foreach (var k in afterReg) if (!beforeKeys.Contains(k.Path)) delta.AddedRegistryKeys.Add(k.Path);
         foreach (var k in beforeReg) if (!afterKeys.Contains(k.Path)) delta.RemovedRegistryKeys.Add(k.Path);
+
+        if (useSysmon)
+        {
+            try
+            {
+                var sysmonChanges = SysmonReader.ReadRegistryChangesSince(sysmonStart);
+                var sysmonPaths = SysmonReader.ExtractRegistryPaths(sysmonChanges);
+                var existing = new HashSet<string>(delta.AddedRegistryKeys, StringComparer.OrdinalIgnoreCase);
+                foreach (var p in sysmonPaths)
+                    if (!existing.Contains(p)) delta.AddedRegistryKeys.Add(p);
+            }
+            catch (Exception ex) { Log.Warn($"Sysmon enrichment failed: {ex.Message}"); }
+        }
 
         SaveManifest(programName, delta);
         return delta;
