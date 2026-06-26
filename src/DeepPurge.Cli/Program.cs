@@ -14,6 +14,7 @@ using DeepPurge.Core.Firewall;
 using DeepPurge.Core.FileSystem;
 using DeepPurge.Core.InstallMonitor;
 using DeepPurge.Core.Privacy;
+using DeepPurge.Core.Packages;
 using DeepPurge.Core.Registry;
 using DeepPurge.Core.Repair;
 using DeepPurge.Core.Safety;
@@ -71,6 +72,7 @@ public static class Program
                 "doctor"          => CmdDoctor(),
                 "register-shell"  => CmdRegisterShell(),
                 "unregister-shell"=> CmdUnregisterShell(),
+                "cleaners"        => CmdCleaners(args),
                 _ => Fail($"Unknown command: {cmd}. Run 'deeppurgecli --help' for usage."),
             };
         }
@@ -117,8 +119,13 @@ public static class Program
     private static async Task<int> CmdListAsync(CancellationToken ct)
     {
         var items = await Task.Run(() => InstalledProgramScanner.GetAllInstalledPrograms(), ct);
+        await PackageManagerScanner.EnrichAsync(items, ct);
         foreach (var p in items.OrderBy(p => p.DisplayName))
-            Console.WriteLine($"{p.DisplayName}\t{p.DisplayVersion}\t{p.Publisher}");
+        {
+            var source = p.SourceDisplay;
+            var pkgId = !string.IsNullOrEmpty(p.PackageId) ? $"\t{p.PackageId}" : "";
+            Console.WriteLine($"{p.DisplayName}\t{p.DisplayVersion}\t{p.Publisher}\t{source}{pkgId}");
+        }
         Console.WriteLine($"# {items.Count} programs");
         return 0;
     }
@@ -178,9 +185,11 @@ public static class Program
             UninstallEngine.UninstallerTimeout = TimeSpan.FromMinutes(mins);
 
         var items = await Task.Run(() => InstalledProgramScanner.GetAllInstalledPrograms(), ct);
+        await PackageManagerScanner.EnrichAsync(items, ct);
         var match = items.FirstOrDefault(p =>
             string.Equals(p.DisplayName,    nameArg, StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(p.RegistryKeyName, nameArg, StringComparison.OrdinalIgnoreCase));
+            string.Equals(p.RegistryKeyName, nameArg, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(p.PackageId,       nameArg, StringComparison.OrdinalIgnoreCase));
         if (match == null) return Fail($"program not found: {nameArg}");
 
         var engine = new UninstallEngine();
@@ -514,6 +523,47 @@ if ($app) {{
         return 1;
     }
 
+    private static int CmdCleaners(ParsedArgs a)
+    {
+        var sub = a.Positional.Count > 0 ? a.Positional[0].ToLowerInvariant() : "list";
+        var rules = CleanerDefinitionRunner.LoadAll();
+        var applicable = CleanerDefinitionRunner.FilterApplicable(rules);
+
+        switch (sub)
+        {
+            case "list":
+                if (applicable.Count == 0) { Console.WriteLine("No applicable custom cleaners found."); return 0; }
+                Console.WriteLine($"{"Name",-30} {"Description",-40} Rules");
+                foreach (var r in applicable)
+                    Console.WriteLine($"{r.Name,-30} {r.Description,-40} {r.Files.Count}F/{r.Registry.Count}R");
+                Console.WriteLine($"\n# {applicable.Count} applicable cleaners (from {rules.Count} loaded)");
+                return 0;
+
+            case "preview":
+                foreach (var r in applicable)
+                {
+                    var (size, count) = CleanerDefinitionRunner.Preview(r);
+                    if (count > 0) Console.WriteLine($"{r.Name,-30} {count,6} items  {size / 1024,8} KB");
+                }
+                return 0;
+
+            case "run":
+                if (applicable.Count == 0) { Console.WriteLine("No applicable cleaners."); return 0; }
+                bool dryRun = a.HasFlag("dry-run");
+                var opt = new DeleteOptions(DryRun: dryRun, SecureDelete: false, UseRecycleBin: false);
+                foreach (var r in applicable)
+                {
+                    var result = CleanerDefinitionRunner.Execute(r, opt);
+                    var verb = dryRun ? "Would clean" : "Cleaned";
+                    Console.WriteLine($"{verb} {r.Name}: {result.ItemsDeleted} items, {result.BytesFreed / 1024} KB freed");
+                }
+                return 0;
+
+            default:
+                return Fail("usage: deeppurgecli cleaners [list|preview|run [--dry-run]]");
+        }
+    }
+
     private static int CmdOrphans(ParsedArgs a)
     {
         Console.WriteLine("Scanning for orphaned artifacts...");
@@ -568,6 +618,15 @@ if ($app) {{
                 foreach (var reg in r.Match.RegistryPaths) Console.WriteLine($"    R  {reg}");
             }
             total += orphanResults.Count;
+
+            var bamRemnants = AmcacheParser.FindRemnants(installed);
+            if (bamRemnants.Count > 0)
+            {
+                Console.WriteLine($"\n=== BAM Execution Remnants ({bamRemnants.Count}) ===");
+                foreach (var b in bamRemnants)
+                    Console.WriteLine($"  {b.Name,-35} {b.InstallPath}");
+                total += bamRemnants.Count;
+            }
         }
 
         return 0;
