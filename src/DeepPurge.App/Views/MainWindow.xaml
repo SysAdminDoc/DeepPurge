@@ -783,6 +783,8 @@
                                 <MenuItem Header="Clean Selected" Tag="&#xE74D;" Click="CleanJunk_Click" Foreground="{DynamicResource RedBrush}"/>
                                 <MenuItem Header="Rescan" Tag="&#xE72C;" Click="ScanJunk_Click"/>
                                 <Separator Style="{StaticResource MenuSep}"/>
+                                <MenuItem Header="Exclude from future scans" Tag="&#xE8F8;" Click="Ctx_ExcludePath_Click"/>
+                                <Separator Style="{StaticResource MenuSep}"/>
                                 <MenuItem Header="Check All" Tag="&#xE73A;" Click="Ctx_CheckAll_Click"/>
                                 <MenuItem Header="Uncheck All" Tag="&#xE739;" Click="Ctx_UncheckAll_Click"/>
                             </ContextMenu>
@@ -803,6 +805,8 @@
                             <ContextMenu>
                                 <MenuItem Header="Clean Selected" Tag="&#xE74D;" Click="CleanEvidence_Click" Foreground="{DynamicResource RedBrush}"/>
                                 <MenuItem Header="Rescan" Tag="&#xE72C;" Click="ScanEvidence_Click"/>
+                                <Separator Style="{StaticResource MenuSep}"/>
+                                <MenuItem Header="Exclude from future scans" Tag="&#xE8F8;" Click="Ctx_ExcludePath_Click"/>
                                 <Separator Style="{StaticResource MenuSep}"/>
                                 <MenuItem Header="Check All" Tag="&#xE73A;" Click="Ctx_CheckAll_Click"/>
                                 <MenuItem Header="Uncheck All" Tag="&#xE739;" Click="Ctx_UncheckAll_Click"/>
@@ -825,6 +829,8 @@
                                 <MenuItem Header="Delete Selected" Tag="&#xE74D;" Click="DeleteEmptyFolders_Click" Foreground="{DynamicResource RedBrush}"/>
                                 <MenuItem Header="Open in Explorer" Tag="&#xE838;" Click="Ctx_OpenFolderPath_Click"/>
                                 <MenuItem Header="Rescan" Tag="&#xE72C;" Click="ScanEmptyFolders_Click"/>
+                                <Separator Style="{StaticResource MenuSep}"/>
+                                <MenuItem Header="Exclude from future scans" Tag="&#xE8F8;" Click="Ctx_ExcludePath_Click"/>
                                 <Separator Style="{StaticResource MenuSep}"/>
                                 <MenuItem Header="Check All" Tag="&#xE73A;" Click="Ctx_CheckAll_Click"/>
                                 <MenuItem Header="Uncheck All" Tag="&#xE739;" Click="Ctx_UncheckAll_Click"/>
@@ -1427,6 +1433,11 @@
                                 </TabItem>
                                 <TabItem Header="File Leftovers">
                                     <DataGrid AutoGenerateColumns="False" x:Name="dgFileLeftovers" ItemsSource="{Binding FileLeftovers}">
+                                        <DataGrid.ContextMenu>
+                                            <ContextMenu>
+                                                <MenuItem Header="Exclude from future scans" Tag="&#xE8F8;" Click="Ctx_ExcludePath_Click"/>
+                                            </ContextMenu>
+                                        </DataGrid.ContextMenu>
                                         <DataGrid.Columns>
                                             <DataGridCheckBoxColumn Binding="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" Width="44"
                                                                     HeaderTemplate="{StaticResource MasterCheckboxHeader}"/>

@@ -7,6 +7,8 @@ public class AppSettings
 {
     public bool ExpertMode { get; set; }
     public List<string> ExcludedPaths { get; set; } = new();
+    public int MinAgeDaysJunk { get; set; }
+    public int MinAgeDaysEvidence { get; set; }
 
     private static readonly Lazy<AppSettings> _instance = new(Load);
     private static readonly object _saveLock = new();
