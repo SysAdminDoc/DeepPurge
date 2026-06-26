@@ -131,7 +131,7 @@ public static class CleanerDefinitionRunner
                 if (!options.DryRun)
                 {
                     if (options.SecureDelete) SecureDelete.Wipe(f);
-                    else fi.Delete();
+                    else SafetyGuard.SafeDeleteFile(f);
                 }
 
                 freed += sz;
@@ -164,6 +164,7 @@ public static class CleanerDefinitionRunner
                 {
                     "HKCU" => Microsoft.Win32.Registry.CurrentUser,
                     "HKLM" => Microsoft.Win32.Registry.LocalMachine,
+                    "HKCR" => Microsoft.Win32.Registry.ClassesRoot,
                     _ => null
                 };
                 hive?.DeleteSubKeyTree(parts[1], throwOnMissingSubKey: false);
