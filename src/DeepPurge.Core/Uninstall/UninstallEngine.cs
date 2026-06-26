@@ -499,6 +499,7 @@ public class UninstallEngine
                 return;
             }
             hive.DeleteSubKeyTree(subPath, throwOnMissingSubKey: false);
+            Diagnostics.DeletionManifest.RecordRegistry(path, "uninstall-leftover");
         }
     }
 
