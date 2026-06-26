@@ -9,6 +9,31 @@ public record HealthReport(
 
 public static class HealthScorer
 {
+    private static readonly TimeSpan ScanTimeout = TimeSpan.FromSeconds(30);
+
+    public static async Task<HealthReport> AssessAsync(CancellationToken ct = default)
+    {
+        var cats = new List<HealthScore>
+        {
+            await RunWithTimeoutAsync(AssessJunk, "Junk Files", ct),
+            await RunWithTimeoutAsync(AssessPrivacy, "Privacy", ct),
+            await RunWithTimeoutAsync(AssessStartup, "Startup Impact", ct),
+            AssessDisk(),
+        };
+
+        var overall = cats.Count > 0 ? (int)Math.Round(cats.Average(c => c.Score)) : 100;
+        var grade = overall switch
+        {
+            >= 90 => "A",
+            >= 75 => "B",
+            >= 60 => "C",
+            >= 40 => "D",
+            _ => "F",
+        };
+
+        return new HealthReport(overall, grade, cats);
+    }
+
     public static HealthReport Assess()
     {
         var cats = new List<HealthScore>
@@ -30,6 +55,26 @@ public static class HealthScorer
         };
 
         return new HealthReport(overall, grade, cats);
+    }
+
+    private static async Task<HealthScore> RunWithTimeoutAsync(Func<HealthScore> scanner, string category, CancellationToken ct)
+    {
+        try
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(ScanTimeout);
+            return await Task.Run(scanner, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            Log.Warn($"Health {category} assessment timed out after {ScanTimeout.TotalSeconds}s");
+            return new HealthScore(category, 50, "Scan timed out", $"Try again");
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Health {category} assessment: {ex.Message}");
+            return new HealthScore(category, 50, "Could not assess", $"Try again");
+        }
     }
 
     private static HealthScore AssessJunk()

@@ -550,17 +550,25 @@ public partial class MainWindow : Window
 
     private async void ScanDisk_Click(object sender, RoutedEventArgs e) => await _vm.ScanDiskAsync();
 
-    private void DeleteLargeFiles_Click(object sender, RoutedEventArgs e)
+    private async void DeleteLargeFiles_Click(object sender, RoutedEventArgs e)
     {
         var selected = _vm.LargeFiles.Where(f => f.IsSelected).ToList();
         if (selected.Count == 0) { _vm.StatusText = "Nothing selected"; return; }
+        _vm.IsBusy = true;
+        _vm.StatusText = $"Deleting {selected.Count} files...";
         int deleted = 0, skipped = 0;
-        foreach (var f in selected)
+        await Task.Run(() =>
         {
-            if (!SafetyGuard.IsPathSafeToDelete(f.Path)) { skipped++; continue; }
-            try { if (SafetyGuard.SafeDeleteFile(f.Path)) { deleted++; _vm.LargeFiles.Remove(f); } else { skipped++; } }
-            catch { skipped++; }
-        }
+            foreach (var f in selected)
+            {
+                if (!SafetyGuard.IsPathSafeToDelete(f.Path)) { Interlocked.Increment(ref skipped); continue; }
+                try { if (SafetyGuard.SafeDeleteFile(f.Path)) Interlocked.Increment(ref deleted); else Interlocked.Increment(ref skipped); }
+                catch { Interlocked.Increment(ref skipped); }
+            }
+        });
+        var deletedItems = selected.Where(f => !File.Exists(f.Path)).ToList();
+        foreach (var f in deletedItems) _vm.LargeFiles.Remove(f);
+        _vm.IsBusy = false;
         ShowToast($"Deleted {deleted} files" + (skipped > 0 ? $" ({skipped} skipped)" : ""));
     }
 
