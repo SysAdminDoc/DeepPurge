@@ -251,6 +251,7 @@ public partial class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            DeepPurge.Core.Diagnostics.Log.Error("RunInitialScanAsync", ex);
             StatusText = $"Scan error: {ex.Message}";
         }
         finally
