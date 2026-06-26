@@ -67,10 +67,12 @@ public static class LockedFileResolver
             if (err != 0) return result;
 
             uint needed = 0, count = 0, rebootReasons = 0;
-            err = RmGetList(sessionHandle, out needed, ref count, null, ref rebootReasons);
 
-            if (err == 234 && needed > 0 && needed <= 1024) // ERROR_MORE_DATA; cap allocation
+            for (int attempt = 0; attempt < 3; attempt++)
             {
+                err = RmGetList(sessionHandle, out needed, ref count, null, ref rebootReasons);
+                if (err != 234 || needed == 0 || needed > 1024) break; // not ERROR_MORE_DATA
+
                 var processes = new RM_PROCESS_INFO[needed];
                 count = needed;
                 err = RmGetList(sessionHandle, out needed, ref count, processes, ref rebootReasons);
@@ -84,7 +86,10 @@ public static class LockedFileResolver
                             processes[i].strAppName ?? "",
                             $"PID {processes[i].Process.dwProcessId}"));
                     }
+                    break;
                 }
+
+                if (err != 234) break; // not a sizing race — stop retrying
             }
         }
         catch (Exception ex) { Log.Warn($"Restart Manager query failed for '{filePath}': {ex.Message}"); }

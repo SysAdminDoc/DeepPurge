@@ -769,6 +769,8 @@ public partial class MainViewModel : ObservableObject
                     });
                 }
 
+                PrefetchScanner.EnrichWithLastUsed(list);
+
                 _ = _dispatcher.BeginInvoke(() =>
                 {
                     var upgradeable = Programs.Count(p => !string.IsNullOrEmpty(p.UpgradeAvailable));
