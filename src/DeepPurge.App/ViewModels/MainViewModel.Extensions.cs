@@ -45,8 +45,8 @@ public partial class MainViewModel
     //  DRIVER STORE
     // ═══════════════════════════════════════════════════════
     public ObservableCollection<DriverPackage> DriverPackages { get; } = new();
-    [ObservableProperty] private string _driverBadge = "";
-    [ObservableProperty] private string _driverSummary = "";
+    [ObservableProperty] public partial string DriverBadge { get; set; } = "";
+    [ObservableProperty] public partial string DriverSummary { get; set; } = "";
 
     [RelayCommand]
     private async Task ScanDriversAsync()
@@ -144,7 +144,7 @@ public partial class MainViewModel
     //  DUPLICATE FINDER
     // ═══════════════════════════════════════════════════════
     public ObservableCollection<DuplicateGroup> DuplicateGroups { get; } = new();
-    [ObservableProperty] private string _duplicateSummary = "";
+    [ObservableProperty] public partial string DuplicateSummary { get; set; } = "";
 
     [RelayCommand]
     private async Task ScanDuplicatesAsync()
@@ -185,8 +185,8 @@ public partial class MainViewModel
     // ═══════════════════════════════════════════════════════
     //  WINDOWS REPAIR
     // ═══════════════════════════════════════════════════════
-    [ObservableProperty] private string _repairOutput = "";
-    [ObservableProperty] private bool   _repairRunning;
+    [ObservableProperty] public partial string RepairOutput { get; set; } = "";
+    [ObservableProperty] public partial bool RepairRunning { get; set; }
 
     // Backing buffer — appending to a string property in a tight loop is
     // O(n²) in characters and also raises PropertyChanged per line.
@@ -248,7 +248,7 @@ public partial class MainViewModel
     //  WINAPP2 COMMUNITY CLEANERS
     // ═══════════════════════════════════════════════════════
     public ObservableCollection<Winapp2Entry> Winapp2Entries { get; } = new();
-    [ObservableProperty] private string _winapp2Source = "";
+    [ObservableProperty] public partial string Winapp2Source { get; set; } = "";
 
     [RelayCommand]
     private async Task LoadWinapp2Async()
@@ -323,7 +323,7 @@ public partial class MainViewModel
     // ═══════════════════════════════════════════════════════
     //  INSTALL MONITOR
     // ═══════════════════════════════════════════════════════
-    [ObservableProperty] private string _snapshotStatus = "";
+    [ObservableProperty] public partial string SnapshotStatus { get; set; } = "";
 
     public async Task<InstallDelta?> TraceInstallerAsync(string programName, string installerPath, string? args = null)
     {
@@ -470,7 +470,7 @@ public partial class MainViewModel
     // ═══════════════════════════════════════════════════════
     public ObservableCollection<ActivityEntry> HistoryEntries { get; } = new();
     public ObservableCollection<ActivityLog.DailyCleanSummary> CleanHistory { get; } = new();
-    [ObservableProperty] private string _cleanHistorySummary = "";
+    [ObservableProperty] public partial string CleanHistorySummary { get; set; } = "";
 
     [RelayCommand]
     private void LoadHistory()
@@ -512,9 +512,9 @@ public partial class MainViewModel
     //  HEALTH DASHBOARD
     // ═══════════════════════════════════════════════════════
     public ObservableCollection<HealthScore> HealthCategories { get; } = new();
-    [ObservableProperty] private int _healthOverallScore;
-    [ObservableProperty] private string _healthGrade = "";
-    [ObservableProperty] private string _healthSummary = "Run health check to assess system hygiene";
+    [ObservableProperty] public partial int HealthOverallScore { get; set; }
+    [ObservableProperty] public partial string HealthGrade { get; set; } = "";
+    [ObservableProperty] public partial string HealthSummary { get; set; } = "Run health check to assess system hygiene";
 
     [RelayCommand]
     private async Task RunHealthCheckAsync()
@@ -542,7 +542,7 @@ public partial class MainViewModel
     //  SYSTEM SLIMMING
     // ═══════════════════════════════════════════════════════
     public ObservableCollection<SlimmableComponent> SlimmableComponents { get; } = new();
-    [ObservableProperty] private string _slimSummary = "";
+    [ObservableProperty] public partial string SlimSummary { get; set; } = "";
 
     [RelayCommand]
     private async Task ScanSlimmableAsync()
@@ -603,8 +603,8 @@ public partial class MainViewModel
     // ═══════════════════════════════════════════════════════
     public ObservableCollection<FirewallRuleEntry> OrphanedFirewallRules { get; } = new();
     public ObservableCollection<PathEntry> OrphanedPathEntries { get; } = new();
-    [ObservableProperty] private string _orphanBadge = "";
-    [ObservableProperty] private string _orphanSummary = "";
+    [ObservableProperty] public partial string OrphanBadge { get; set; } = "";
+    [ObservableProperty] public partial string OrphanSummary { get; set; } = "";
 
     [RelayCommand]
     private async Task ScanOrphansAsync()
@@ -684,7 +684,7 @@ public partial class MainViewModel
     // ═══════════════════════════════════════════════════════
     //  UPDATE CHECK
     // ═══════════════════════════════════════════════════════
-    [ObservableProperty] private string _updateText = "";
+    [ObservableProperty] public partial string UpdateText { get; set; } = "";
 
     [RelayCommand]
     private async Task CheckForUpdatesAsync()

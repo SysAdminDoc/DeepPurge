@@ -35,45 +35,45 @@ public partial class MainViewModel : ObservableObject
     //  OBSERVABLE STATE
     // ═══════════════════════════════════════════════════════
 
-    [ObservableProperty] private bool _isInitialScanRunning = true;
-    [ObservableProperty] private string _scanOverlayText = "DeepPurge is analyzing your system...";
-    [ObservableProperty] private double _overlayScanProgress;
-    [ObservableProperty] private bool _isBusy;
-    [ObservableProperty] private string _statusText = "Ready";
-    [ObservableProperty] private string _programCountText = "0 programs";
-    [ObservableProperty] private string _currentPanel = "Programs";
+    [ObservableProperty] public partial bool IsInitialScanRunning { get; set; } = true;
+    [ObservableProperty] public partial string ScanOverlayText { get; set; } = "DeepPurge is analyzing your system...";
+    [ObservableProperty] public partial double OverlayScanProgress { get; set; }
+    [ObservableProperty] public partial bool IsBusy { get; set; }
+    [ObservableProperty] public partial string StatusText { get; set; } = "Ready";
+    [ObservableProperty] public partial string ProgramCountText { get; set; } = "0 programs";
+    [ObservableProperty] public partial string CurrentPanel { get; set; } = "Programs";
 
     // Status bar metrics
-    [ObservableProperty] private string _totalJunkDisplay = "Junk: --";
-    [ObservableProperty] private string _selectedCountBadge = "";
+    [ObservableProperty] public partial string TotalJunkDisplay { get; set; } = "Junk: --";
+    [ObservableProperty] public partial string SelectedCountBadge { get; set; } = "";
 
     // Per-nav scan badges
-    [ObservableProperty] private string _programsBadge = "";
-    [ObservableProperty] private string _junkBadge = "";
-    [ObservableProperty] private string _tasksBadge = "";
-    [ObservableProperty] private string _autorunBadge = "";
-    [ObservableProperty] private string _browserExtBadge = "";
-    [ObservableProperty] private string _windowsAppsBadge = "";
-    [ObservableProperty] private string _contextMenuBadge = "";
-    [ObservableProperty] private string _servicesBadge = "";
-    [ObservableProperty] private string _evidenceBadge = "";
-    [ObservableProperty] private string _emptyFoldersBadge = "";
+    [ObservableProperty] public partial string ProgramsBadge { get; set; } = "";
+    [ObservableProperty] public partial string JunkBadge { get; set; } = "";
+    [ObservableProperty] public partial string TasksBadge { get; set; } = "";
+    [ObservableProperty] public partial string AutorunBadge { get; set; } = "";
+    [ObservableProperty] public partial string BrowserExtBadge { get; set; } = "";
+    [ObservableProperty] public partial string WindowsAppsBadge { get; set; } = "";
+    [ObservableProperty] public partial string ContextMenuBadge { get; set; } = "";
+    [ObservableProperty] public partial string ServicesBadge { get; set; } = "";
+    [ObservableProperty] public partial string EvidenceBadge { get; set; } = "";
+    [ObservableProperty] public partial string EmptyFoldersBadge { get; set; } = "";
 
     // Scan progress per category (0-100)
-    [ObservableProperty] private double _programsScanProgress;
-    [ObservableProperty] private double _junkScanProgress;
-    [ObservableProperty] private double _tasksScanProgress;
+    [ObservableProperty] public partial double ProgramsScanProgress { get; set; }
+    [ObservableProperty] public partial double JunkScanProgress { get; set; }
+    [ObservableProperty] public partial double TasksScanProgress { get; set; }
 
     // Destructive-action options. Bound to status-bar toggles so the user
     // can flip dry-run or secure-delete before any cleanup call.
-    [ObservableProperty] private bool _dryRunEnabled;
-    [ObservableProperty] private bool _secureDeleteEnabled;
-    [ObservableProperty] private bool _expertMode = Core.App.AppSettings.Current.ExpertMode;
+    [ObservableProperty] public partial bool DryRunEnabled { get; set; }
+    [ObservableProperty] public partial bool SecureDeleteEnabled { get; set; }
+    [ObservableProperty] public partial bool ExpertMode { get; set; } = Core.App.AppSettings.Current.ExpertMode;
 
     // Live progress bar for the current long-running delete.
-    [ObservableProperty] private double _operationProgress;
-    [ObservableProperty] private string _operationProgressText = "";
-    [ObservableProperty] private bool _operationProgressVisible;
+    [ObservableProperty] public partial double OperationProgress { get; set; }
+    [ObservableProperty] public partial string OperationProgressText { get; set; } = "";
+    [ObservableProperty] public partial bool OperationProgressVisible { get; set; }
 
     // ═══════════════════════════════════════════════════════
     //  DATA COLLECTIONS
@@ -98,11 +98,11 @@ public partial class MainViewModel : ObservableObject
     public ObservableCollection<LeftoverItem> RegistryLeftovers { get; } = new();
     public ObservableCollection<LeftoverItem> FileLeftovers { get; } = new();
 
-    [ObservableProperty] private ScanResult? _currentScanResult;
-    [ObservableProperty] private string _leftoverTitle = "";
-    [ObservableProperty] private string _leftoverInfo = "";
-    [ObservableProperty] private string _leftoverStats = "";
-    [ObservableProperty] private bool _showLeftovers;
+    [ObservableProperty] public partial ScanResult? CurrentScanResult { get; set; }
+    [ObservableProperty] public partial string LeftoverTitle { get; set; } = "";
+    [ObservableProperty] public partial string LeftoverInfo { get; set; } = "";
+    [ObservableProperty] public partial string LeftoverStats { get; set; } = "";
+    [ObservableProperty] public partial bool ShowLeftovers { get; set; }
 
     private readonly HashSet<string> _loadedPanels = new();
     private string _searchFilter = "";
@@ -788,11 +788,11 @@ public partial class MainViewModel : ObservableObject
 
     public ObservableCollection<RegistryHit> RegistryHits { get; } = new();
 
-    [ObservableProperty] private bool _hunterUseRegex;
-    [ObservableProperty] private bool _hunterSearchKeys = true;
-    [ObservableProperty] private bool _hunterSearchNames = true;
-    [ObservableProperty] private bool _hunterSearchData = true;
-    [ObservableProperty] private int _hunterLiveCount;
+    [ObservableProperty] public partial bool HunterUseRegex { get; set; }
+    [ObservableProperty] public partial bool HunterSearchKeys { get; set; } = true;
+    [ObservableProperty] public partial bool HunterSearchNames { get; set; } = true;
+    [ObservableProperty] public partial bool HunterSearchData { get; set; } = true;
+    [ObservableProperty] public partial int HunterLiveCount { get; set; }
 
     public async Task<int> HuntRegistryAsync(string needle)
     {
