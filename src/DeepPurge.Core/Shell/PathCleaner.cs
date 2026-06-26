@@ -159,21 +159,19 @@ public static class PathCleaner
             var raw = key.GetValue(valueName, "", global::Microsoft.Win32.RegistryValueOptions.DoNotExpandEnvironmentNames)
                          ?.ToString() ?? "";
 
-            var parts = raw.Split(';', StringSplitOptions.None);
+            var parts = raw.Split(';', StringSplitOptions.RemoveEmptyEntries);
             int removed = 0;
             var kept = new List<string>();
 
             foreach (var part in parts)
             {
                 var trimmed = part.Trim();
-                if (!string.IsNullOrEmpty(trimmed) && toRemove.Contains(trimmed))
-                {
+                if (string.IsNullOrEmpty(trimmed)) continue;
+
+                if (toRemove.Contains(trimmed))
                     removed++;
-                }
                 else
-                {
-                    kept.Add(part);
-                }
+                    kept.Add(trimmed);
             }
 
             if (removed > 0)

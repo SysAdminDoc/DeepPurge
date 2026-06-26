@@ -523,7 +523,7 @@ public partial class MainViewModel
         StatusText = "Running health assessment...";
         try
         {
-            var report = await Task.Run(() => HealthScorer.Assess());
+            var report = await HealthScorer.AssessAsync();
             _dispatcher.Invoke(() =>
             {
                 HealthCategories.Clear();
