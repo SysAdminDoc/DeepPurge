@@ -56,6 +56,7 @@ public class InstalledProgram : INotifyPropertyChanged
 
     public bool IsSuspectedBundleware { get; set; }
     public string Note { get; set; } = string.Empty;
+    public string SignatureDisplay { get; set; } = string.Empty;
 
     public string EstimatedSizeDisplay
     {
