@@ -1,44 +1,44 @@
 {
   "version": 1,
   "dependencies": {
-    "net8.0-windows10.0.17763": {
+    "net10.0-windows10.0.17763": {
       "System.CodeDom": {
         "type": "Transitive",
-        "resolved": "8.0.0",
-        "contentHash": "WTlRjL6KWIMr/pAaq3rYqh0TJlzpouaQ/W1eelssHgtlwHAH25jXTkUphTYx9HaIIf7XA6qs/0+YhtLEQRkJ+Q=="
+        "resolved": "10.0.9",
+        "contentHash": "scH7O8oAuOMyZKOEiOQB3ZVz6x9XkrZNKNeWVCxdvkJHSy4SYXyinGK0o2Rn5LiGh+ovezziT2WCdqWKa7WMKA=="
       },
       "System.Diagnostics.EventLog": {
         "type": "Transitive",
-        "resolved": "8.0.1",
-        "contentHash": "n1ZP7NM2Gkn/MgD8+eOT5MulMj6wfeQMNS2Pizvq5GHCZfjlFMXV2irQlQmJhwA2VABC57M0auudO89Iu2uRLg=="
+        "resolved": "10.0.9",
+        "contentHash": "s2PcxHK4IYQ6gmD3VSBkym9tWGkFisKjcjWBdl7a+n4Yy66ae4beJ1ZdjDp060SSll4W3Rt4H2LW87dWckv+QQ=="
       },
       "System.IO.Hashing": {
         "type": "Transitive",
-        "resolved": "8.0.0",
-        "contentHash": "ne1843evDugl0md7Fjzy6QjJrzsjh46ZKbhf8GwBXb5f/gw97J4bxMs0NQKifDuThh/f0bZ0e62NPl1jzTuRqA=="
+        "resolved": "10.0.9",
+        "contentHash": "vixglGnKEexAJDeIRhyayZYzxyrgK1K9GU3K/zRZVwDbaDcMkSqj4WDHoVmQMNfsdUtLALfNSJw6mBIpdxie4A=="
       },
       "System.Management": {
         "type": "Transitive",
-        "resolved": "8.0.0",
-        "contentHash": "jrK22i5LRzxZCfGb+tGmke2VH7oE0DvcDlJ1HAKYU8cPmD8XnpUT0bYn2Gy98GEhGjtfbR/sxKTVb+dE770pfA==",
+        "resolved": "10.0.9",
+        "contentHash": "8mfTzHLlMHCqFE1+iFGzxRCeCb2gDqvRQtZthuksYB+z546QZaFCiagbJ2KXHe7dy5ZpCUg/usaIqc2DxiemPw==",
         "dependencies": {
-          "System.CodeDom": "8.0.0"
+          "System.CodeDom": "10.0.9"
         }
       },
       "System.ServiceProcess.ServiceController": {
         "type": "Transitive",
-        "resolved": "8.0.1",
-        "contentHash": "02I0BXo1kmMBgw03E8Hu4K6nTqur4wpQdcDZrndczPzY2fEoGvlinE35AWbyzLZ2h2IksEZ6an4tVt3hi9j1oA==",
+        "resolved": "10.0.9",
+        "contentHash": "VaYklIT689DthcRzbqt3S8z3GkymiD+US+RLzMFfoPxNIyUxMpXT116cO6rVrKHSuwgdvb35HRKN/PmDmbL+3g==",
         "dependencies": {
-          "System.Diagnostics.EventLog": "8.0.1"
+          "System.Diagnostics.EventLog": "10.0.9"
         }
       },
       "deeppurge.core": {
         "type": "Project",
         "dependencies": {
-          "System.IO.Hashing": "[8.0.0, )",
-          "System.Management": "[8.0.0, )",
-          "System.ServiceProcess.ServiceController": "[8.0.1, )"
+          "System.IO.Hashing": "[10.0.9, )",
+          "System.Management": "[10.0.9, )",
+          "System.ServiceProcess.ServiceController": "[10.0.9, )"
         }
       }
     }
