@@ -7,7 +7,7 @@ Thanks for your interest. This guide covers local setup, PR conventions, and the
 Requirements:
 
 - Windows 10/11 x64
-- .NET 8 SDK (`winget install Microsoft.DotNet.SDK.8`)
+- .NET 10 SDK (`winget install Microsoft.DotNet.SDK.10`)
 - Git Bash or PowerShell 5.1+
 
 ```powershell
@@ -44,7 +44,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the cross-cutting flow and the v0.9 f
 
 ## Coding standards
 
-- **.NET 8 + nullable reference types enabled.** No `#nullable disable`.
+- **.NET 10 LTS + nullable reference types enabled.** No `#nullable disable`.
 - **Global usings are set in each csproj** — don't re-import `System`, `System.IO`, etc. in
   every file. Do import specific types per file (e.g. `using DeepPurge.Core.Safety;`).
 - **SafetyGuard is the single choke-point for destructive ops.** Don't bypass it. If a new

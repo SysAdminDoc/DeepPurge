@@ -35,12 +35,6 @@ Blocked items live in `Roadmap_Blocked.md`.
   Acceptance: Primary navigation, action buttons, dialog titles, and status copy bind to resources instead of literals; a culture-switch smoke test or generated-resource test proves the strings are consumed; missing-resource fallback remains English.
   Complexity: M
 
-- [ ] P2 — Align release truth with .NET 10 and ARM64
-  Why: Project files target .NET 10 and CI release matrices include ARM64, but local build scripts, CodeQL, docs, manifests, and visible XAML version text still contain .NET 8, x64-only, or `v0.8.1` truth.
-  Evidence: `src/**/*.csproj`, `Build.ps1`, `BUILD.bat`, `.github/workflows/codeql.yml`, `README.md`, `CONTRIBUTING.md`, `ARCHITECTURE.md`, `packaging/`, `src/DeepPurge.App/Views/MainWindow.xaml`; Microsoft .NET lifecycle and RID catalog.
-  Touches: `Build.ps1`, `BUILD.bat`, `.github/workflows/codeql.yml`, `README.md`, `CONTRIBUTING.md`, `ARCHITECTURE.md`, `packaging/scoop/deeppurge.json`, `packaging/winget/SysAdminDoc.DeepPurge.yaml`, `src/DeepPurge.App/Views/MainWindow.xaml`
-  Acceptance: Scripts install/use .NET 10, CodeQL builds net10, visible versions bind to assembly version, README/docs no longer claim .NET 8 or x64-only, and package manifests include correct x64/arm64 release asset placeholders.
-  Complexity: S
 
 ## Ideas / not committed
 

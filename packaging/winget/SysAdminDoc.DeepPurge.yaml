@@ -36,9 +36,14 @@ Installers:
     InstallerType: portable
     Scope: user
     InstallerUrl: https://github.com/SysAdminDoc/DeepPurge/releases/download/v0.9.0/DeepPurge.exe
-    # Hash computed from the locally-published Release build. Re-run
-    # Get-FileHash and update this line any time DeepPurge.exe is rebuilt.
-    InstallerSha256: A59B2F5270F566523F75325C02F5CBAC9F94F1E58A3FA06855B1D113F3F8CEE5
+    InstallerSha256: PLACEHOLDER_UPDATE_ON_RELEASE
+    Commands:
+      - DeepPurge
+  - Architecture: arm64
+    InstallerType: portable
+    Scope: user
+    InstallerUrl: https://github.com/SysAdminDoc/DeepPurge/releases/download/v0.9.0/DeepPurge-arm64.exe
+    InstallerSha256: PLACEHOLDER_UPDATE_ON_RELEASE
     Commands:
       - DeepPurge
 
