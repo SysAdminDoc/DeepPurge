@@ -110,7 +110,8 @@ public static class DevDirectoryScanner
                 ScanRecursive(sub, results, ct, depth + 1, maxDepth);
             }
         }
-        catch { }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex) { Log.Warn($"Dev directory scan failed in '{dir}': {ex.Message}"); }
     }
 
     private static bool HasCsprojSibling(string parentDir)
@@ -122,7 +123,7 @@ public static class DevDirectoryScanner
             foreach (var file in Directory.EnumerateFiles(parentDir, "*.fsproj"))
                 return true;
         }
-        catch { }
+        catch (Exception ex) { Log.Warn($"Csproj sibling check failed in '{parentDir}': {ex.Message}"); }
         return false;
     }
 
@@ -135,10 +136,11 @@ public static class DevDirectoryScanner
             {
                 ct.ThrowIfCancellationRequested();
                 try { total += new FileInfo(file).Length; }
-                catch { }
+                catch (Exception ex) { Log.Warn($"File size read failed for '{file}': {ex.Message}"); }
             }
         }
-        catch { }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex) { Log.Warn($"Size computation failed for '{dir}': {ex.Message}"); }
         return total;
     }
 }

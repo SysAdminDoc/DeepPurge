@@ -122,7 +122,7 @@ public static class EvidenceRemover
                         continue;
                     }
                 }
-                catch { }
+                catch (Exception ex) { Log.Warn($"MinAge check failed for '{item.Path}': {ex.Message}"); }
             }
 
             if (options.DryRun)

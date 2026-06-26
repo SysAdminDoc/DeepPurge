@@ -189,7 +189,7 @@ public static class DeletionManifest
                     var e = JsonSerializer.Deserialize<DeletionEntry>(line);
                     if (e != null) entries.Add(e);
                 }
-                catch { }
+                catch (Exception ex) { Log.Warn($"Malformed manifest line in {filePath}: {ex.Message}"); }
             }
         }
         catch (Exception ex) { Log.Warn($"Failed to load manifest {filePath}: {ex.Message}"); }

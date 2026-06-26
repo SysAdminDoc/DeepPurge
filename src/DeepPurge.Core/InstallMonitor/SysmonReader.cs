@@ -72,7 +72,7 @@ public static class SysmonReader
                                 record.TimeCreated?.ToUniversalTime() ?? DateTime.UtcNow));
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { Log.Warn($"Sysmon event parse failed: {ex.Message}"); }
                 }
             }
         }
