@@ -4,6 +4,12 @@ All notable changes to DeepPurge will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed (audit pass 2)
+- **HKCR registry hive support** — `CleanerDefinition.Execute` and `LeftoverSignatureDb.ScanForOrphans` now handle HKCR (ClassesRoot) registry paths, matching the detection methods that already supported it. Previously, cleaner rules referencing HKCR would pass applicability checks but silently skip registry cleanup.
+- **Locked-file recovery wired into all delete paths** — `SafeDeleteFile` (with Restart Manager query and delete-on-reboot fallback) now used by JunkFilesCleaner, EvidenceRemover, CleanerDefinition, Winapp2Parser, DuplicateFinder, UninstallEngine, and InstallSnapshotEngine instead of raw `File.Delete`. Files locked by running processes are now diagnosed and queued for reboot cleanup instead of silently skipped.
+- **Path exclusion list hardened** — `SafetyGuard.IsPathSafeToDelete` now catches `ArgumentException` from `Path.GetFullPath` on malformed exclusion paths in `settings.json`, preventing a corrupted config from breaking all safety checks.
+- **Target path traversal guard** — `--target` argument in MainWindow rejects paths containing `..` segments before file existence checks.
+
 ### Changed (P2 localization)
 - **Navigation labels wired to `.resx` resources** — 8 primary navigation labels in MainWindow.xaml now use `{x:Static props:Resources.Nav_*}` bindings instead of hardcoded strings. Adding a `Resources.de.resx` (or any other culture) file will produce a localized sidebar. `xmlns:props` namespace registered in XAML root.
 

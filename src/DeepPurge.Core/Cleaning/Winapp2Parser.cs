@@ -258,7 +258,7 @@ public class Winapp2Runner
                 if (opt.IsDestructive)
                 {
                     if (opt.SecureDelete) SecureDelete.Wipe(file);
-                    else File.Delete(file);
+                    else SafetyGuard.SafeDeleteFile(file);
                 }
             }
             catch (IOException)        { /* locked by OS: skip */ }

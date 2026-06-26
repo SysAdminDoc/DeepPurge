@@ -133,7 +133,7 @@ public static class EvidenceRemover
                 else if (File.Exists(item.Path))
                 {
                     if (options.SecureDelete) SecureDelete.Wipe(item.Path);
-                    else File.Delete(item.Path);
+                    else Safety.SafetyGuard.SafeDeleteFile(item.Path);
                     freed += item.SizeBytes;
                     cleaned++;
                 }

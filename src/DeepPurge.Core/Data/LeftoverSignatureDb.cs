@@ -103,6 +103,7 @@ public static class LeftoverSignatureDb
                     {
                         "HKLM" => Microsoft.Win32.Registry.LocalMachine,
                         "HKCU" => Microsoft.Win32.Registry.CurrentUser,
+                        "HKCR" => Microsoft.Win32.Registry.ClassesRoot,
                         _ => null
                     };
                     if (hive == null) continue;

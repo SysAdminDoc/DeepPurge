@@ -145,7 +145,7 @@ public static class JunkFilesCleaner
                 else if (File.Exists(file.Path))
                 {
                     if (options.SecureDelete) SecureDelete.Wipe(file.Path);
-                    else File.Delete(file.Path);
+                    else Safety.SafetyGuard.SafeDeleteFile(file.Path);
                     freed += file.Size;
                     cleaned++;
                 }

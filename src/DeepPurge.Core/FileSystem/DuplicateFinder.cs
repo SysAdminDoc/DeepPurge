@@ -142,7 +142,7 @@ public class DuplicateFinder
                     if (opt.IsDestructive)
                     {
                         if (opt.SecureDelete) SecureDelete.Wipe(victim);
-                        else File.Delete(victim);
+                        else Safety.SafetyGuard.SafeDeleteFile(victim);
                     }
                     n++;
                 }

@@ -218,7 +218,7 @@ public class InstallSnapshotEngine
                     if (opt.IsDestructive)
                     {
                         if (opt.SecureDelete) SecureDelete.Wipe(f.Path);
-                        else File.Delete(f.Path);
+                        else SafetyGuard.SafeDeleteFile(f.Path);
                     }
                     freed += size;
                     removed++;

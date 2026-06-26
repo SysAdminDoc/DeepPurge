@@ -57,7 +57,8 @@ public partial class MainWindow : Window
         var target = (Application.Current as App)?.StartupTargetPath;
         if (!string.IsNullOrEmpty(target))
         {
-            if (File.Exists(target) || Directory.Exists(target))
+            if (target.Contains("..")) target = null;
+            if (target != null && (File.Exists(target) || Directory.Exists(target)))
             {
                 txtForcedName.Text = Path.GetFileNameWithoutExtension(target);
                 txtForcedPath.Text = Path.GetDirectoryName(target) ?? "";
