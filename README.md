@@ -50,9 +50,26 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 
 ### Community Cleaner Definitions
 - **winapp2.ini integration** - Parses the community-maintained [winapp2.ini](https://github.com/MoscaDotTo/Winapp2) database (2,500+ third-party cleaners). Auto-downloads on first run, honours `Detect=` / `DetectFile=` gating so only applicable rules fire. Gated through SafetyGuard on every path.
+- **Custom JSON cleaners** - Define your own cleaning rules in `*.cleaner.json` files (detect by registry/file, target files with patterns, recurse, and remove-self). Exposed via `deeppurgecli cleaners list|preview|run [--dry-run]`.
 
 ### Duplicate Finder
 - **Three-stage hash** - Group by exact byte-size → XXH3 first-MB head-hash → XXH3 full-file for remaining collisions. Skips reparse points / junctions to avoid infinite loops. *(algorithm from Czkawka / fdupes)*
+
+### Health Dashboard
+- **System health score** - Assesses 4 categories (Junk Files, Privacy, Startup Impact, Disk Space) with 0-100 scores and A-F grade
+
+### Program Discovery
+- **Portable app detection** - Scans Desktop, Downloads, PortableApps folders, and removable drives for standalone executables not tracked by any installer. Shows with a "Portable" source badge. *(only Uninstalr previously offered this)*
+- **Game platform detection** - Discovers Steam games (via `libraryfolders.vdf` + `appmanifest_*.acf`), Epic Games (via `.item` manifests), and GOG Galaxy titles (via registry). Games appear in the unified programs list with platform badges.
+- **Bundleware / sideload detection** - Flags programs installed on the same day from a non-trusted publisher that appear as the sole representative of their publisher — likely bundled silently with other software.
+- **BAM remnant discovery** - Reads Windows Background Activity Moderator data to find previously-executed binaries that are no longer installed. Available via `deeppurgecli orphans --remnants`.
+
+### System Slimming
+- **Windows component cleanup** - Scans ~15 removable components (wallpapers, sample media, help files, MSI patch cache, delivery optimization, WER reports, font cache, log folders, Windows.old) with per-item sizes and delete through SafetyGuard.
+
+### Shell Integration
+- **Context menu** - `deeppurgecli register-shell` adds "Uninstall with DeepPurge" to the right-click menu for `.exe` files. `unregister-shell` removes it. The GUI accepts `--target <path>` to pre-populate the forced-uninstall panel.
+- **Expert / Safe mode** - Toggle visibility of advanced operations (secure delete, advanced scan, registry hunter, service deletion). Persists between sessions via `settings.json`.
 
 ### Safety
 - **System Restore Points** - View, create, and manage restore points
@@ -69,7 +86,7 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 - **Update checker** - Hits GitHub Releases API to flag available upgrades; never blocks startup.
 
 ### Themes
-Eight built-in themes with runtime switching and persistence between sessions:
+Nine built-in themes with runtime switching and persistence between sessions:
 - **Catppuccin Mocha** (dark, default)
 - **OLED Black** (pure black, blue accent)
 - **Dracula** (classic purple)
@@ -78,6 +95,7 @@ Eight built-in themes with runtime switching and persistence between sessions:
 - **Obsidian** (deep black, lavender accent)
 - **Matrix** (neon green on black)
 - **Arctic** (light mode)
+- **High Contrast** (WCAG AAA, bright saturated accents on pure black)
 
 ## Build
 
@@ -91,7 +109,7 @@ Output:
 - `build\DeepPurge.exe` - GUI, ~66 MB, `requireAdministrator` manifest
 - `build\DeepPurgeCli.exe` - CLI, ~66 MB, `asInvoker` manifest (scriptable, elevate externally if needed)
 
-Both are self-contained single-file portable executables.
+Both are self-contained single-file portable executables. ARM64 builds are also available via CI (`win-arm64` matrix target).
 
 ## CLI quickstart
 

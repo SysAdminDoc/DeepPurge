@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using DeepPurge.Core.Safety;
 
 namespace DeepPurge.Core.FileSystem;
 
@@ -78,7 +79,8 @@ public static class EmptyFolderScanner
         {
             try
             {
-                if (Directory.Exists(folder.Path) && IsDirectoryEmpty(folder.Path))
+                if (Directory.Exists(folder.Path) && IsDirectoryEmpty(folder.Path)
+                    && SafetyGuard.IsPathSafeToDelete(folder.Path))
                 {
                     Directory.Delete(folder.Path, recursive: false);
                     deleted++;

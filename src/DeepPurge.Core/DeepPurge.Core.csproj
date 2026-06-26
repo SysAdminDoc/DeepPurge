@@ -35,9 +35,9 @@
   </ItemGroup>
 
   <ItemGroup>
-<PackageReference Include="System.Management" Version="8.0.0" />
-    <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.1" />
-    <PackageReference Include="System.IO.Hashing" Version="8.0.0" />
+<PackageReference Include="System.Management" Version="10.0.9" />
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.9" />
+    <PackageReference Include="System.IO.Hashing" Version="10.0.9" />
   </ItemGroup>
 
 </Project>
