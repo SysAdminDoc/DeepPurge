@@ -169,6 +169,7 @@ public static class CleanerDefinitionRunner
                     _ => null
                 };
                 hive?.DeleteSubKeyTree(parts[1], throwOnMissingSubKey: false);
+                DeletionManifest.RecordRegistry(regPath, "cleaner-regkey");
             }
             catch (Exception ex) { Log.Warn($"Cleaner registry delete '{regPath}': {ex.Message}"); }
         }

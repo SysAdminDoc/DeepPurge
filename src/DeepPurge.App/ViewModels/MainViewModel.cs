@@ -459,8 +459,9 @@ public partial class MainViewModel : ObservableObject
             // read per volume) and falls back to FindFirstFileExW with the
             // large-fetch flag — both substantially faster than the old
             // Directory.EnumerateFiles path.
-            var folders = await Task.Run(() => FastDiskAnalyzer.AnalyzeDrive(@"C:\"));
-            var large = await Task.Run(() => FastDiskAnalyzer.FindLargeFiles(@"C:\", 50 * 1024 * 1024, 200));
+            var sysDrive = Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows)) ?? @"C:\";
+            var folders = await Task.Run(() => FastDiskAnalyzer.AnalyzeDrive(sysDrive));
+            var large = await Task.Run(() => FastDiskAnalyzer.FindLargeFiles(sysDrive, 50 * 1024 * 1024, 200));
 
             DiskFolders.Clear();
             foreach (var f in folders) DiskFolders.Add(f);

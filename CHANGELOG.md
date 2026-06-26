@@ -9,6 +9,11 @@ All notable changes to DeepPurge will be documented in this file.
 - **Automated deletion rollback from manifest** — `DeletionManifest` now supports `ListManifests()`, `LoadManifest(date)`, and `RestoreFromManifest(date, dryRun)`. Registry deletions are restored via `reg import` from BackupManager's `.reg` exports. Files are flagged for Recycle Bin recovery. Secure-deleted items are reported as unrecoverable. CLI: `deeppurgecli restore [--date YYYY-MM-DD] [--list] [--dry-run]`.
 - **Per-program notes/tags** — `AppSettings.ProgramNotes` dictionary persists notes keyed by program name. `InstalledProgram.Note` property for VM binding. CLI: `deeppurgecli note "Program Name" "keep for compliance"` to set, `--clear` to remove. `list --json` includes notes.
 
+### Fixed (P0 audit)
+- **DeletionManifest now records registry deletions** — new `RecordRegistry(path, operation)` method wired into `Winapp2Parser`, `CleanerDefinition`, `UninstallEngine`, and `ContextMenuCleaner`. Registry entries now appear in the JSONL manifest, making `RestoreFromManifest` functional for registry operations.
+- **Disk analyzer dynamic drive resolution** — `MainViewModel.ScanDiskAsync` now resolves the system drive via `Environment.SpecialFolder.Windows` instead of hardcoding `C:\`. Fixes disk analysis on non-C: Windows installations.
+- **DeletionManifest.RecordFile empty catch replaced** with `Log.Warn` so failed size reads leave a paper trail.
+
 ### Added (P3 install monitoring)
 - **Sysmon event log integration for install monitoring** — `SysmonReader` reads `Microsoft-Windows-Sysmon/Operational` event log for registry change events (IDs 12/13/14) during installer tracing. `TraceInstallV2Async` now captures Sysmon registry changes alongside USN journal filesystem changes, supplementing the before/after registry snapshot with real-time event data. Falls back gracefully when Sysmon is not installed. `deeppurgecli doctor` reports Sysmon availability.
 

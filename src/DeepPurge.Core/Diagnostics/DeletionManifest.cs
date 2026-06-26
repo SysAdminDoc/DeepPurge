@@ -47,13 +47,19 @@ public static class DeletionManifest
     public static void RecordFile(string path, string operation)
     {
         long size = 0;
-        try { if (File.Exists(path)) size = new FileInfo(path).Length; } catch { }
+        try { if (File.Exists(path)) size = new FileInfo(path).Length; }
+        catch (Exception ex) { Log.Warn($"Failed to get file size for manifest: {ex.Message}"); }
         Record(path, "file", size, operation);
     }
 
     public static void RecordDirectory(string path, string operation)
     {
         Record(path, "directory", 0, operation);
+    }
+
+    public static void RecordRegistry(string path, string operation)
+    {
+        Record(path, "registry", 0, operation);
     }
 
     public static List<ManifestSummary> ListManifests()

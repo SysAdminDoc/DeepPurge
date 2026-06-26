@@ -285,6 +285,7 @@ public class Winapp2Runner
         {
             using var baseKey = Microsoft.Win32.RegistryKey.OpenBaseKey(hive.Value, Microsoft.Win32.RegistryView.Default);
             baseKey.DeleteSubKeyTree(sub, throwOnMissingSubKey: false);
+            Diagnostics.DeletionManifest.RecordRegistry(raw, "winapp2-regkey");
         }
         catch (UnauthorizedAccessException) { /* policy-locked: skip */ }
         catch (Exception ex) { Log.Warn($"DeleteSubKeyTree '{raw}' failed: {ex.Message}"); }

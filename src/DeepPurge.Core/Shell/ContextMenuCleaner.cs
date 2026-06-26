@@ -77,6 +77,7 @@ public static class ContextMenuCleaner
 
                 var subName = Path.GetFileName(entry.RegistryPath);
                 key.DeleteSubKeyTree(subName, throwOnMissingSubKey: false);
+                Diagnostics.DeletionManifest.RecordRegistry($"HKCR\\{entry.RegistryPath}", "contextmenu-delete");
                 removed++;
             }
             catch { /* skip unreachable entries */ }
