@@ -20,20 +20,7 @@ public class JunkCategory : INotifyPropertyChanged
         set { _isSelected = value; OnPropertyChanged(); }
     }
 
-    public string TotalSizeDisplay
-    {
-        get
-        {
-            var b = TotalSize;
-            if (b <= 0) return "0 B";
-            double kb = b / 1024.0;
-            if (kb < 1) return $"{b} B";
-            double mb = kb / 1024.0;
-            if (mb < 1) return $"{kb:F0} KB";
-            if (mb < 1024) return $"{mb:F1} MB";
-            return $"{mb / 1024.0:F2} GB";
-        }
-    }
+    public string TotalSizeDisplay => Diagnostics.SizeFormatter.Format(TotalSize);
 
     public event PropertyChangedEventHandler? PropertyChanged;
     private void OnPropertyChanged([CallerMemberName] string? name = null)

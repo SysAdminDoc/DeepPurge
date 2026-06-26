@@ -122,4 +122,69 @@ public class SafetyGuardTests
     [InlineData(@"D:\Tools\bin")]
     public void Allows_third_party_path_entries(string dir)
         => Assert.True(SafetyGuard.IsPathEntrySafeToRemove(dir));
+
+    [Fact]
+    public void SafeDeleteFile_deletes_normal_file()
+    {
+        var tmp = Path.Combine(Path.GetTempPath(), $"dp_test_{Guid.NewGuid():N}.txt");
+        File.WriteAllText(tmp, "test");
+        Assert.True(SafetyGuard.SafeDeleteFile(tmp));
+        Assert.False(File.Exists(tmp));
+    }
+
+    [Fact]
+    public void SafeDeleteFile_succeeds_for_missing_file()
+    {
+        var missing = Path.Combine(Path.GetTempPath(), $"dp_missing_{Guid.NewGuid():N}.txt");
+        Assert.True(SafetyGuard.SafeDeleteFile(missing));
+    }
+
+    [Fact]
+    public void SafeDeleteDirectory_deletes_tree()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"dp_dir_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(dir, "sub"));
+        File.WriteAllText(Path.Combine(dir, "a.txt"), "a");
+        File.WriteAllText(Path.Combine(dir, "sub", "b.txt"), "b");
+        Assert.True(SafetyGuard.SafeDeleteDirectory(dir));
+        Assert.False(Directory.Exists(dir));
+    }
+
+    [Fact]
+    public void SafeDeleteDirectory_rejects_protected_path()
+    {
+        var winDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+        Assert.False(SafetyGuard.SafeDeleteDirectory(winDir));
+    }
+
+    [Fact]
+    public void SafeEnumerateFiles_skips_reparse_child()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dp_enum_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        File.WriteAllText(Path.Combine(root, "real.txt"), "ok");
+        var files = SafetyGuard.SafeEnumerateFiles(root).ToList();
+        Assert.Single(files);
+        Assert.Contains("real.txt", files[0]);
+        SafetyGuard.SafeDeleteDirectory(root);
+    }
+
+    [Fact]
+    public void SafeEnumerateDirectories_returns_deepest_first()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dp_enumdir_{Guid.NewGuid():N}");
+        var sub = Path.Combine(root, "a");
+        var subsub = Path.Combine(sub, "b");
+        Directory.CreateDirectory(subsub);
+        var dirs = SafetyGuard.SafeEnumerateDirectories(root).ToList();
+        Assert.Equal(2, dirs.Count);
+        Assert.True(dirs[0].Length >= dirs[1].Length);
+        SafetyGuard.SafeDeleteDirectory(root);
+    }
+
+    [Fact]
+    public void SafeDeleteFile_rejects_path_with_traversal()
+    {
+        Assert.False(SafetyGuard.SafeDeleteFile(@"C:\Users\test\..\..\..\Windows\System32\ntdll.dll"));
+    }
 }

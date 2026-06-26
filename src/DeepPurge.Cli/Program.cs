@@ -55,7 +55,7 @@ public static class Program
             {
                 "version"         => CmdVersion(),
                 "portable"        => CmdPortable(args),
-                "list"            => await CmdListAsync(cts.Token),
+                "list"            => await CmdListAsync(args, cts.Token),
                 "clean"           => await CmdCleanAsync(args, cts.Token),
                 "uninstall"       => await CmdUninstallAsync(args, cts.Token),
                 "repair"          => await CmdRepairAsync(args, cts.Token),
@@ -116,10 +116,11 @@ public static class Program
         return 0;
     }
 
-    private static async Task<int> CmdListAsync(CancellationToken ct)
+    private static async Task<int> CmdListAsync(ParsedArgs a, CancellationToken ct)
     {
         var items = await Task.Run(() => InstalledProgramScanner.GetAllInstalledPrograms(), ct);
-        await PackageManagerScanner.EnrichAsync(items, ct);
+        if (!a.HasFlag("registry-only"))
+            await PackageManagerScanner.EnrichAsync(items, ct);
         foreach (var p in items.OrderBy(p => p.DisplayName))
         {
             var source = p.SourceDisplay;
@@ -654,13 +655,7 @@ if ($app) {{
     private static string Truncate(string s, int max)
         => string.IsNullOrEmpty(s) ? "" : (s.Length <= max ? s : s[..(max - 1)] + "…");
 
-    private static string FormatBytes(long bytes)
-    {
-        string[] u = { "B", "KB", "MB", "GB", "TB" };
-        double b = bytes; int i = 0;
-        while (b >= 1024 && i < u.Length - 1) { b /= 1024; i++; }
-        return $"{b,6:F1} {u[i]}";
-    }
+    private static string FormatBytes(long bytes) => DeepPurge.Core.Diagnostics.SizeFormatter.Format(bytes);
 
     private static ExportFormat ParseExportFormat(ParsedArgs a)
     {
@@ -679,7 +674,7 @@ if ($app) {{
         Console.WriteLine("Commands:");
         Console.WriteLine("  version                                  Show build + data paths");
         Console.WriteLine("  portable [--enable]                      Query or toggle portable mode");
-        Console.WriteLine("  list                                     List installed programs (TSV)");
+        Console.WriteLine("  list [--registry-only]                    List installed programs (TSV)");
         Console.WriteLine("  uninstall <name> [--silent]              Uninstall a program");
         Console.WriteLine("  clean [junk|evidence ...] [--dry-run] [--secure]");
         Console.WriteLine("  repair <sfc|dism-scan|dism-restore|dism-cleanup|dism-resetbase|chkdsk|fontcache|iconcache>");

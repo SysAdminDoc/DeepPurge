@@ -28,14 +28,7 @@ public class TraceCategory : INotifyPropertyChanged
     private void OnPropertyChanged([CallerMemberName] string? name = null)
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
-    private static string FormatSize(long bytes)
-    {
-        if (bytes <= 0) return "0 B";
-        double kb = bytes / 1024.0;
-        if (kb < 1024) return $"{kb:F0} KB";
-        double mb = kb / 1024.0;
-        return mb < 1024 ? $"{mb:F1} MB" : $"{mb / 1024.0:F2} GB";
-    }
+    private static string FormatSize(long bytes) => Diagnostics.SizeFormatter.Format(bytes);
 }
 
 public class TraceItem
