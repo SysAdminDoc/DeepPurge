@@ -6,7 +6,7 @@ echo     DeepPurge Builder
 echo   ============================================
 echo.
 echo   Building portable executable...
-echo   .NET 8 SDK will be auto-installed if needed.
+echo   .NET 10 SDK will be auto-installed if needed.
 echo.
 
 :: Run the build script with proper execution policy

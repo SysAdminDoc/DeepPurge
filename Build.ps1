@@ -4,7 +4,7 @@
     Compiles the project into single portable .exe files (GUI + CLI)
 
 .DESCRIPTION
-    Automatically installs .NET 8 SDK if needed, then builds self-contained
+    Automatically installs .NET 10 SDK if needed, then builds self-contained
     single-file portable executables. No Visual Studio required.
 
 .NOTES
@@ -121,7 +121,7 @@ function Invoke-Signing {
     }
 }
 
-# ── Locate or Install .NET 8 SDK ──────────────────────────────
+# ── Locate or Install .NET 10 SDK ──────────────────────────────
 function Find-DotNet {
     # Check common locations
     $candidates = @(
@@ -135,7 +135,7 @@ function Find-DotNet {
         try {
             $output = & $path --version 2>&1 | Out-String
             $output = $output.Trim()
-            if ($output -match "^8\.") {
+            if ($output -match "^10\.") {
                 return $path
             }
         } catch { }
@@ -154,7 +154,7 @@ function Confirm-DotNetSDK {
         } catch { }
     }
 
-    Write-Host "  [!] .NET 8 SDK not found. Installing..." -ForegroundColor Yellow
+    Write-Host "  [!] .NET 10 SDK not found. Installing..." -ForegroundColor Yellow
     Write-Host ""
 
     $installerUrl = "https://dot.net/v1/dotnet-install.ps1"
@@ -165,8 +165,8 @@ function Confirm-DotNetSDK {
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath -UseBasicParsing -ErrorAction Stop
 
-        Write-Host "  [*] Installing .NET 8 SDK to: $installDir" -ForegroundColor Yellow
-        & $installerPath -Channel 8.0 -InstallDir $installDir
+        Write-Host "  [*] Installing .NET 10 SDK to: $installDir" -ForegroundColor Yellow
+        & $installerPath -Channel 10.0 -InstallDir $installDir
 
         # Update PATH for this session
         $env:PATH = "$installDir;$env:PATH"
@@ -183,7 +183,7 @@ function Confirm-DotNetSDK {
     }
     catch {
         Write-Host "  [ERROR] Failed to install .NET SDK: $_" -ForegroundColor Red
-        Write-Host "  Download manually: https://dotnet.microsoft.com/download/dotnet/8.0" -ForegroundColor Yellow
+        Write-Host "  Download manually: https://dotnet.microsoft.com/download/dotnet/10.0" -ForegroundColor Yellow
         Write-Host ""
         Read-Host "  Press Enter to exit"
         exit 1

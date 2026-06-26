@@ -81,7 +81,7 @@ Eight built-in themes with runtime switching and persistence between sessions:
 
 ## Build
 
-Requires .NET 8 SDK. Run `BUILD.bat` from the project root.
+Requires .NET 10 SDK. Run `BUILD.bat` from the project root.
 
 ```
 BUILD.bat
@@ -131,7 +131,7 @@ Covers UpdateChecker version-compare, Winapp2Parser detect/bucket routing, Start
 ## Requirements
 - Windows 10/11
 - Run as Administrator (enforced by the manifest)
-- .NET 8 SDK (build only)
+- .NET 10 SDK (build only)
 - Optional: winget (auto-detected; enrichment silently no-ops when unavailable)
 - Optional: Scoop in `%USERPROFILE%\scoop\apps` (filesystem-scanned; no shelling required)
 
