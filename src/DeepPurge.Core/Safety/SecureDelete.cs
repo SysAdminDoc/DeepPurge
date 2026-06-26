@@ -81,24 +81,17 @@ public static class SecureDelete
 
         try
         {
-            foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
-            {
-                // Swallow per-file failures — we still want to process the rest.
+            foreach (var file in SafetyGuard.SafeEnumerateFiles(path))
                 Wipe(file);
-            }
 
-            // Remove empty folders deepest-first.
-            var dirs = Directory.EnumerateDirectories(path, "*", SearchOption.AllDirectories)
-                .OrderByDescending(d => d.Length)
-                .ToList();
-
-            foreach (var d in dirs)
+            foreach (var d in SafetyGuard.SafeEnumerateDirectories(path))
             {
                 try { if (Directory.Exists(d)) Directory.Delete(d, recursive: false); }
                 catch (Exception ex) { Log.Warn($"Failed to remove subdirectory '{d}': {ex.Message}"); }
             }
 
-            try { Directory.Delete(path, recursive: true); } catch (Exception ex) { Log.Warn($"Failed to remove root directory '{path}': {ex.Message}"); }
+            try { Directory.Delete(path, recursive: false); }
+            catch (Exception ex) { Log.Warn($"Failed to remove root directory '{path}': {ex.Message}"); }
             return !Directory.Exists(path);
         }
         catch

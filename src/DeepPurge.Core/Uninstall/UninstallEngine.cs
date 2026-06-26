@@ -505,7 +505,7 @@ public class UninstallEngine
     private static void DeleteFileItem(LeftoverItem item)
     {
         if (item.Type == LeftoverType.Folder && Directory.Exists(item.Path))
-            Directory.Delete(item.Path, recursive: true);
+            Safety.SafetyGuard.SafeDeleteDirectory(item.Path);
         else if (File.Exists(item.Path))
             File.Delete(item.Path);
     }

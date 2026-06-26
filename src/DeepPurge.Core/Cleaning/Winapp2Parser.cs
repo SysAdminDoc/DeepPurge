@@ -236,10 +236,14 @@ public class Winapp2Runner
         if (!SafetyGuard.IsPathSafeToDelete(dir)) return 0;
 
         long freed = 0;
-        var search = recurse ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
 
         IEnumerable<string> files;
-        try { files = Directory.EnumerateFiles(dir, spec, search); }
+        try
+        {
+            files = recurse
+                ? SafetyGuard.SafeEnumerateFiles(dir, spec)
+                : Directory.EnumerateFiles(dir, spec, SearchOption.TopDirectoryOnly);
+        }
         catch { return 0; }
 
         foreach (var file in files)
@@ -263,7 +267,7 @@ public class Winapp2Runner
 
         if (removeSelf && opt.IsDestructive)
         {
-            try { if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true); }
+            try { if (Directory.Exists(dir)) SafetyGuard.SafeDeleteDirectory(dir); }
             catch (Exception ex) { Log.Warn($"REMOVESELF '{dir}' failed: {ex.Message}"); }
         }
         return freed;

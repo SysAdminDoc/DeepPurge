@@ -5,22 +5,6 @@ Blocked items live in `Roadmap_Blocked.md`.
 
 ## Research-Driven Additions
 
-### P0 — Safety and data-loss prevention
-
-- [ ] P0 — Route GUI junk cleanup through the shared delete pipeline
-  Why: The WPF junk panel currently deletes files directly, so Dry Run, Secure Delete, progress, cancellation, and activity logging are not honored from the toolbar/context menu.
-  Evidence: `src/DeepPurge.App/Views/MainWindow.xaml.cs` `CleanJunk_Click`; `src/DeepPurge.App/ViewModels/MainViewModel.cs` `CleanJunkAsync`; BleachBit preview/delete workflow.
-  Touches: `src/DeepPurge.App/Views/MainWindow.xaml.cs`, `src/DeepPurge.App/Views/MainWindow.xaml`, `src/DeepPurge.App/ViewModels/MainViewModel.cs`, `tests/DeepPurge.Tests/`
-  Acceptance: Every Junk "Clean Selected" entry point calls `MainViewModel.CleanJunkAsync`; a fixture test proves Dry Run deletes nothing and Secure Delete uses the shared `DeleteOptions` path; progress/status text matches CLI behavior.
-  Complexity: S
-
-- [ ] P0 — Make recursive destructive walking child-reparse safe
-  Why: Checking only the selected root does not stop a child junction/symlink under a safe directory from redirecting recursive delete or wipe into unrelated data.
-  Evidence: `src/DeepPurge.Core/Safety/SecureDelete.cs`, `src/DeepPurge.Core/Cleaning/Winapp2Parser.cs`, `src/DeepPurge.Core/Cleaning/CleanerDefinition.cs`, `src/DeepPurge.Core/Uninstall/UninstallEngine.cs`; Microsoft reparse-point and symbolic-link docs.
-  Touches: `src/DeepPurge.Core/Safety/`, `src/DeepPurge.Core/FileSystem/`, `src/DeepPurge.Core/Cleaning/`, `src/DeepPurge.Core/Privacy/`, `src/DeepPurge.Core/Uninstall/`, `tests/DeepPurge.Tests/`
-  Acceptance: One Core file-tree primitive enumerates/deletes/wipes while skipping child `FileAttributes.ReparsePoint`; destructive recursive paths no longer use raw `SearchOption.AllDirectories` or `Directory.Delete(..., recursive:true)` without that primitive; tests cover a child junction/symlink fixture.
-  Complexity: M
-
 ### P1 — Trust and recovery
 
 - [ ] P1 — Repair registry symbolic-link detection

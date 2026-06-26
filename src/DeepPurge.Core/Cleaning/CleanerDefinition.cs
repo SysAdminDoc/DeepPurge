@@ -79,8 +79,10 @@ public static class CleanerDefinitionRunner
 
             try
             {
-                var opt = fr.Recurse ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-                foreach (var f in Directory.EnumerateFiles(expanded, fr.Pattern, opt))
+                var enumFiles = fr.Recurse
+                    ? SafetyGuard.SafeEnumerateFiles(expanded, fr.Pattern)
+                    : Directory.EnumerateFiles(expanded, fr.Pattern, SearchOption.TopDirectoryOnly);
+                foreach (var f in enumFiles)
                 {
                     if (!SafetyGuard.IsPathSafeToDelete(f)) continue;
                     try { size += new FileInfo(f).Length; count++; }
@@ -106,8 +108,10 @@ public static class CleanerDefinitionRunner
 
             try
             {
-                var opt = fr.Recurse ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-                files.AddRange(Directory.EnumerateFiles(expanded, fr.Pattern, opt));
+                var enumFiles = fr.Recurse
+                    ? SafetyGuard.SafeEnumerateFiles(expanded, fr.Pattern)
+                    : Directory.EnumerateFiles(expanded, fr.Pattern, SearchOption.TopDirectoryOnly);
+                files.AddRange(enumFiles);
             }
             catch { /* skip */ }
         }
@@ -143,7 +147,7 @@ public static class CleanerDefinitionRunner
             var expanded = Environment.ExpandEnvironmentVariables(fr.Path);
             if (!options.DryRun && Directory.Exists(expanded) && SafetyGuard.IsPathSafeToDelete(expanded))
             {
-                try { Directory.Delete(expanded, recursive: true); }
+                try { SafetyGuard.SafeDeleteDirectory(expanded); }
                 catch (Exception ex) { Log.Warn($"RemoveSelf '{expanded}': {ex.Message}"); }
             }
         }

@@ -138,7 +138,7 @@ public static class JunkFilesCleaner
                 {
                     if (Safety.SafetyGuard.IsReparsePoint(file.Path)) { skipped++; continue; }
                     if (options.SecureDelete) SecureDelete.WipeDirectory(file.Path);
-                    else Directory.Delete(file.Path, recursive: true);
+                    else Safety.SafetyGuard.SafeDeleteDirectory(file.Path);
                     freed += file.Size;
                     cleaned++;
                 }

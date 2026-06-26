@@ -126,7 +126,7 @@ public static class EvidenceRemover
                 {
                     if (Safety.SafetyGuard.IsReparsePoint(item.Path)) { skipped++; continue; }
                     if (options.SecureDelete) SecureDelete.WipeDirectory(item.Path);
-                    else Directory.Delete(item.Path, recursive: true);
+                    else Safety.SafetyGuard.SafeDeleteDirectory(item.Path);
                     freed += item.SizeBytes;
                     cleaned++;
                 }
