@@ -73,11 +73,14 @@ public static class ActivityLog
     {
         try
         {
-            if (!File.Exists(FilePath)) return;
-            var lines = File.ReadAllLines(FilePath);
-            if (lines.Length <= MaxEntries) return;
-            var keep = lines.Skip(lines.Length - MaxEntries).ToArray();
-            File.WriteAllLines(FilePath, keep, System.Text.Encoding.UTF8);
+            lock (_lock)
+            {
+                if (!File.Exists(FilePath)) return;
+                var lines = File.ReadAllLines(FilePath);
+                if (lines.Length <= MaxEntries) return;
+                var keep = lines.Skip(lines.Length - MaxEntries).ToArray();
+                File.WriteAllLines(FilePath, keep, System.Text.Encoding.UTF8);
+            }
         }
         catch { /* activity logging failures must never throw */ }
     }
