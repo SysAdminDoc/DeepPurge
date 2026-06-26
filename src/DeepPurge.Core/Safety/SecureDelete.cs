@@ -65,8 +65,9 @@ public static class SecureDelete
             File.Delete(randomName);
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            Log.Warn($"SecureDelete.Wipe failed for '{path}': {ex.Message}");
             return false;
         }
     }

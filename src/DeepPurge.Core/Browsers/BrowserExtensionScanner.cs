@@ -25,16 +25,7 @@ public class BrowserExtension : INotifyPropertyChanged
         set { _isSelected = value; OnPropertyChanged(); }
     }
 
-    public string SizeDisplay
-    {
-        get
-        {
-            if (SizeBytes <= 0) return "";
-            double kb = SizeBytes / 1024.0;
-            if (kb < 1024) return $"{kb:F0} KB";
-            return $"{kb / 1024.0:F1} MB";
-        }
-    }
+    public string SizeDisplay => SizeBytes <= 0 ? "" : Diagnostics.SizeFormatter.Format(SizeBytes);
 
     public event PropertyChangedEventHandler? PropertyChanged;
     private void OnPropertyChanged([CallerMemberName] string? name = null)

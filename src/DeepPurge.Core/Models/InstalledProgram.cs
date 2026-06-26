@@ -68,14 +68,7 @@ public class InstalledProgram : INotifyPropertyChanged
         }
     }
 
-    private static string FormatBytes(long bytes)
-    {
-        if (bytes < 1024) return $"{bytes} B";
-        double kb = bytes / 1024.0;
-        if (kb < 1024) return $"{kb:F0} KB";
-        double mb = kb / 1024.0;
-        return mb < 1024 ? $"{mb:F1} MB" : $"{mb / 1024.0:F2} GB";
-    }
+    private static string FormatBytes(long bytes) => Diagnostics.SizeFormatter.Format(bytes);
 
     public string InstallDateDisplay
     {

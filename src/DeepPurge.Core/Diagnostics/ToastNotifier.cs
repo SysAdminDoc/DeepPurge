@@ -37,13 +37,7 @@ public static class ToastNotifier
         Show($"{prefix}DeepPurge: {operation}", $"{itemCount} items processed{freed}");
     }
 
-    private static string FormatBytes(long bytes)
-    {
-        string[] u = { "B", "KB", "MB", "GB", "TB" };
-        double b = bytes; int i = 0;
-        while (b >= 1024 && i < u.Length - 1) { b /= 1024; i++; }
-        return $"{b:F1} {u[i]}";
-    }
+    private static string FormatBytes(long bytes) => SizeFormatter.Format(bytes);
 
     private static string EscapeXml(string s) =>
         s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
