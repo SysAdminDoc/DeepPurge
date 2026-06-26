@@ -1,0 +1,74 @@
+using DeepPurge.Core.Diagnostics;
+using Xunit;
+
+namespace DeepPurge.Tests;
+
+public class DeletionManifestTests
+{
+    [Fact]
+    public void Record_creates_valid_jsonl_entry()
+    {
+        var entry = new DeletionEntry(
+            @"C:\Test\file.txt", "file", 1024, DateTime.UtcNow, "delete");
+
+        Assert.Equal(@"C:\Test\file.txt", entry.Path);
+        Assert.Equal("file", entry.Type);
+        Assert.Equal(1024, entry.SizeBytes);
+        Assert.Equal("delete", entry.Operation);
+    }
+
+    [Fact]
+    public void DeletionEntry_supports_registry_type()
+    {
+        var entry = new DeletionEntry(
+            @"HKLM\SOFTWARE\TestApp", "registry", 0, DateTime.UtcNow, "uninstall-leftover");
+
+        Assert.Equal("registry", entry.Type);
+        Assert.True(entry.Path.StartsWith("HKLM", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void ManifestSummary_has_expected_fields()
+    {
+        var summary = new ManifestSummary(
+            @"C:\Logs\deletions-2026-06-26.jsonl",
+            new DateTime(2026, 6, 26),
+            42,
+            1024 * 1024);
+
+        Assert.Equal(42, summary.EntryCount);
+        Assert.Equal(1024 * 1024, summary.TotalBytes);
+        Assert.Equal(new DateTime(2026, 6, 26), summary.Date);
+    }
+
+    [Fact]
+    public void RestoreResult_reports_counts()
+    {
+        var result = new RestoreResult(
+            RegistryRestored: 3,
+            FilesRecoverable: 5,
+            Unrecoverable: 2,
+            Details: new List<string> { "item1", "item2" });
+
+        Assert.Equal(3, result.RegistryRestored);
+        Assert.Equal(5, result.FilesRecoverable);
+        Assert.Equal(2, result.Unrecoverable);
+        Assert.Equal(2, result.Details.Count);
+    }
+
+    [Fact]
+    public void RestoreFromManifest_returns_empty_for_nonexistent_date()
+    {
+        var result = DeletionManifest.RestoreFromManifest(new DateTime(1999, 1, 1));
+        Assert.Equal(0, result.RegistryRestored);
+        Assert.Equal(0, result.FilesRecoverable);
+        Assert.Equal(0, result.Unrecoverable);
+    }
+
+    [Fact]
+    public void LoadManifest_returns_empty_for_nonexistent_date()
+    {
+        var entries = DeletionManifest.LoadManifest(new DateTime(1999, 1, 1));
+        Assert.Empty(entries);
+    }
+}
