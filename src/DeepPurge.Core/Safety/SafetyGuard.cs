@@ -275,7 +275,12 @@ public static class SafetyGuard
             normalized.StartsWith(parent, StringComparison.OrdinalIgnoreCase));
     }
 
-    /// <summary>Returns true if a registry key is a symbolic link. Callers must NOT write/delete symlinked keys — an attacker can redirect writes to critical system keys.</summary>
+    /// <summary>
+    /// Returns true if a registry key is a symbolic link (REG_LINK).
+    /// Reads the key class via RegQueryInfoKeyW — symlinks have a non-empty class.
+    /// Normal keys have an empty/null class. Callers must NOT write/delete
+    /// symlinked keys — an attacker can redirect writes to critical system keys.
+    /// </summary>
     public static bool IsRegistrySymlink(Microsoft.Win32.RegistryKey key)
     {
         try
@@ -285,17 +290,22 @@ public static class SafetyGuard
             if (field == null) return false;
             var handle = field.GetValue(key) as Microsoft.Win32.SafeHandles.SafeRegistryHandle;
             if (handle == null || handle.IsInvalid) return false;
+
+            var classBuffer = new StringBuilder(260);
+            int classLen = classBuffer.Capacity;
             int result = RegQueryInfoKeyW(handle.DangerousGetHandle(),
-                null, IntPtr.Zero, IntPtr.Zero,
+                classBuffer, ref classLen, IntPtr.Zero,
                 out _, out _, out _, out _, out _, out _, out _, IntPtr.Zero);
-            return result != 0;
+
+            if (result != 0) return false;
+            return classLen > 0 && classBuffer.Length > 0;
         }
         catch { return false; }
     }
 
     [System.Runtime.InteropServices.DllImport("advapi32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
     private static extern int RegQueryInfoKeyW(
-        IntPtr hKey, StringBuilder? lpClass, IntPtr lpcchClass, IntPtr lpReserved,
+        IntPtr hKey, StringBuilder? lpClass, ref int lpcchClass, IntPtr lpReserved,
         out int lpcSubKeys, out int lpcbMaxSubKeyLen, out int lpcbMaxClassLen,
         out int lpcValues, out int lpcbMaxValueNameLen, out int lpcbMaxValueLen,
         out int lpcbSecurityDescriptor, IntPtr lpftLastWriteTime);
@@ -366,10 +376,7 @@ public static class SafetyGuard
         try
         {
             foreach (var file in SafeEnumerateFiles(path))
-            {
-                try { File.Delete(file); }
-                catch (Exception ex) { Diagnostics.Log.Warn($"SafeDelete file '{file}': {ex.Message}"); }
-            }
+                SafeDeleteFile(file);
 
             foreach (var dir in SafeEnumerateDirectories(path))
             {
@@ -384,6 +391,38 @@ public static class SafetyGuard
         catch (Exception ex)
         {
             Diagnostics.Log.Warn($"SafeDeleteDirectory '{path}': {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Deletes a single file. If deletion fails with a sharing violation,
+    /// queries the Restart Manager for locking processes and queues the file
+    /// for delete-on-reboot as a fallback.
+    /// </summary>
+    public static bool SafeDeleteFile(string path)
+    {
+        try
+        {
+            File.Delete(path);
+            return true;
+        }
+        catch (IOException ex) when (ex.HResult == unchecked((int)0x80070020)) // ERROR_SHARING_VIOLATION
+        {
+            var lockers = FileSystem.LockedFileResolver.GetLockingProcesses(path);
+            if (lockers.Count > 0)
+                Diagnostics.Log.Warn($"Locked by: {string.Join(", ", lockers.Select(l => $"{l.ProcessName} (PID {l.ProcessId})"))} — '{path}'");
+
+            if (FileSystem.LockedFileResolver.QueueDeleteOnReboot(path))
+            {
+                Diagnostics.Log.Info($"Queued for delete-on-reboot: '{path}'");
+                return true;
+            }
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Warn($"SafeDeleteFile '{path}': {ex.Message}");
             return false;
         }
     }

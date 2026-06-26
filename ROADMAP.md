@@ -5,36 +5,6 @@ Blocked items live in `Roadmap_Blocked.md`.
 
 ## Research-Driven Additions
 
-### P1 — Trust and recovery
-
-- [ ] P1 — Repair registry symbolic-link detection
-  Why: Current detection does not read the registry key class or open links explicitly, so the code comment promises protection the implementation cannot prove.
-  Evidence: `src/DeepPurge.Core/Safety/SafetyGuard.cs` `IsRegistrySymlink`; Microsoft `RegOpenKeyEx` `REG_OPTION_OPEN_LINK`, `RegQueryInfoKey`, and MS-RRP registry symbolic-link docs.
-  Touches: `src/DeepPurge.Core/Safety/SafetyGuard.cs`, `src/DeepPurge.Core/Uninstall/UninstallEngine.cs`, `src/DeepPurge.Core/Cleaning/CleanerDefinition.cs`, `tests/DeepPurge.Tests/SafetyGuardTests.cs`
-  Acceptance: Registry link fixtures are detected and skipped before delete/write; normal keys are not false positives; tests verify HKLM/HKCU/HKU delete callers use the corrected check.
-  Complexity: M
-
-- [ ] P1 — Remove remaining fixed-drive assumptions from repair and install tracing
-  Why: Non-`C:` Windows installs were already a repeated hardening theme, but chkdsk and USN mode selection still assume `C:`.
-  Evidence: `src/DeepPurge.Core/Repair/WindowsRepairEngine.cs` `ChkDsk => "C: /scan"`; `src/DeepPurge.Cli/Program.cs` and `src/DeepPurge.App/ViewModels/MainViewModel.Extensions.cs` `UsnJournalReader.IsSupported(@"C:\")`.
-  Touches: `src/DeepPurge.Core/Repair/WindowsRepairEngine.cs`, `src/DeepPurge.Cli/Program.cs`, `src/DeepPurge.App/ViewModels/MainViewModel.Extensions.cs`, `tests/DeepPurge.Tests/WindowsRepairSanitiserTests.cs`
-  Acceptance: chkdsk defaults to `Path.GetPathRoot(Environment.SystemDirectory)` and supports an explicit drive argument where exposed; USN support probes the installer/root volume; tests cover a non-`C:` system-root abstraction.
-  Complexity: S
-
-- [ ] P1 — Wire locked-file recovery into failed deletes
-  Why: Restart Manager and delete-on-reboot support exist but are unused, so users still get silent skips or generic failures when leftovers are locked.
-  Evidence: `src/DeepPurge.Core/FileSystem/LockedFileResolver.cs`; `src/DeepPurge.Core/Uninstall/UninstallEngine.cs`; BCU issue #129.
-  Touches: `src/DeepPurge.Core/FileSystem/LockedFileResolver.cs`, shared delete primitive, `src/DeepPurge.App/ViewModels/`, `src/DeepPurge.Cli/Program.cs`, `tests/DeepPurge.Tests/`
-  Acceptance: Failed file deletes report locking processes when available and offer/log queue-on-reboot behavior; CLI returns a distinct summary for queued deletes; tests exercise the fallback without requiring a real locked system file.
-  Complexity: M
-
-- [ ] P1 — Make the shell context-menu target path actionable
-  Why: The registered command passes `--target "%1"` to the GUI, but the WPF app ignores startup arguments, so the right-click entry cannot open a forced-uninstall flow for that executable.
-  Evidence: `src/DeepPurge.Core/Shell/ShellExtensionRegistrar.cs`; `src/DeepPurge.App/App.xaml.cs`; `src/DeepPurge.App/Views/MainWindow.xaml.cs`.
-  Touches: `src/DeepPurge.App/App.xaml`, `src/DeepPurge.App/App.xaml.cs`, `src/DeepPurge.App/Views/MainWindow.xaml.cs`, `src/DeepPurge.Core/Shell/ShellExtensionRegistrar.cs`, `tests/DeepPurge.Tests/`
-  Acceptance: Launching `DeepPurge.exe --target <exe>` opens the forced uninstall/remnant scan panel with the target path populated; invalid targets show a recoverable error; register/unregister smoke tests verify the command string.
-  Complexity: M
-
 ### P2 — Parity, extensibility, and release truth
 
 - [ ] P2 — Unify CLI app discovery with GUI package enrichment
