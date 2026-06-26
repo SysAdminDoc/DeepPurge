@@ -371,6 +371,40 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
+# ── Build Slim (Framework-Dependent) ─────────────────────────
+$SlimDir = Join-Path $BuildDir "slim"
+New-Item -ItemType Directory -Path $SlimDir -Force | Out-Null
+
+Write-Host ""
+Write-Host "  [*] Building framework-dependent slim executables..." -ForegroundColor Yellow
+Write-Host "      Output: build/slim/ (requires .NET 10 runtime on target)" -ForegroundColor Gray
+
+$slimCommon = @(
+    "-c", $Configuration,
+    "-r", "win-x64",
+    "--no-self-contained",
+    "-p:PublishSingleFile=true",
+    "-p:DebugType=none",
+    "-p:DebugSymbols=false",
+    "--nologo",
+    "--source", "https://api.nuget.org/v3/index.json"
+)
+$slimGuiOut = & $script:DotNetExe publish $AppProject @slimCommon --output $SlimDir 2>&1 | Out-String
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "  [WARN] Slim GUI build failed (self-contained builds still available)" -ForegroundColor Yellow
+} else {
+    $slimCliOut = & $script:DotNetExe publish $CliProject @slimCommon --output $SlimDir 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  [WARN] Slim CLI build failed" -ForegroundColor Yellow
+    } else {
+        Get-ChildItem $SlimDir -Exclude "DeepPurge.exe","DeepPurgeCli.exe" |
+            Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
+        $slimGuiSize = if (Test-Path (Join-Path $SlimDir "DeepPurge.exe")) { [math]::Round((Get-Item (Join-Path $SlimDir "DeepPurge.exe")).Length / 1MB, 1) } else { 0 }
+        $slimCliSize = if (Test-Path (Join-Path $SlimDir "DeepPurgeCli.exe")) { [math]::Round((Get-Item (Join-Path $SlimDir "DeepPurgeCli.exe")).Length / 1MB, 1) } else { 0 }
+        Write-Host "  [OK] Slim GUI: $slimGuiSize MB  |  Slim CLI: $slimCliSize MB" -ForegroundColor Green
+    }
+}
+
 # ── Verify Output ──────────────────────────────────────────────
 $exePath = Join-Path $BuildDir "DeepPurge.exe"
 $cliPath = Join-Path $BuildDir "DeepPurgeCli.exe"
