@@ -4,6 +4,11 @@ All notable changes to DeepPurge will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed (P1 trust and recovery)
+- **Registry symlink detection repaired** — `IsRegistrySymlink` now reads the key class via `RegQueryInfoKeyW` with a `StringBuilder` buffer instead of treating any API error as a symlink. Normal keys no longer produce false positives.
+- **Locked-file recovery wired into delete flows** — `SafeDeleteFile` queries the Restart Manager for locking processes on sharing-violation errors and queues files for delete-on-reboot via `MoveFileEx(MOVEFILE_DELAY_UNTIL_REBOOT)` as a fallback. All `SafeDeleteDirectory` calls automatically benefit.
+- **Shell context-menu `--target` path actionable** — `App.xaml.cs` now parses `--target <path>` from startup arguments. MainWindow navigates to the Forced Uninstall panel with the target name and path pre-populated. Invalid/missing targets show a recoverable warning toast.
+
 ### Fixed (P0 safety)
 - **GUI junk cleanup routed through shared pipeline** — `CleanJunk_Click` in MainWindow now delegates to `MainViewModel.CleanJunkAsync` instead of deleting files directly. Dry Run, Secure Delete, progress reporting, cancellation, and ActivityLog recording are now honored for all GUI junk cleanup paths.
 - **Child-reparse-safe recursive deletion** — New `SafetyGuard.SafeEnumerateFiles`, `SafeEnumerateDirectories`, and `SafeDeleteDirectory` primitives skip child junctions/symlinks during recursive operations. All destructive recursive callers updated: `SecureDelete.WipeDirectory`, `Winapp2Parser`, `CleanerDefinition`, `UninstallEngine.DeleteFileItem`, `EvidenceRemover`, `JunkFilesCleaner`, and `SystemSlimmer`. Prevents a junction under a safe directory from redirecting deletion into unrelated data.

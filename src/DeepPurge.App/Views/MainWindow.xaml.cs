@@ -53,6 +53,25 @@ public partial class MainWindow : Window
         try { await _vm.RunInitialScanAsync(); }
         catch (Exception ex) { ShowToast($"Startup scan error: {ex.Message}", isError: true); }
         finally { FadeOutLoadingOverlay(); }
+
+        var target = (Application.Current as App)?.StartupTargetPath;
+        if (!string.IsNullOrEmpty(target))
+        {
+            if (File.Exists(target) || Directory.Exists(target))
+            {
+                txtForcedName.Text = Path.GetFileNameWithoutExtension(target);
+                txtForcedPath.Text = Path.GetDirectoryName(target) ?? "";
+                foreach (var p in AllPanels) p.Visibility = Visibility.Collapsed;
+                panelForced.Visibility = Visibility.Visible;
+                _currentPanel = "Forced";
+                _vm.CurrentPanel = "Forced";
+                ShowToast($"Target: {Path.GetFileName(target)}");
+            }
+            else
+            {
+                ShowToast($"Target not found: {target}", isWarning: true);
+            }
+        }
     }
 
     private void FadeOutLoadingOverlay()

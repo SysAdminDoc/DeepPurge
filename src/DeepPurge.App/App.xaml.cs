@@ -42,6 +42,8 @@ public partial class App : Application
     private static string FallbackCrashLogDir
         => Path.Combine(Path.GetTempPath(), "DeepPurge", "Logs");
 
+    public string? StartupTargetPath { get; private set; }
+
     protected override void OnStartup(StartupEventArgs e)
     {
         // Wire global exception handlers FIRST — before calling *anything*
@@ -65,7 +67,12 @@ public partial class App : Application
                 return;
             }
 
-            // Apply the persisted theme (or dark default) before the main window shows.
+            for (int i = 0; i < e.Args.Length; i++)
+            {
+                if (e.Args[i].Equals("--target", StringComparison.OrdinalIgnoreCase) && i + 1 < e.Args.Length)
+                    StartupTargetPath = e.Args[i + 1];
+            }
+
             try
             {
                 ThemeManager.ApplySavedOrDefault();
