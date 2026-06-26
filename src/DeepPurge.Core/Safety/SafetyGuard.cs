@@ -376,6 +376,8 @@ public static class SafetyGuard
         if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path)) return false;
         if (!IsPathSafeToDelete(path)) return false;
 
+        Diagnostics.DeletionManifest.RecordDirectory(path, "delete-recursive");
+
         try
         {
             foreach (var file in SafeEnumerateFiles(path))
@@ -407,6 +409,7 @@ public static class SafetyGuard
     {
         try
         {
+            Diagnostics.DeletionManifest.RecordFile(path, "delete");
             File.Delete(path);
             return true;
         }

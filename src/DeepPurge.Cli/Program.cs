@@ -24,6 +24,8 @@ using DeepPurge.Core.Shortcuts;
 using DeepPurge.Core.Startup;
 using DeepPurge.Core.Uninstall;
 using DeepPurge.Core.Updates;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace DeepPurge.Cli;
 
@@ -74,6 +76,7 @@ public static class Program
                 "unregister-shell"=> CmdUnregisterShell(),
                 "cleaners"        => CmdCleaners(args),
                 "settings"        => CmdSettings(args),
+                "update-winapp2"  => await CmdUpdateWinapp2Async(args, cts.Token),
                 _ => Fail($"Unknown command: {cmd}. Run 'deeppurgecli --help' for usage."),
             };
         }
@@ -123,14 +126,26 @@ public static class Program
         if (!a.HasFlag("registry-only"))
             await PackageManagerScanner.EnrichAsync(items, ct);
         PrefetchScanner.EnrichWithLastUsed(items);
-        foreach (var p in items.OrderBy(p => p.DisplayName))
+        var sorted = items.OrderBy(p => p.DisplayName).ToList();
+
+        if (a.HasFlag("json"))
+        {
+            WriteJson(sorted.Select(p => new {
+                p.DisplayName, p.DisplayVersion, p.Publisher,
+                Source = p.SourceDisplay, p.PackageId, p.LastUsedDisplay,
+                p.InstallDate, p.EstimatedSizeKB, p.InstallLocation
+            }));
+            return 0;
+        }
+
+        foreach (var p in sorted)
         {
             var source = p.SourceDisplay;
             var pkgId = !string.IsNullOrEmpty(p.PackageId) ? $"\t{p.PackageId}" : "";
             var lastUsed = !string.IsNullOrEmpty(p.LastUsedDisplay) ? $"\t{p.LastUsedDisplay}" : "";
             Console.WriteLine($"{p.DisplayName}\t{p.DisplayVersion}\t{p.Publisher}\t{source}{pkgId}{lastUsed}");
         }
-        Console.WriteLine($"# {items.Count} programs");
+        Console.WriteLine($"# {sorted.Count} programs");
         return 0;
     }
 
@@ -254,6 +269,15 @@ public static class Program
             return 0;
         }
 
+        if (a.HasFlag("json"))
+        {
+            WriteJson(filtered.Select(p => new {
+                p.PublishedName, p.OriginalName, p.ProviderName, p.DriverVersion,
+                p.DriverDate, p.SizeBytes, p.IsOldVersion
+            }));
+            return 0;
+        }
+
         foreach (var p in filtered)
         {
             var tag = p.IsOldVersion ? "OLD" : "   ";
@@ -280,6 +304,14 @@ public static class Program
         {
             GridExporter.ExportStartupImpact(sorted, exportPath, ParseExportFormat(a));
             Console.WriteLine($"Exported {sorted.Count} entries to {exportPath}");
+            return 0;
+        }
+
+        if (a.HasFlag("json"))
+        {
+            WriteJson(sorted.Select(e => new {
+                e.ProcessName, Impact = e.Impact.ToString(), e.DiskBytes, e.CpuMs
+            }));
             return 0;
         }
 
@@ -637,12 +669,23 @@ if ($app) {{
 
     private static int CmdOrphans(ParsedArgs a)
     {
-        Console.WriteLine("Scanning for orphaned artifacts...");
+        Console.Error.WriteLine("Scanning for orphaned artifacts...");
 
         var services = DeepPurge.Core.Services.ServiceScanner.GetAllServices(orphanedOnly: true);
         var tasks = DeepPurge.Core.Tasks.ScheduledTaskScanner.GetAllTasks().Where(t => t.IsOrphaned).ToList();
         var firewall = FirewallRuleScanner.GetAllRules(orphanedOnly: true);
         var paths = DeepPurge.Core.Shell.PathCleaner.ScanPathEntries(orphanedOnly: true);
+
+        if (a.HasFlag("json"))
+        {
+            WriteJson(new {
+                services = services.Select(s => new { s.Name, s.DisplayName, s.ImagePath }),
+                tasks = tasks.Select(t => new { t.Name, t.Action }),
+                firewall = firewall.Select(r => new { r.DisplayName, r.Program }),
+                paths = paths.Select(p => new { p.Source, p.Directory }),
+            });
+            return 0;
+        }
 
         Console.WriteLine();
         Console.WriteLine($"=== Orphaned Services ({services.Count}) ===");
@@ -714,6 +757,34 @@ if ($app) {{
         return 0;
     }
 
+    private static async Task<int> CmdUpdateWinapp2Async(ParsedArgs a, CancellationToken ct)
+    {
+        var (isStale, localDate, remoteDate) = await Winapp2Updater.CheckStalenessAsync(ct);
+        Console.WriteLine($"Local:  {(localDate.HasValue ? localDate.Value.ToString("yyyy-MM-dd HH:mm UTC") : "(not downloaded)")}");
+        Console.WriteLine($"Remote: {(remoteDate.HasValue ? remoteDate.Value.ToString("yyyy-MM-dd HH:mm UTC") : "(check failed)")}");
+
+        if (a.HasFlag("check-only"))
+        {
+            Console.WriteLine(isStale ? "Update available." : "Up to date.");
+            return isStale ? 1 : 0;
+        }
+
+        if (!isStale)
+        {
+            Console.WriteLine("Already up to date.");
+            return 0;
+        }
+
+        Console.Write("Downloading latest winapp2.ini... ");
+        if (await Winapp2Updater.UpdateAsync(ct))
+        {
+            Console.WriteLine("done.");
+            return 0;
+        }
+        Console.WriteLine("failed.");
+        return 1;
+    }
+
     // ═══════════════════════════════════════════════════════
     //  HELPERS
     // ═══════════════════════════════════════════════════════
@@ -748,6 +819,16 @@ if ($app) {{
         return null;
     }
 
+    private static readonly JsonSerializerOptions _jsonOpts = new()
+    {
+        WriteIndented = true,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
+
+    private static void WriteJson<T>(T value) =>
+        Console.WriteLine(JsonSerializer.Serialize(value, _jsonOpts));
+
     private static bool IsHelp(string a) => a is "--help" or "-h" or "help" or "/?";
 
     private static void PrintHelp()
@@ -777,8 +858,12 @@ if ($app) {{
         Console.WriteLine("  unregister-shell                         Remove the shell context menu entry");
         Console.WriteLine("  settings [show|export <path>|import <path>]  View or transfer settings");
         Console.WriteLine("  detection-script --program \"Name\" [--export file.ps1]   Generate Intune/SCCM detection script");
+        Console.WriteLine("  update-winapp2 [--check-only]            Download latest winapp2.ini from GitHub");
         Console.WriteLine("  check-update                             Check GitHub for a newer release");
         Console.WriteLine("  doctor                                   Run environment self-test + report");
+        Console.WriteLine();
+        Console.WriteLine("Global flags:");
+        Console.WriteLine("  --json                                   Output as JSON (list, drivers, startup-impact, orphans)");
         Console.WriteLine();
         Console.WriteLine("Exit codes: 0 ok | 1 fail | 2 bad args | 13 access denied | 1223 cancelled");
     }
