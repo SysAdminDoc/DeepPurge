@@ -110,6 +110,14 @@ public static class JunkFilesCleaner
                 continue;
             }
 
+            if (options.MinAgeDays > 0 && IsTooRecent(file.Path, options.MinAgeDays))
+            {
+                skipped++;
+                progress?.Report(new DeleteProgress(
+                    i + 1, all.Count, freed, file.Path, Skipped: true));
+                continue;
+            }
+
             if (options.DryRun)
             {
                 freed += file.Size;
@@ -637,5 +645,16 @@ public static class JunkFilesCleaner
                 .Sum(fi => { try { return fi.Length; } catch { return 0L; } });
         }
         catch { return 0; }
+    }
+
+    private static bool IsTooRecent(string path, int minAgeDays)
+    {
+        try
+        {
+            var cutoff = DateTime.UtcNow.AddDays(-minAgeDays);
+            var lastWrite = File.GetLastWriteTimeUtc(path);
+            return lastWrite > cutoff;
+        }
+        catch { return false; }
     }
 }

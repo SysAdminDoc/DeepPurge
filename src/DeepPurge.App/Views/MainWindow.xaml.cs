@@ -785,6 +785,28 @@ public partial class MainWindow : Window
         else ShowToast($"Failed to toggle {entry.Name}", isError: true);
     }
 
+    private void Ctx_ExcludePath_Click(object sender, RoutedEventArgs e)
+    {
+        var grid = FindParentGrid(sender);
+        if (grid?.SelectedItem == null) { _vm.StatusText = "Nothing selected"; return; }
+        var item = grid.SelectedItem;
+        string? path = null;
+        foreach (var propName in new[] { "Path", "DisplayPath", "Directory" })
+        {
+            var prop = item.GetType().GetProperty(propName);
+            if (prop != null) { path = prop.GetValue(item)?.ToString(); if (!string.IsNullOrEmpty(path)) break; }
+        }
+        if (string.IsNullOrEmpty(path)) { _vm.StatusText = "No path available for exclusion"; return; }
+        var settings = DeepPurge.Core.App.AppSettings.Current;
+        if (!settings.ExcludedPaths.Contains(path, StringComparer.OrdinalIgnoreCase))
+        {
+            settings.ExcludedPaths.Add(path);
+            settings.Save();
+            ShowToast($"Excluded: {path}");
+        }
+        else ShowToast($"Already excluded: {path}");
+    }
+
     private void Ctx_OpenFolderPath_Click(object sender, RoutedEventArgs e)
     {
         if (dgEmptyFolders.SelectedItem is not EmptyFolderInfo folder) return;

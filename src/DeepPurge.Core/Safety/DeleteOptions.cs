@@ -16,7 +16,8 @@ namespace DeepPurge.Core.Safety;
 public readonly record struct DeleteOptions(
     bool DryRun = false,
     bool SecureDelete = false,
-    bool UseRecycleBin = true)
+    bool UseRecycleBin = true,
+    int MinAgeDays = 0)
 {
     public static DeleteOptions Default => new();
 

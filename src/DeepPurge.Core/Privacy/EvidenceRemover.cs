@@ -98,6 +98,22 @@ public static class EvidenceRemover
             var (_, item) = all[i];
             var label = string.IsNullOrEmpty(item.Path) ? item.Command : item.Path;
 
+            if (options.MinAgeDays > 0 && !item.IsCommand && !string.IsNullOrEmpty(item.Path))
+            {
+                try
+                {
+                    var cutoff = DateTime.UtcNow.AddDays(-options.MinAgeDays);
+                    if (File.GetLastWriteTimeUtc(item.Path) > cutoff)
+                    {
+                        skipped++;
+                        progress?.Report(new DeleteProgress(
+                            i + 1, all.Count, freed, label, Skipped: true));
+                        continue;
+                    }
+                }
+                catch { }
+            }
+
             if (options.DryRun)
             {
                 freed += item.SizeBytes;

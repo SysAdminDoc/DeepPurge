@@ -137,9 +137,10 @@ public static class Program
     {
         bool dryRun = a.HasFlag("dry-run");
         bool secure = a.HasFlag("secure");
+        int minAge = int.TryParse(a.GetValue("min-age"), out var ma) ? ma : 0;
         var categories = a.Positional.Count > 0 ? a.Positional : new List<string> { "junk", "evidence" };
 
-        var opt = new DeleteOptions(DryRun: dryRun, SecureDelete: secure, UseRecycleBin: !secure);
+        var opt = new DeleteOptions(DryRun: dryRun, SecureDelete: secure, UseRecycleBin: !secure, MinAgeDays: minAge);
         long total = 0;
         foreach (var cat in categories)
         {
@@ -164,8 +165,17 @@ public static class Program
                     freed = s.BytesFreed;
                     break;
                 }
+                case "dev":
+                {
+                    var root = a.GetValue("path") ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                    var devDirs = await Task.Run(() => DeepPurge.Core.FileSystem.DevDirectoryScanner.Scan(root, ct), ct);
+                    foreach (var d in devDirs) Console.WriteLine($"  {d.Type,-16} {FormatBytes(d.SizeBytes),10}  {d.Path}");
+                    var s = await Task.Run(() => DeepPurge.Core.FileSystem.DevDirectoryScanner.Delete(devDirs, opt, ProgressSink("dev"), ct), ct);
+                    freed = s.BytesFreed;
+                    break;
+                }
                 default:
-                    Console.Error.WriteLine($"unknown category: {cat} (expected junk | evidence)");
+                    Console.Error.WriteLine($"unknown category: {cat} (expected junk | evidence | dev)");
                     return 2;
             }
             Console.WriteLine();
