@@ -22,67 +22,37 @@ Things worth considering but not on a timeline:
 
 ## Research-Driven Additions
 
-### P0 — Safety
+### P1 — Deployment
 
-- [ ] P0 — Validate CLI `--export` paths against traversal
-  Why: `File.WriteAllText(exportPath, ...)` and `GridExporter.Export*()` accept raw user paths without validation — `--export ..\..\windows\system32\evil.txt` writes outside intended directory
-  Evidence: `src/DeepPurge.Cli/Program.cs` lines 250, 278, 298, 337, 489
-  Touches: `Program.cs` — add `Path.GetFullPath()` normalization + reject paths containing `..` or rooted outside current directory / user profile
-  Acceptance: `deeppurgecli drivers --export ..\..\test.csv` returns exit code 2 with error message; unit test confirms
+- [ ] P1 — Framework-dependent "slim" build target
+  Why: Self-contained builds are ~66 MB each; framework-dependent builds are ~2-5 MB for users with .NET 10 runtime installed. Dramatically improves download and USB deployment experience.
+  Evidence: InstallerClean triple distribution model (65MB self-contained / 2MB framework-dependent / CLI standalone); r/sysadmin preference for small portable tools
+  Touches: `Build.ps1`, `BUILD.bat` — add parallel publish with `-p:SelfContained=false --no-self-contained`; output to `build/slim/`; update README.md packaging section
+  Acceptance: `BUILD.bat` produces `build/slim/DeepPurge.exe` (~2-5 MB) and `build/slim/DeepPurgeCli.exe` (~2-5 MB) alongside the existing self-contained builds; both run correctly when .NET 10 runtime is installed
   Complexity: S
 
-### P1 — Reliability
+### P2 — Trust and scripting
 
-- [ ] P1 — Lock `ActivityLog.LoadRecent()` reads
-  Why: `File.ReadAllLines()` without `_lock` can race with concurrent `Record()` or `Prune()` causing partial reads or IOException
-  Evidence: `src/DeepPurge.Core/Diagnostics/ActivityLog.cs:40` — `Record()` and `Prune()` hold `_lock` but `LoadRecent()` does not
-  Touches: `ActivityLog.cs` — wrap `ReadAllLines` in `lock (_lock)` block
-  Acceptance: Concurrent Record + LoadRecent calls in a test never throw or return truncated data
-  Complexity: S
-
-- [ ] P1 — Add timeout to initial scan
-  Why: `RunInitialScanAsync()` has no timeout; if any scanner hangs (WMI timeout, disk I/O stall), the window stays in loading overlay indefinitely with no recovery
-  Evidence: `src/DeepPurge.App/Views/MainWindow.xaml.cs:53`
-  Touches: `MainWindow.xaml.cs` — wrap in `Task.WhenAny(scan, Task.Delay(timeout))` with fallback to show partial results + error toast
-  Acceptance: Initial scan completes or times out within 60s; UI always becomes interactive
-  Complexity: S
-
-- [ ] P1 — Route EmptyFolderScanner through SafeDeleteDirectory
-  Why: `Directory.Delete(folder.Path, recursive: false)` bypasses reparse-point guards and locked-file recovery in SafetyGuard
-  Evidence: `src/DeepPurge.Core/FileSystem/EmptyFolderScanner.cs:85` — `IsPathSafeToDelete` is checked but deletion uses raw API
-  Touches: `EmptyFolderScanner.cs` — replace `Directory.Delete` with `SafetyGuard.SafeDeleteDirectory`
-  Acceptance: Deleting a junction-pointed empty folder does not follow the junction; build passes
-  Complexity: S
-
-- [ ] P1 — Fix HealthScorer system-drive fallback
-  Why: Falls back to `@"C:\"` when `Path.GetPathRoot()` returns null — incorrect on systems where Windows is installed on D:\ or another drive
-  Evidence: `src/DeepPurge.Core/Diagnostics/HealthScorer.cs:169`
-  Touches: `HealthScorer.cs` — replace `@"C:\"` with `Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows)) ?? @"C:\"`
-  Acceptance: On a system with Windows on any drive letter, HealthScorer reports correct free space
-  Complexity: S
-
-### P2 — Quality and trust
-
-- [ ] P2 — Dynamic user-agent version from assembly
-  Why: Hardcoded `"DeepPurge/0.9"` user-agent string will become stale on version bumps
-  Evidence: `src/DeepPurge.App/ViewModels/MainViewModel.Extensions.cs:40`
-  Touches: `MainViewModel.Extensions.cs` — replace with `$"DeepPurge/{Assembly.GetExecutingAssembly().GetName().Version?.ToString(2)}"`
-  Acceptance: After version bump, UpdateChecker and winapp2 download requests send correct version in User-Agent header
-  Complexity: S
-
-- [ ] P2 — Settings export/import CLI commands
-  Why: IT technicians deploying DeepPurge across machines need to replicate configuration (expert mode, excluded paths, age thresholds) without manual setup
-  Evidence: FluentCleaner v26.06.02 settings export/import; InstallerClean CLI packaging pattern
-  Touches: `Program.cs` (add `settings export <path>` and `settings import <path>` commands), `AppSettings.cs` (add `ExportTo`/`ImportFrom` methods)
-  Acceptance: `deeppurgecli settings export config.json` produces valid JSON; `settings import config.json` on another machine applies all settings
-  Complexity: S
-
-- [ ] P2 — Unit tests for SafetyGuard deletion primitives
-  Why: `SafeDeleteFile`, `SafeDeleteDirectory`, `SafeEnumerateFiles` are the foundation of every destructive operation but have no dedicated tests — only indirect coverage through higher-level tests
-  Evidence: `src/DeepPurge.Core/Safety/SafetyGuard.cs` — SafeDeleteFile (line 406+), SafeDeleteDirectory (line 376+), SafeEnumerateFiles (line 331+)
-  Touches: New `tests/DeepPurge.Tests/SafetyGuardDeletionTests.cs` — test reparse-point skipping, locked-file fallback, protected-path rejection, recursive enumeration safety
-  Acceptance: ≥12 tests covering happy path + reparse point + protected path + nonexistent path scenarios; all pass
+- [ ] P2 — Granular deletion manifest
+  Why: IT/sysadmin users need an audit trail of exactly what was deleted (path, type, size, timestamp, operation) for compliance and post-mortem review. ActivityLog records summaries but not per-item detail.
+  Evidence: Winhance Change History logging; Win11Debloat revert tracking; enterprise compliance requests from r/sysadmin
+  Touches: `SafetyGuard.cs` (add manifest write after each SafeDeleteFile/SafeDeleteDirectory call), new `Core/Diagnostics/DeletionManifest.cs` (JSONL writer), `DataPaths.cs` (add `DeletionManifests` path)
+  Acceptance: After any cleanup operation, `%LocalAppData%\DeepPurge\Logs\deletions-YYYY-MM-DD.jsonl` contains one JSON line per deleted item with `{path, type, sizeBytes, timestampUtc, operation}`; CLI `clean` outputs manifest path on completion
   Complexity: M
+
+- [ ] P2 — CLI `--json` stdout output mode
+  Why: Sysadmin scripting workflows need machine-parseable output for piping to jq, PowerShell ConvertFrom-Json, or feeding into SCCM/Intune reports. All current CLI output is human-readable text.
+  Evidence: BCU console JSON export; Czkawka CLI JSON output; winget `--output json`; r/sysadmin requests for scriptable cleanup tools
+  Touches: `Program.cs` (add `--json` flag to ParsedArgs, add JSON serialization branch in each command handler: `list`, `drivers`, `startup-impact`, `shortcuts`, `orphans`, `doctor`, `duplicates`)
+  Acceptance: `deeppurgecli list --json` outputs a JSON array of program objects to stdout; `deeppurgecli drivers --old --json | jq '.[] | .PublishedName'` works; exit codes unchanged
+  Complexity: M
+
+- [ ] P2 — Winapp2.ini staleness check + update command
+  Why: Winapp2.ini auto-downloads on first run but never checks for updates. FluentCleaner and BleachBit both auto-update their cleaner databases. Stale rules miss new browser versions and app paths.
+  Evidence: FluentCleaner auto-updates winapp2.ini; BleachBit auto-updates; winapp2.ini GitHub last commit May 2026 but no tagged release since Nov 2025
+  Touches: `Winapp2Parser.cs` or new `Core/Cleaning/Winapp2Updater.cs` (check GitHub API for latest commit date vs local file timestamp), `Program.cs` (add `update-winapp2` command), `MainViewModel.Extensions.cs` (add button/indicator in GUI winapp2 panel)
+  Acceptance: `deeppurgecli update-winapp2` downloads latest winapp2.ini from GitHub if local copy is older; GUI shows "Update available" indicator when stale; `--check-only` flag prints status without downloading
+  Complexity: S
 
 ## What we will NOT ship
 
