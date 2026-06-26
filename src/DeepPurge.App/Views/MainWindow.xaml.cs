@@ -558,7 +558,7 @@ public partial class MainWindow : Window
         foreach (var f in selected)
         {
             if (!SafetyGuard.IsPathSafeToDelete(f.Path)) { skipped++; continue; }
-            try { File.Delete(f.Path); deleted++; _vm.LargeFiles.Remove(f); }
+            try { if (SafetyGuard.SafeDeleteFile(f.Path)) { deleted++; _vm.LargeFiles.Remove(f); } else { skipped++; } }
             catch { skipped++; }
         }
         ShowToast($"Deleted {deleted} files" + (skipped > 0 ? $" ({skipped} skipped)" : ""));

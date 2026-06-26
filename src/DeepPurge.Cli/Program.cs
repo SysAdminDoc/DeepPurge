@@ -693,6 +693,10 @@ if ($app) {{
         Console.WriteLine("  schedule add --name N --time HH:MM [--freq daily|weekly|monthly] [--day Mon] [--args \"...\"]");
         Console.WriteLine("  schedule remove --name N");
         Console.WriteLine("  orphans                                  Scan for orphaned services, tasks, firewall rules, PATH entries");
+        Console.WriteLine("  orphans --remnants                       Include BAM execution evidence in orphan scan");
+        Console.WriteLine("  cleaners list|preview|run [--dry-run]    Manage custom JSON cleaner definitions");
+        Console.WriteLine("  register-shell                           Add 'Uninstall with DeepPurge' to .exe right-click menu");
+        Console.WriteLine("  unregister-shell                         Remove the shell context menu entry");
         Console.WriteLine("  detection-script --program \"Name\" [--export file.ps1]   Generate Intune/SCCM detection script");
         Console.WriteLine("  check-update                             Check GitHub for a newer release");
         Console.WriteLine("  doctor                                   Run environment self-test + report");
