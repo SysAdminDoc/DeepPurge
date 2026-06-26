@@ -231,15 +231,9 @@ public static class BrowserExtensionScanner
         try
         {
             if (Directory.Exists(ext.Path))
-            {
-                Directory.Delete(ext.Path, true);
-                return true;
-            }
+                return Safety.SafetyGuard.SafeDeleteDirectory(ext.Path);
             if (File.Exists(ext.Path))
-            {
-                File.Delete(ext.Path);
-                return true;
-            }
+                return Safety.SafetyGuard.SafeDeleteFile(ext.Path);
         }
         catch (Exception ex) { Log.Warn($"Removing extension '{ext.Name}' at {ext.Path}: {ex.Message}"); }
         return false;

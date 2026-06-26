@@ -274,9 +274,8 @@
                                 </Border>
                                 <StackPanel VerticalAlignment="Center">
                                     <TextBlock Text="DeepPurge" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource TextBrush}"/>
-                                    <TextBlock FontSize="10.5" Foreground="{DynamicResource Subtext0Brush}" Margin="0,1,0,0">
-                                        <Run Text="v0.8.1"/>
-                                    </TextBlock>
+                                    <TextBlock FontSize="10.5" Foreground="{DynamicResource Subtext0Brush}" Margin="0,1,0,0"
+                                               Text="{Binding AppVersionDisplay, StringFormat=v{0}}"/>
                                 </StackPanel>
                             </StackPanel>
                         </DockPanel>
@@ -1591,9 +1590,10 @@
                     <!-- App name -->
                     <TextBlock Text="DeepPurge" FontSize="28" FontWeight="Bold"
                                Foreground="{DynamicResource TextBrush}" HorizontalAlignment="Center" Margin="0,0,0,6"/>
-                    <TextBlock Text="v0.8.1" FontSize="11" FontWeight="Medium"
+                    <TextBlock FontSize="11" FontWeight="Medium"
                                Foreground="{DynamicResource Subtext0Brush}" HorizontalAlignment="Center" Margin="0,0,0,28"
-                               Opacity="0.5"/>
+                               Opacity="0.5"
+                               Text="{Binding AppVersionDisplay, StringFormat=v{0}}"/>
 
                     <!-- Status text -->
                     <TextBlock Text="{Binding ScanOverlayText}" FontSize="14" FontWeight="Medium"
