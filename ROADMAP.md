@@ -5,17 +5,6 @@ Blocked items live in `Roadmap_Blocked.md`.
 
 ## Research-Driven Additions
 
-### P2 — Parity, extensibility, and release truth
-
-
-- [ ] P2 — Wire existing `.resx` localization into UI text
-  Why: Localization resources and generated accessors exist, but user-visible XAML/code-behind strings still bypass them, so the claimed i18n path is not observable.
-  Evidence: `src/DeepPurge.App/Properties/Resources.resx`; `src/DeepPurge.App/Properties/Resources.Designer.cs`; `src/DeepPurge.App/Views/MainWindow.xaml`; BleachBit translation/localization practice.
-  Touches: `src/DeepPurge.App/Properties/Resources.resx`, `src/DeepPurge.App/Views/MainWindow.xaml`, `src/DeepPurge.App/Views/MainWindow.xaml.cs`, `src/DeepPurge.App/ViewModels/`, `tests/DeepPurge.Tests/`
-  Acceptance: Primary navigation, action buttons, dialog titles, and status copy bind to resources instead of literals; a culture-switch smoke test or generated-resource test proves the strings are consumed; missing-resource fallback remains English.
-  Complexity: M
-
-
 ## Ideas / not committed
 
 Things worth considering but not on a timeline:

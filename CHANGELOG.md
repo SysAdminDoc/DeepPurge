@@ -4,6 +4,9 @@ All notable changes to DeepPurge will be documented in this file.
 
 ## [Unreleased]
 
+### Changed (P2 localization)
+- **Navigation labels wired to `.resx` resources** — 8 primary navigation labels in MainWindow.xaml now use `{x:Static props:Resources.Nav_*}` bindings instead of hardcoded strings. Adding a `Resources.de.resx` (or any other culture) file will produce a localized sidebar. `xmlns:props` namespace registered in XAML root.
+
 ### Added (P2 parity)
 - **CLI app discovery unified with GUI enrichment** — `deeppurgecli list` and `uninstall` now call `PackageManagerScanner.EnrichAsync`, including winget, Scoop, portable app, and game-platform sources. List output includes source and package ID columns. Uninstall accepts package IDs in addition to display names and registry key names.
 - **CLI `cleaners` command** — `deeppurgecli cleaners list|preview|run [--dry-run]` exposes custom JSON cleaner definitions through the CLI. Lists applicable rules, previews sizes, and runs with dry-run support.

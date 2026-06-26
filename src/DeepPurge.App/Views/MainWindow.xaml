@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:DeepPurge.App.ViewModels"
         xmlns:conv="clr-namespace:DeepPurge.App.Converters"
+        xmlns:props="clr-namespace:DeepPurge.App.Properties"
         Title="DeepPurge v0.9.0" Width="1380" Height="900"
         MinWidth="1060" MinHeight="700" WindowStartupLocation="CenterScreen"
         Style="{DynamicResource MainWindowStyle}">
@@ -317,7 +318,7 @@
                                     </Border>
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="&#xE74C;" Style="{StaticResource NavIcon}"/>
-                                        <TextBlock Text="Installed Programs" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{x:Static props:Resources.Nav_InstalledPrograms}" VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </DockPanel>
                             </RadioButton>
@@ -355,7 +356,7 @@
                                     </Border>
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="&#xE74D;" Style="{StaticResource NavIcon}"/>
-                                        <TextBlock Text="Junk Cleaner" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{x:Static props:Resources.Nav_JunkCleaner}" VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </DockPanel>
                             </RadioButton>
@@ -369,7 +370,7 @@
                                     </Border>
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="&#xE72E;" Style="{StaticResource NavIcon}"/>
-                                        <TextBlock Text="Evidence Remover" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{x:Static props:Resources.Nav_EvidenceRemover}" VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </DockPanel>
                             </RadioButton>
@@ -404,7 +405,7 @@
                                     </Border>
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="&#xE768;" Style="{StaticResource NavIcon}"/>
-                                        <TextBlock Text="Autorun Manager" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{x:Static props:Resources.Nav_AutorunManager}" VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </DockPanel>
                             </RadioButton>
@@ -511,7 +512,7 @@
                                     </Border>
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="&#xE950;" Style="{StaticResource NavIcon}"/>
-                                        <TextBlock Text="Driver Store" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{x:Static props:Resources.Nav_DriverStore}" VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </DockPanel>
                             </RadioButton>
@@ -547,7 +548,7 @@
                             <RadioButton GroupName="nav" Tag="Repair" Checked="NavButton_Checked" Style="{StaticResource NavRadioButton}">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="&#xE90F;" Style="{StaticResource NavIcon}"/>
-                                    <TextBlock Text="Repair Windows" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{x:Static props:Resources.Nav_RepairWindows}" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </RadioButton>
 
@@ -568,14 +569,14 @@
                             <RadioButton GroupName="nav" Tag="History" Checked="NavButton_Checked" Style="{StaticResource NavRadioButton}">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="&#xE81C;" Style="{StaticResource NavIcon}"/>
-                                    <TextBlock Text="History" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{x:Static props:Resources.Nav_History}" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </RadioButton>
 
                             <RadioButton GroupName="nav" Tag="About" Checked="NavButton_Checked" Style="{StaticResource NavRadioButton}">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="&#xE946;" Style="{StaticResource NavIcon}"/>
-                                    <TextBlock Text="About / Updates" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{x:Static props:Resources.Nav_About}" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </RadioButton>
                         </StackPanel>
