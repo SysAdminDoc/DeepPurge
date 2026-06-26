@@ -35,6 +35,7 @@ public static class SelfTest
         results.Add(CheckDriverStoreRepo());
         results.Add(CheckWinapp2Cached());
         results.Add(CheckSnapshotDir());
+        results.Add(CheckSysmon());
 
         return results;
     }
@@ -240,6 +241,22 @@ public static class SelfTest
         {
             return new("Snapshots dir", SelfTestStatus.Fail, ex.Message,
                 Hint: "Create the Snapshots folder and grant write permission, or enable portable mode from a writable folder.");
+        }
+    }
+
+    private static SelfTestResult CheckSysmon()
+    {
+        try
+        {
+            var available = InstallMonitor.SysmonReader.IsAvailable();
+            return available
+                ? new("Sysmon", SelfTestStatus.Ok, "Sysmon event log detected — install monitoring will capture registry changes via Sysmon")
+                : new("Sysmon", SelfTestStatus.Warn, "Sysmon not installed or not running",
+                    Hint: "Install Sysmon (sysinternals.com) or enable the built-in Sysmon on Windows 11 26H2+ for enhanced install monitoring.");
+        }
+        catch (Exception ex)
+        {
+            return new("Sysmon", SelfTestStatus.Warn, $"Sysmon check failed: {ex.Message}");
         }
     }
 
