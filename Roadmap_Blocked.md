@@ -72,3 +72,16 @@ development passes.
 - [ ] **Hunter Mode (drag-to-identify)**
       Blocked: requires new WPF overlay window with Win32 `WindowFromPoint` +
       `GetWindowThreadProcessId` interop and visual/interactive testing.
+
+- [ ] **WCAG 2.2 accessibility pass**
+      Blocked: requires visual testing in all four Windows contrast themes
+      (Aquatic, Desert, Dusk, Night Sky) + Narrator testing + keyboard-only
+      verification. HighContrast ResourceDictionary must map brushes to
+      SystemColor*Color and meet 2px/3:1 focus indicator requirements.
+
+- [ ] **Publish independent accuracy benchmark**
+      Blocked: requires a clean VM image, 8 specific test apps (Adobe CC,
+      Discord, Steam, Bongo Cat, Notepad++ Portable, Brave Portable,
+      CCleaner leftovers, Corel PDF Fusion), screen recordings, and
+      reproducible methodology documentation. May drive accuracy
+      improvements in leftover scanners.
