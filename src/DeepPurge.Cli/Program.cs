@@ -137,6 +137,7 @@ public static class Program
                 p.DisplayName, p.DisplayVersion, p.Publisher,
                 Source = p.SourceDisplay, p.PackageId, p.LastUsedDisplay,
                 p.InstallDate, p.EstimatedSizeKB, p.InstallLocation,
+                p.SignatureDisplay,
                 Note = notes.TryGetValue(p.DisplayName ?? "", out var n) ? n : null,
             }));
             return 0;

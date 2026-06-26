@@ -12,6 +12,7 @@ using DeepPurge.Core.Packages;
 using DeepPurge.Core.Privacy;
 using DeepPurge.Core.Registry;
 using DeepPurge.Core.Safety;
+using DeepPurge.Core.Security;
 using DeepPurge.Core.Services;
 using DeepPurge.Core.Shell;
 using DeepPurge.Core.Startup;
@@ -192,6 +193,7 @@ public partial class MainViewModel : ObservableObject
 
             StartIconBackfill(programs);
             StartPackageEnrichment(programs);
+            StartSignatureEnrichment(programs);
 
             // Each parallel task calls Tick() on completion so the progress
             // bar advances as individual scanners finish, not just at the end.
@@ -678,6 +680,7 @@ public partial class MainViewModel : ObservableObject
 
             StartIconBackfill(programs);
             StartPackageEnrichment(programs);
+            StartSignatureEnrichment(programs);
         }
         finally { IsBusy = false; }
     }
@@ -779,6 +782,32 @@ public partial class MainViewModel : ObservableObject
                 });
             }
             catch { /* non-fatal */ }
+        }, ct);
+    }
+
+    private void StartSignatureEnrichment(IReadOnlyList<InstalledProgram> programs)
+    {
+        var ct = _cts?.Token ?? CancellationToken.None;
+        var list = programs.ToList();
+
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                var opts = new ParallelOptions { MaxDegreeOfParallelism = 8, CancellationToken = ct };
+                Parallel.ForEach(list, opts, p =>
+                {
+                    var exePath = p.InstallLocation;
+                    if (string.IsNullOrEmpty(exePath)) return;
+                    var exe = Directory.Exists(exePath)
+                        ? Directory.EnumerateFiles(exePath, "*.exe", SearchOption.TopDirectoryOnly).FirstOrDefault()
+                        : (File.Exists(exePath) ? exePath : null);
+                    if (exe == null) return;
+                    var info = DigitalSignatureInspector.Inspect(exe);
+                    p.SignatureDisplay = info.Display;
+                });
+            }
+            catch { }
         }, ct);
     }
 
