@@ -4,6 +4,11 @@ All notable changes to DeepPurge will be documented in this file.
 
 ## [Unreleased]
 
+### Added (P2 parity)
+- **CLI app discovery unified with GUI enrichment** — `deeppurgecli list` and `uninstall` now call `PackageManagerScanner.EnrichAsync`, including winget, Scoop, portable app, and game-platform sources. List output includes source and package ID columns. Uninstall accepts package IDs in addition to display names and registry key names.
+- **CLI `cleaners` command** — `deeppurgecli cleaners list|preview|run [--dry-run]` exposes custom JSON cleaner definitions through the CLI. Lists applicable rules, previews sizes, and runs with dry-run support.
+- **BAM remnant discovery wired into orphan scan** — `deeppurgecli orphans --remnants` now includes BAM execution evidence from `AmcacheParser.FindRemnants` alongside signature-based remnant scanning.
+
 ### Fixed (P1 trust and recovery)
 - **Registry symlink detection repaired** — `IsRegistrySymlink` now reads the key class via `RegQueryInfoKeyW` with a `StringBuilder` buffer instead of treating any API error as a symlink. Normal keys no longer produce false positives.
 - **Locked-file recovery wired into delete flows** — `SafeDeleteFile` queries the Restart Manager for locking processes on sharing-violation errors and queues files for delete-on-reboot via `MoveFileEx(MOVEFILE_DELAY_UNTIL_REBOOT)` as a fallback. All `SafeDeleteDirectory` calls automatically benefit.
