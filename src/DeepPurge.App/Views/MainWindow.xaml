@@ -706,6 +706,8 @@
                                 <MenuItem Header="Check All" Tag="&#xE73A;" Click="Ctx_CheckAll_Click"/>
                                 <MenuItem Header="Uncheck All" Tag="&#xE739;" Click="Ctx_UncheckAll_Click"/>
                                 <MenuItem Header="Invert Selection" Tag="&#xE7C1;" Click="Ctx_InvertSelection_Click"/>
+                                <Separator Style="{StaticResource MenuSep}"/>
+                                <MenuItem Header="Copy All to Clipboard" Tag="&#xE8C8;" Command="{Binding CopyProgramsToClipboardCommand}"/>
                             </ContextMenu>
                         </DataGrid.ContextMenu>
                         <DataGrid.Columns>
@@ -788,6 +790,8 @@
                                 <Separator Style="{StaticResource MenuSep}"/>
                                 <MenuItem Header="Check All" Tag="&#xE73A;" Click="Ctx_CheckAll_Click"/>
                                 <MenuItem Header="Uncheck All" Tag="&#xE739;" Click="Ctx_UncheckAll_Click"/>
+                                <Separator Style="{StaticResource MenuSep}"/>
+                                <MenuItem Header="Copy All to Clipboard" Tag="&#xE8C8;" Command="{Binding CopyJunkToClipboardCommand}"/>
                             </ContextMenu>
                         </DataGrid.ContextMenu>
                         <DataGrid.Columns>
@@ -811,6 +815,8 @@
                                 <Separator Style="{StaticResource MenuSep}"/>
                                 <MenuItem Header="Check All" Tag="&#xE73A;" Click="Ctx_CheckAll_Click"/>
                                 <MenuItem Header="Uncheck All" Tag="&#xE739;" Click="Ctx_UncheckAll_Click"/>
+                                <Separator Style="{StaticResource MenuSep}"/>
+                                <MenuItem Header="Copy All to Clipboard" Tag="&#xE8C8;" Command="{Binding CopyEvidenceToClipboardCommand}"/>
                             </ContextMenu>
                         </DataGrid.ContextMenu>
                         <DataGrid.Columns>
@@ -885,6 +891,8 @@
                                 <Separator Style="{StaticResource MenuSep}"/>
                                 <MenuItem Header="Open File Location" Tag="&#xE838;" Click="Ctx_OpenAutorunPath_Click"/>
                                 <MenuItem Header="Copy Command" Tag="&#xE8C8;" Click="Ctx_CopyCommand_Click"/>
+                                <Separator Style="{StaticResource MenuSep}"/>
+                                <MenuItem Header="Copy All to Clipboard" Tag="&#xE8C8;" Command="{Binding CopyAutorunsToClipboardCommand}"/>
                             </ContextMenu>
                         </DataGrid.ContextMenu>
                         <DataGrid.Columns>
@@ -951,6 +959,8 @@
                                 <Separator Style="{StaticResource MenuSep}"/>
                                 <MenuItem Header="Check All" Tag="&#xE73A;" Click="Ctx_CheckAll_Click"/>
                                 <MenuItem Header="Uncheck All" Tag="&#xE739;" Click="Ctx_UncheckAll_Click"/>
+                                <Separator Style="{StaticResource MenuSep}"/>
+                                <MenuItem Header="Copy All to Clipboard" Tag="&#xE8C8;" Command="{Binding CopyServicesToClipboardCommand}"/>
                             </ContextMenu>
                         </DataGrid.ContextMenu>
                         <DataGrid.Columns>
@@ -1149,6 +1159,11 @@
                               ItemsSource="{Binding DriverPackages}"
                               AutomationProperties.Name="Driver Store packages"
                               AutomationProperties.HelpText="Third-party driver packages. Old versions can be removed to reclaim disk space.">
+                        <DataGrid.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Copy All to Clipboard" Tag="&#xE8C8;" Command="{Binding CopyDriversToClipboardCommand}"/>
+                            </ContextMenu>
+                        </DataGrid.ContextMenu>
                         <DataGrid.Columns>
                             <DataGridTextColumn Binding="{Binding PublishedName}" Header="OEM" Width="90"/>
                             <DataGridTextColumn Binding="{Binding OriginalName}" Header="INF" Width="220"/>
@@ -1167,6 +1182,11 @@
                               ItemsSource="{Binding StartupImpacts}"
                               AutomationProperties.Name="Startup impact analysis"
                               AutomationProperties.HelpText="Boot-time cost per autorun process. High-impact processes slow system startup.">
+                        <DataGrid.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Copy All to Clipboard" Tag="&#xE8C8;" Command="{Binding CopyStartupImpactToClipboardCommand}"/>
+                            </ContextMenu>
+                        </DataGrid.ContextMenu>
                         <DataGrid.Columns>
                             <DataGridTextColumn Binding="{Binding Impact}" Header="IMPACT" Width="90"/>
                             <DataGridTextColumn Binding="{Binding ProcessName}" Header="PROCESS" Width="280"/>
@@ -1197,6 +1217,11 @@
                               ItemsSource="{Binding DuplicateGroups}"
                               AutomationProperties.Name="Duplicate file groups"
                               AutomationProperties.HelpText="Files with identical content grouped by hash. Delete copies to reclaim wasted space.">
+                        <DataGrid.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Copy All to Clipboard" Tag="&#xE8C8;" Command="{Binding CopyDuplicatesToClipboardCommand}"/>
+                            </ContextMenu>
+                        </DataGrid.ContextMenu>
                         <DataGrid.Columns>
                             <DataGridTextColumn Binding="{Binding FileSize, Converter={StaticResource BytesToSizeConverter}}" Header="SIZE" Width="90"/>
                             <DataGridTextColumn Binding="{Binding Paths, Converter={StaticResource CountConverter}}" Header="COPIES" Width="70"/>
