@@ -8,11 +8,11 @@ public static class ProgramExporter
     public static string ExportToCsv(IEnumerable<InstalledProgram> programs, string filePath)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("\"Name\",\"Version\",\"Publisher\",\"Install Date\",\"Size (KB)\",\"Install Location\",\"Uninstall String\",\"Source\"");
+        sb.AppendLine("\"Name\",\"Version\",\"Publisher\",\"Install Date\",\"Size (KB)\",\"Install Location\",\"Uninstall String\",\"Source\",\"Flags\"");
 
         foreach (var p in programs)
         {
-            sb.AppendLine($"\"{Esc(p.DisplayName)}\",\"{Esc(p.DisplayVersion)}\",\"{Esc(p.Publisher)}\",\"{p.InstallDateDisplay}\",\"{p.EstimatedSizeKB}\",\"{Esc(p.InstallLocation)}\",\"{Esc(p.UninstallString)}\",\"{p.SourceDisplay}\"");
+            sb.AppendLine($"\"{Esc(p.DisplayName)}\",\"{Esc(p.DisplayVersion)}\",\"{Esc(p.Publisher)}\",\"{p.InstallDateDisplay}\",\"{p.EstimatedSizeKB}\",\"{Esc(p.InstallLocation)}\",\"{Esc(p.UninstallString)}\",\"{p.SourceDisplay}\",\"{Esc(p.FlagsDisplay)}\"");
         }
 
         File.WriteAllText(filePath, sb.ToString(), Encoding.UTF8);
@@ -37,11 +37,11 @@ public static class ProgramExporter
         sb.AppendLine("</style></head><body>");
         sb.AppendLine("<h1>Installed Programs</h1>");
         sb.AppendLine($"<p class='meta'>Exported by DeepPurge on {DateTime.Now:yyyy-MM-dd HH:mm} | {programs.Count()} programs</p>");
-        sb.AppendLine("<table><thead><tr><th>Program</th><th>Version</th><th>Publisher</th><th>Installed</th><th class='size'>Size</th><th>Source</th></tr></thead><tbody>");
+        sb.AppendLine("<table><thead><tr><th>Program</th><th>Version</th><th>Publisher</th><th>Installed</th><th class='size'>Size</th><th>Source</th><th>Flags</th></tr></thead><tbody>");
 
         foreach (var p in programs.OrderBy(p => p.DisplayName))
         {
-            sb.AppendLine($"<tr><td>{H(p.DisplayName)}</td><td>{H(p.DisplayVersion)}</td><td>{H(p.Publisher)}</td><td>{p.InstallDateDisplay}</td><td class='size'>{p.EstimatedSizeDisplay}</td><td>{p.SourceDisplay}</td></tr>");
+            sb.AppendLine($"<tr><td>{H(p.DisplayName)}</td><td>{H(p.DisplayVersion)}</td><td>{H(p.Publisher)}</td><td>{p.InstallDateDisplay}</td><td class='size'>{p.EstimatedSizeDisplay}</td><td>{p.SourceDisplay}</td><td>{H(p.FlagsDisplay)}</td></tr>");
         }
 
         sb.AppendLine("</tbody></table></body></html>");
@@ -59,6 +59,10 @@ public static class ProgramExporter
             Size = p.EstimatedSizeDisplay,
             p.InstallLocation, p.UninstallString,
             Source = p.SourceDisplay,
+            Flags = p.FlagsDisplay,
+            p.IsSuspectedBundleware,
+            p.OemBloatScore,
+            p.OemBloatReason,
         });
 
         var json = System.Text.Json.JsonSerializer.Serialize(data,

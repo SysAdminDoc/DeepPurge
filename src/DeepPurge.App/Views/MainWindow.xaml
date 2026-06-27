@@ -720,6 +720,7 @@
                             <DataGridTextColumn Binding="{Binding EstimatedSizeDisplay}" Header="SIZE" Width="90"/>
                             <DataGridTextColumn Binding="{Binding InstallDateDisplay}" Header="INSTALLED" Width="105"/>
                             <DataGridTextColumn Binding="{Binding SourceDisplay}" Header="SOURCE" Width="80"/>
+                            <DataGridTextColumn Binding="{Binding FlagsDisplay}" Header="FLAGS" Width="110"/>
                             <DataGridTextColumn Binding="{Binding SignatureDisplay}" Header="SIGNATURE" Width="130"/>
                         </DataGrid.Columns>
                     </DataGrid>

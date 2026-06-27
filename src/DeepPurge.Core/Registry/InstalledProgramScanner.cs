@@ -68,6 +68,7 @@ public static class InstalledProgramScanner
         catch (Exception ex) { Log.Warn($"Failed to enumerate HKU user SIDs: {ex.Message}"); }
 
         FlagSuspectedBundleware(programs);
+        ScoreOemBloat(programs);
         return programs.OrderBy(p => p.DisplayName, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
@@ -79,6 +80,29 @@ public static class InstalledProgramScanner
         "AMD", "Advanced Micro Devices", "Advanced Micro Devices, Inc.",
         "Realtek", "Realtek Semiconductor",
         "Qualcomm", "Broadcom", "Texas Instruments",
+    };
+
+    private static readonly string[] OemPublishers =
+    {
+        "Acer", "Alienware", "ASUS", "ASUSTeK", "Dell", "Dell Inc.",
+        "Dynabook", "Fujitsu", "Gigabyte", "HP", "HP Inc.", "Hewlett-Packard",
+        "Huawei", "Lenovo", "LG", "MSI", "Micro-Star", "Samsung", "Toshiba",
+    };
+
+    private static readonly string[] OemBloatTerms =
+    {
+        "app explorer", "assistant", "care center", "companion", "customer connect",
+        "digital delivery", "documentation", "jumpstart", "marketplace", "myasus",
+        "optimizer", "promo", "registration", "supportassist", "support assistant",
+        "support center", "trial", "vantage", "welcome",
+    };
+
+    private static readonly string[] OemEssentialTerms =
+    {
+        "audio", "bios", "bluetooth", "chipset", "control center", "driver",
+        "firmware", "graphics", "hotkey", "lan", "management engine", "power",
+        "runtime", "sdk", "service", "system interface", "thermal", "touchpad",
+        "wi-fi", "wireless",
     };
 
     private static void FlagSuspectedBundleware(List<InstalledProgram> programs)
@@ -105,6 +129,59 @@ public static class InstalledProgramScanner
                     lone.IsSuspectedBundleware = true;
             }
         }
+    }
+
+    private static void ScoreOemBloat(List<InstalledProgram> programs)
+    {
+        foreach (var program in programs)
+        {
+            if (program.IsSystemComponent)
+            {
+                program.OemBloatScore = 0;
+                program.OemBloatReason = "";
+                continue;
+            }
+
+            var name = program.DisplayName ?? "";
+            var publisher = program.Publisher ?? "";
+            var reasons = new List<string>();
+            var score = 0;
+
+            if (ContainsAny(publisher, OemPublishers) || ContainsAny(name, OemPublishers))
+            {
+                score += 35;
+                reasons.Add("OEM publisher/name");
+            }
+
+            if (ContainsAny(name, OemBloatTerms))
+            {
+                score += 45;
+                reasons.Add("support/trial utility");
+            }
+
+            if (program.IsSuspectedBundleware)
+            {
+                score += 15;
+                reasons.Add("same-day bundle signal");
+            }
+
+            if (ContainsAny(name, OemEssentialTerms))
+            {
+                score -= 45;
+                reasons.Add("driver/system utility signal");
+            }
+
+            program.OemBloatScore = Math.Clamp(score, 0, 100);
+            program.OemBloatReason = program.OemBloatScore >= 60
+                ? string.Join("; ", reasons)
+                : "";
+        }
+    }
+
+    private static bool ContainsAny(string value, IEnumerable<string> needles)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return false;
+        return needles.Any(n => value.Contains(n, StringComparison.OrdinalIgnoreCase));
     }
 
     private static void ScanRegistryKey(RegistryKey baseKey, string basePath, RegistrySource source,

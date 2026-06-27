@@ -11,6 +11,7 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 - **Bulk Uninstall** - Multi-select + one-click sequential uninstall with silent flags auto-applied *(inspired by BCUninstaller)*
 - **winget integration** - Programs tracked by winget are tagged with their package ID; upgrade-available badge + right-click → "Upgrade via winget" *(inspired by BCU source-adapter pattern)*
 - **Scoop integration** - Scoop apps that skip the Windows installer DB are auto-discovered and merged into the list
+- **Chocolatey integration** - `choco list --local-only --limit-output` entries are merged into the installed programs list and CLI output
 - **Silent-switch database** - Curated per-installer-family silent flags (`/S`, `/qn`, `/VERYSILENT`, `/quiet`, Squirrel `--uninstall --silent`) with vendor fingerprint overrides *(inspired by PatchMyPC)*
 - **Forced Uninstall** - Scan for remnants of already-removed or partially uninstalled programs
 - **Windows Apps** - Remove UWP/MSIX apps including system bloatware
@@ -21,7 +22,8 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 - **Junk Cleaner** - Browser caches, temp files, crash dumps, prefetch, installer cache, Windows Update leftovers
 - **Evidence Remover** - Recent documents, jump lists, thumbnail cache, clipboard, DNS cache, Explorer history, Windows logs, crash reports, error reports, font cache, delivery optimization cache
 - **Empty Folders** - Scan common locations for empty directory trees and remove them
-- **Disk Analyzer** - Folder size breakdown and large file finder (50MB+) with delete capability. Uses WizTree's raw-MFT technique (`FSCTL_ENUM_USN_DATA` + `FSCTL_GET_NTFS_FILE_RECORD`) on NTFS volumes; parallel `FindFirstFileExW(FIND_FIRST_EX_LARGE_FETCH)` fallback on ReFS/FAT32. Typical full-drive scan in seconds.
+- **Disk Analyzer** - Folder size breakdown and large file finder (50MB+) with delete capability. Uses WizTree's raw-MFT technique (`FSCTL_ENUM_USN_DATA` + `FSCTL_GET_NTFS_FILE_RECORD`) on NTFS volumes; parallel `FindFirstFileExW(FIND_FIRST_EX_LARGE_FETCH)` fallback on ReFS/exFAT/FAT32. Typical full-drive scan in seconds.
+- **MSI/MSP orphan cleanup** - Scans `%WINDIR%\Installer` for old MSI/MSP files not referenced by active Windows Installer products
 - **Dry-run / Preview mode** - Every destructive pipeline can be previewed: enumerate and size items without touching them *(inspired by BleachBit)*
 - **Secure Delete** - Privacy-grade wipe (single-pass cryptographic random + opaque rename + delete — multi-pass DoD wipes are obsolete on SSDs and deliberately omitted) *(inspired by BleachBit/PrivaZer)*
 - **Live progress bars** - Every long-running delete reports item / total / bytes-freed / current path in the status bar
@@ -62,6 +64,7 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 - **Portable app detection** - Scans Desktop, Downloads, PortableApps folders, and removable drives for standalone executables not tracked by any installer. Shows with a "Portable" source badge. *(only Uninstalr previously offered this)*
 - **Game platform detection** - Discovers Steam games (via `libraryfolders.vdf` + `appmanifest_*.acf`), Epic Games (via `.item` manifests), and GOG Galaxy titles (via registry). Games appear in the unified programs list with platform badges.
 - **Bundleware / sideload detection** - Flags programs installed on the same day from a non-trusted publisher that appear as the sole representative of their publisher — likely bundled silently with other software.
+- **OEM bloat scoring** - Flags likely OEM support/trial utilities while suppressing driver and firmware components
 - **BAM remnant discovery** - Reads Windows Background Activity Moderator data to find previously-executed binaries that are no longer installed. Available via `deeppurgecli orphans --remnants`.
 
 ### System Slimming
@@ -109,7 +112,7 @@ Output:
 - `build\DeepPurge.exe` - GUI, ~66 MB, `requireAdministrator` manifest
 - `build\DeepPurgeCli.exe` - CLI, ~66 MB, `asInvoker` manifest (scriptable, elevate externally if needed)
 
-Both are self-contained single-file portable executables. ARM64 builds are also available via CI (`win-arm64` matrix target).
+Both are self-contained single-file portable executables. ARM64 builds can be produced locally with `Build.ps1 -Runtime win-arm64`.
 
 ## CLI quickstart
 
@@ -142,7 +145,7 @@ Covers UpdateChecker version-compare, Winapp2Parser detect/bucket routing, Start
 
 - **winget** — `packaging/winget/SysAdminDoc.DeepPurge.yaml` (submit via `wingetcreate`)
 - **Scoop**  — `packaging/scoop/deeppurge.json` (drop into a personal bucket)
-- **GitHub Releases** — `.github/workflows/release.yml` builds, tests, SHA256s, and attaches both exes on tag push
+- **GitHub Releases** — build locally with `BUILD.bat` / `Build.ps1`, generate SHA256s, and attach the artifacts with `gh release create` / `gh release upload`
 - **Authenticode signing** — `./Build.ps1 -Sign -CertPath signing.pfx -CertPassword (Read-Host -AsSecureString)`
 
 
@@ -152,6 +155,7 @@ Covers UpdateChecker version-compare, Winapp2Parser detect/bucket routing, Start
 - .NET 10 SDK (build only)
 - Optional: winget (auto-detected; enrichment silently no-ops when unavailable)
 - Optional: Scoop in `%USERPROFILE%\scoop\apps` (filesystem-scanned; no shelling required)
+- Optional: Chocolatey (`choco.exe` on PATH; enrichment silently no-ops when unavailable)
 
 ## License
 MIT License

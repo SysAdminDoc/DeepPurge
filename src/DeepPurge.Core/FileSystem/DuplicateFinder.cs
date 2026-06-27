@@ -170,6 +170,10 @@ public class DuplicateFinder
         int seen = 0;
         foreach (var root in roots.Where(r => !string.IsNullOrEmpty(r) && Directory.Exists(r)))
         {
+            var fs = VolumeFileSystem.GetForPath(root);
+            if (fs.UsesFallbackEnumeration)
+                progress?.Report($"Stage 1: scanning {root} (fallback mode: {FallbackName(fs)})...");
+
             foreach (var file in SafeEnumerate(root, ct))
             {
                 ct.ThrowIfCancellationRequested();
@@ -188,6 +192,9 @@ public class DuplicateFinder
         return map.Where(kv => kv.Value.Count >= 2)
                   .ToDictionary(kv => kv.Key, kv => kv.Value);
     }
+
+    private static string FallbackName(VolumeFileSystemInfo fs)
+        => fs.IsKnown ? fs.FileSystemName : "unknown filesystem";
 
     /// <summary>
     /// Iterative walker that skips reparse points (junctions / symlinks) to

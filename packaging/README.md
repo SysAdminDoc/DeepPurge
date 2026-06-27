@@ -4,9 +4,11 @@ Package-manager manifests and publish checklists for DeepPurge releases.
 
 ## Release workflow
 
-1. Tag the release: `git tag v0.9.0 && git push --tags`
-2. GitHub Actions (`.github/workflows/release.yml`) publishes `DeepPurge.exe`, `DeepPurgeCli.exe`, and `SHA256SUMS.txt` as release assets.
-3. Copy the SHA256 from `SHA256SUMS.txt` into the manifests below.
+1. Run `BUILD.bat` or `Build.ps1` locally and verify both published executables.
+2. Generate `SHA256SUMS.txt` locally for `DeepPurge.exe` and `DeepPurgeCli.exe`.
+3. Tag the release: `git tag v0.9.0 && git push --tags`.
+4. Create or update the GitHub Release with `gh release create` / `gh release upload` and attach both executables plus `SHA256SUMS.txt`.
+5. Copy the SHA256 values into the manifests below.
 
 ## winget
 
@@ -31,9 +33,9 @@ Before committing to the bucket, replace `<<REPLACE_WITH_RELEASE_ARTIFACT_SHA256
 
 The `pre_install` hook drops a `DeepPurge.portable` marker so the app redirects all state to `$dir/Data/` — matches Scoop's user-scope philosophy.
 
-## Chocolatey (optional)
+## Chocolatey
 
-Not shipped in v0.9.0. If you want it: `choco new deeppurge` and template off the portable installer type.
+Runtime Chocolatey discovery is built into DeepPurge through `choco list --local-only --limit-output`. A Chocolatey package manifest is still optional distribution work; template it with `choco new deeppurge` if a release needs Chocolatey installation support.
 
 ## Code signing
 
