@@ -7,11 +7,12 @@ namespace DeepPurge.Core.Packages;
 
 public sealed record WingetEntry(string Id, string Name, string Version, string? Available, string Source);
 public sealed record ScoopEntry(string Name, string Version, string Bucket);
+public sealed record ChocolateyEntry(string Name, string Version);
 
 /// <summary>
 /// Secondary source adapter — borrowed conceptually from BCUninstaller.
 /// Enriches the existing <see cref="InstalledProgram"/> list with metadata
-/// from modern Windows package managers (winget, scoop) so the user can see
+/// from modern Windows package managers (winget, scoop, Chocolatey) so the user can see
 /// "installed via winget, upgrade available: 1.2.3".
 ///
 /// Never adds synthetic entries for duplicates that already live in the
@@ -27,6 +28,7 @@ public static class PackageManagerScanner
     {
         var wingetTask = Task.Run(() => QueryWinget(ct), ct);
         var scoopTask  = Task.Run(() => QueryScoop(ct), ct);
+        var chocoTask  = Task.Run(() => QueryChocolatey(ct), ct);
         var portableTask = Task.Run(() =>
         {
             var known = new HashSet<string>(
@@ -38,6 +40,7 @@ public static class PackageManagerScanner
 
         var winget = await wingetTask.ConfigureAwait(false);
         var scoop  = await scoopTask.ConfigureAwait(false);
+        var choco  = await chocoTask.ConfigureAwait(false);
         var portables = await portableTask.ConfigureAwait(false);
         var games = await gamesTask.ConfigureAwait(false);
 
@@ -69,6 +72,33 @@ public static class PackageManagerScanner
                 Publisher = $"scoop / {s.Bucket}",
                 PackageManager = "scoop",
                 PackageId = s.Name,
+                Source = RegistrySource.HKCU_Uninstall,
+            };
+            programs.Add(synthetic);
+            lookup[norm] = synthetic;
+        }
+
+        foreach (var c in choco)
+        {
+            var norm = Normalize(c.Name);
+            if (norm.Length == 0) continue;
+
+            if (lookup.TryGetValue(norm, out var prog))
+            {
+                prog.PackageManager = "chocolatey";
+                prog.PackageId = c.Name;
+                if (string.IsNullOrEmpty(prog.DisplayVersion))
+                    prog.DisplayVersion = c.Version;
+                continue;
+            }
+
+            var synthetic = new InstalledProgram
+            {
+                DisplayName = c.Name,
+                DisplayVersion = c.Version,
+                Publisher = "Chocolatey",
+                PackageManager = "chocolatey",
+                PackageId = c.Name,
                 Source = RegistrySource.HKCU_Uninstall,
             };
             programs.Add(synthetic);
@@ -259,6 +289,40 @@ public static class PackageManagerScanner
         catch (Exception ex) { Log.Warn($"Scoop directory enumeration failed: {ex.Message}"); }
 
         return result;
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  chocolatey
+    // ═══════════════════════════════════════════════════════
+
+    public static List<ChocolateyEntry> QueryChocolatey(CancellationToken ct = default)
+    {
+        try
+        {
+            var output = RunProcess("choco.exe",
+                "list --local-only --limit-output --no-color", ct);
+            if (!string.IsNullOrWhiteSpace(output))
+                return ParseChocolateyLimitOutput(output);
+        }
+        catch (Exception ex) { Log.Warn($"Chocolatey query failed: {ex.Message}"); }
+        return new();
+    }
+
+    internal static List<ChocolateyEntry> ParseChocolateyLimitOutput(string output)
+    {
+        var entries = new List<ChocolateyEntry>();
+        foreach (var raw in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var line = raw.TrimEnd('\r');
+            if (line.Length == 0 || line.StartsWith("Chocolatey v", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var parts = line.Split('|', 2, StringSplitOptions.TrimEntries);
+            if (parts.Length != 2) continue;
+            if (string.IsNullOrWhiteSpace(parts[0])) continue;
+            entries.Add(new ChocolateyEntry(parts[0], parts[1]));
+        }
+        return entries;
     }
 
     // ═══════════════════════════════════════════════════════

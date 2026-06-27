@@ -55,8 +55,23 @@ public class InstalledProgram : INotifyPropertyChanged
     }
 
     public bool IsSuspectedBundleware { get; set; }
+    public int OemBloatScore { get; set; }
+    public string OemBloatReason { get; set; } = string.Empty;
     public string Note { get; set; } = string.Empty;
     public string SignatureDisplay { get; set; } = string.Empty;
+
+    public bool IsOemBloatCandidate => OemBloatScore >= 60;
+
+    public string FlagsDisplay
+    {
+        get
+        {
+            var flags = new List<string>();
+            if (IsSuspectedBundleware) flags.Add("Bundleware");
+            if (IsOemBloatCandidate) flags.Add($"OEM {OemBloatScore}");
+            return string.Join(", ", flags);
+        }
+    }
 
     public string EstimatedSizeDisplay
     {

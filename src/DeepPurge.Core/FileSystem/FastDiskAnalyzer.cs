@@ -33,16 +33,34 @@ public static class FastDiskAnalyzer
 
     // ───── public API ────────────────────────────────────────────
 
+    public static bool UsesFallbackEnumeration(string drivePath)
+        => VolumeFileSystem.UsesFallbackEnumeration(drivePath);
+
     public static List<DiskFolderInfo> AnalyzeDrive(
         string drivePath,
         CancellationToken ct = default)
+        => AnalyzeDrive(drivePath, out _, ct);
+
+    public static List<DiskFolderInfo> AnalyzeDrive(
+        string drivePath,
+        out bool usedFallback,
+        CancellationToken ct = default)
     {
+        usedFallback = false;
+
+        if (!VolumeFileSystem.IsNtfs(drivePath))
+        {
+            usedFallback = true;
+            return AnalyzeFolderFast(drivePath, ct);
+        }
+
         // Happy path: NTFS + admin → one MFT sweep gives every file on the volume.
         if (TryMftScan(drivePath, out var mftFolders, ct))
             return AggregateTopLevel(drivePath, mftFolders);
 
         // Fallback: fast directory walk (still uses the WizTree-style
         // FIND_FIRST_EX_LARGE_FETCH hint).
+        usedFallback = true;
         return AnalyzeFolderFast(drivePath, ct);
     }
 
@@ -51,7 +69,23 @@ public static class FastDiskAnalyzer
         long minSizeBytes = MinLargeFileBytes,
         int maxResults = 200,
         CancellationToken ct = default)
+        => FindLargeFiles(drivePath, out _, minSizeBytes, maxResults, ct);
+
+    public static List<LargeFileInfo> FindLargeFiles(
+        string drivePath,
+        out bool usedFallback,
+        long minSizeBytes = MinLargeFileBytes,
+        int maxResults = 200,
+        CancellationToken ct = default)
     {
+        usedFallback = false;
+
+        if (!VolumeFileSystem.IsNtfs(drivePath))
+        {
+            usedFallback = true;
+            return FindLargeFilesFallback(drivePath, minSizeBytes, maxResults, ct);
+        }
+
         // MFT scan yields every file with a size already, so the "large files"
         // view is free — no second traversal needed.
         if (TryMftFileList(drivePath, minSizeBytes, out var hits, ct))
@@ -62,6 +96,7 @@ public static class FastDiskAnalyzer
                 .ToList();
         }
 
+        usedFallback = true;
         return FindLargeFilesFallback(drivePath, minSizeBytes, maxResults, ct);
     }
 
@@ -583,14 +618,7 @@ public static class FastDiskAnalyzer
     // ───── volume helpers ───────────────────────────────────────
 
     private static bool IsNtfs(string volumeRoot)
-    {
-        try
-        {
-            var drive = new DriveInfo(volumeRoot);
-            return drive.IsReady && drive.DriveFormat.Equals("NTFS", StringComparison.OrdinalIgnoreCase);
-        }
-        catch { return false; }
-    }
+        => VolumeFileSystem.IsNtfs(volumeRoot);
 
     private static SafeFileHandle OpenVolume(string volumeRoot)
     {

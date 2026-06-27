@@ -39,6 +39,7 @@ public static class JunkFilesCleaner
     private static readonly TimeSpan RecentThreshold = TimeSpan.FromHours(1);
     private static readonly TimeSpan LogAge = TimeSpan.FromDays(7);
     private static readonly TimeSpan PrefetchAge = TimeSpan.FromDays(30);
+    private static readonly TimeSpan InstallerPackageAge = TimeSpan.FromDays(14);
     private static readonly string WinDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
     private static readonly string ProgramData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
     private static readonly string SystemDrive = Path.GetPathRoot(WinDir)?.TrimEnd('\\') ?? @"C:";
@@ -60,6 +61,7 @@ public static class JunkFilesCleaner
             ScanInstallerCache(),
             // Package Cache (orphaned installer caches)
             ScanPackageCache(),
+            ScanWindowsInstallerOrphans(),
             // App-specific caches
             ScanAppCaches(),
             // Runtime caches
@@ -501,6 +503,110 @@ public static class JunkFilesCleaner
         }
         catch (Exception ex) { Log.Warn($"Package cache directory scan failed: {ex.Message}"); }
         return cat;
+    }
+
+    private static JunkCategory ScanWindowsInstallerOrphans()
+    {
+        var cat = new JunkCategory
+        {
+            Name = "Orphaned Windows Installer Packages",
+            Description = "MSI/MSP payloads in %WINDIR%\\Installer not referenced by active products",
+            IsSelected = false,
+        };
+
+        var installerDir = Path.Combine(WinDir, "Installer");
+        if (!Directory.Exists(installerDir)) return cat;
+
+        var referenced = GetReferencedWindowsInstallerPackages();
+        var cutoff = DateTime.Now - InstallerPackageAge;
+
+        try
+        {
+            foreach (var pattern in new[] { "*.msi", "*.msp" })
+            {
+                foreach (var file in Directory.EnumerateFiles(installerDir, pattern, SearchOption.TopDirectoryOnly))
+                {
+                    try
+                    {
+                        var full = Path.GetFullPath(file);
+                        if (referenced.Contains(full)) continue;
+
+                        var fi = new FileInfo(full);
+                        if (fi.LastWriteTime > cutoff) continue;
+                        cat.Files.Add(new JunkFile { Path = full, Size = fi.Length });
+                    }
+                    catch (Exception ex) { Log.Warn($"Windows Installer package scan failed for '{file}': {ex.Message}"); }
+                }
+            }
+        }
+        catch (Exception ex) { Log.Warn($"Windows Installer orphan scan failed: {ex.Message}"); }
+
+        return cat;
+    }
+
+    private static HashSet<string> GetReferencedWindowsInstallerPackages()
+    {
+        var packages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            using var key = global::Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
+                @"SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData");
+            CollectLocalPackageValues(key, packages, depth: 0);
+        }
+        catch (Exception ex) { Log.Warn($"Windows Installer HKLM reference scan failed: {ex.Message}"); }
+
+        try
+        {
+            using var key = global::Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                @"SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData");
+            CollectLocalPackageValues(key, packages, depth: 0);
+        }
+        catch (Exception ex) { Log.Warn($"Windows Installer HKCU reference scan failed: {ex.Message}"); }
+
+        return packages;
+    }
+
+    private static void CollectLocalPackageValues(
+        global::Microsoft.Win32.RegistryKey? key,
+        HashSet<string> packages,
+        int depth)
+    {
+        if (key == null || depth > 10) return;
+
+        try
+        {
+            if (key.GetValue("LocalPackage") is string localPackage &&
+                IsWindowsInstallerPackage(localPackage))
+            {
+                packages.Add(Path.GetFullPath(localPackage));
+            }
+        }
+        catch (Exception ex) { Log.Warn($"Windows Installer LocalPackage read failed: {ex.Message}"); }
+
+        string[] subKeys;
+        try { subKeys = key.GetSubKeyNames(); }
+        catch (Exception ex)
+        {
+            Log.Warn($"Windows Installer subkey enumeration failed: {ex.Message}");
+            return;
+        }
+
+        foreach (var subKeyName in subKeys)
+        {
+            try
+            {
+                using var subKey = key.OpenSubKey(subKeyName);
+                CollectLocalPackageValues(subKey, packages, depth + 1);
+            }
+            catch (Exception ex) { Log.Warn($"Windows Installer subkey scan failed for '{subKeyName}': {ex.Message}"); }
+        }
+    }
+
+    private static bool IsWindowsInstallerPackage(string path)
+    {
+        var ext = Path.GetExtension(path);
+        return ext.Equals(".msi", StringComparison.OrdinalIgnoreCase) ||
+               ext.Equals(".msp", StringComparison.OrdinalIgnoreCase);
     }
 
     // ─── APP CACHES ───

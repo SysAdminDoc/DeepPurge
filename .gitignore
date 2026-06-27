@@ -30,7 +30,9 @@ coverage/
 
 # ─── AI / agent working files (per global CLAUDE.md) ─────
 CLAUDE.md
+AGENTS.md
 CODEX_CHANGELOG.md
+.claude/
 
 # ─── Signing (keep certs out of the repo, always) ────────
 *.pfx

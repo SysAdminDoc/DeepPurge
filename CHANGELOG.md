@@ -4,6 +4,16 @@ All notable changes to DeepPurge will be documented in this file.
 
 ## [Unreleased]
 
+### Added (roadmap continuation)
+- **Chocolatey package discovery** — `PackageManagerScanner` now queries `choco list --local-only --limit-output`, merges matching entries into the installed programs list, and injects Chocolatey-only entries when they are absent from the registry inventory. CLI `list --json` and TSV output include the resulting source/package metadata.
+- **OEM bloat scoring** — installed programs now receive an `OemBloatScore` and reason string based on OEM publisher/name signals, support/trial utility terms, and driver/firmware suppression terms. GUI, CLI, CSV, HTML, and JSON exports expose the combined `Flags` value.
+- **Orphaned Windows Installer package scan** — Junk Cleaner now scans `%WINDIR%\Installer` for old MSI/MSP files not referenced by active Windows Installer `LocalPackage` registry values. The category is deselected by default and routed through the existing SafetyGuard deletion pipeline.
+- **Non-NTFS fallback detection** — `VolumeFileSystem` centralizes `GetVolumeInformationW` checks. `FastDiskAnalyzer` and `DuplicateFinder` report fallback enumeration on ReFS/exFAT/FAT32 or unknown filesystems instead of presenting the NTFS fast path as active.
+- **Fluent-style WPF control polish** — shared theme styles now cover Label, GroupBox, GridSplitter, Hyperlink, RichTextBox, DatePicker, and GridView column headers using the active DeepPurge brush resources.
+
+### Tests (roadmap continuation)
+- **Package/discovery coverage** — added tests for Chocolatey `--limit-output` parsing, OEM bloat suppression for driver utilities, volume filesystem detection, and MSI/MSP package helper behavior. Test count: 220 → 226.
+
 ### Added (P1 trust and safety)
 - **Cookie preservation whitelist** — `AppSettings.CookieWhitelist` lets users specify domains (e.g., `github.com`, `google.com`) to preserve during Evidence cleaning. When the whitelist is non-empty, browser cookie database files (Chrome, Edge, Brave, Firefox, Vivaldi, Opera) are skipped. New "Browser Cookies" scan category in EvidenceRemover auto-deselects when a whitelist is active. CLI: `deeppurgecli clean evidence --keep-cookies github.com,google.com`. Settings export/import includes the whitelist.
 - **Automated deletion rollback from manifest** — `DeletionManifest` now supports `ListManifests()`, `LoadManifest(date)`, and `RestoreFromManifest(date, dryRun)`. Registry deletions are restored via `reg import` from BackupManager's `.reg` exports. Files are flagged for Recycle Bin recovery. Secure-deleted items are reported as unrecoverable. CLI: `deeppurgecli restore [--date YYYY-MM-DD] [--list] [--dry-run]`.

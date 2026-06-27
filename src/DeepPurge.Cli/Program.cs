@@ -138,6 +138,10 @@ public static class Program
                 Source = p.SourceDisplay, p.PackageId, p.LastUsedDisplay,
                 p.InstallDate, p.EstimatedSizeKB, p.InstallLocation,
                 p.SignatureDisplay,
+                Flags = p.FlagsDisplay,
+                p.IsSuspectedBundleware,
+                p.OemBloatScore,
+                p.OemBloatReason,
                 Note = notes.TryGetValue(p.DisplayName ?? "", out var n) ? n : null,
             }));
             return 0;
@@ -148,7 +152,8 @@ public static class Program
             var source = p.SourceDisplay;
             var pkgId = !string.IsNullOrEmpty(p.PackageId) ? $"\t{p.PackageId}" : "";
             var lastUsed = !string.IsNullOrEmpty(p.LastUsedDisplay) ? $"\t{p.LastUsedDisplay}" : "";
-            Console.WriteLine($"{p.DisplayName}\t{p.DisplayVersion}\t{p.Publisher}\t{source}{pkgId}{lastUsed}");
+            var flags = !string.IsNullOrEmpty(p.FlagsDisplay) ? $"\t{p.FlagsDisplay}" : "";
+            Console.WriteLine($"{p.DisplayName}\t{p.DisplayVersion}\t{p.Publisher}\t{source}{pkgId}{lastUsed}{flags}");
         }
         Console.WriteLine($"# {sorted.Count} programs");
         return 0;

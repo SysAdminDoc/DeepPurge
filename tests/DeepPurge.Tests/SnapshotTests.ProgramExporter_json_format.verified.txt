@@ -1,4 +1,4 @@
-﻿[
+[
   {
     "DisplayName": "Test App",
     "DisplayVersion": "1.0",
@@ -8,6 +8,10 @@
     "Size": "",
     "InstallLocation": "",
     "UninstallString": "",
-    "Source": "System"
+    "Source": "System",
+    "Flags": "",
+    "IsSuspectedBundleware": false,
+    "OemBloatScore": 0,
+    "OemBloatReason": ""
   }
 ]

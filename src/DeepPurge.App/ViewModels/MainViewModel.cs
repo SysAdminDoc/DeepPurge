@@ -451,7 +451,11 @@ public partial class MainViewModel : ObservableObject
     public async Task ScanDiskAsync()
     {
         IsBusy = true;
-        StatusText = "Analyzing disk space (WizTree-style MFT scan)...";
+        var sysDrive = Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows)) ?? @"C:\";
+        var expectedFallback = FastDiskAnalyzer.UsesFallbackEnumeration(sysDrive);
+        StatusText = expectedFallback
+            ? "Analyzing disk space (fallback mode)..."
+            : "Analyzing disk space (WizTree-style MFT scan)...";
 
         var sw = Stopwatch.StartNew();
         try
@@ -460,9 +464,19 @@ public partial class MainViewModel : ObservableObject
             // read per volume) and falls back to FindFirstFileExW with the
             // large-fetch flag — both substantially faster than the old
             // Directory.EnumerateFiles path.
-            var sysDrive = Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows)) ?? @"C:\";
-            var folders = await Task.Run(() => FastDiskAnalyzer.AnalyzeDrive(sysDrive));
-            var large = await Task.Run(() => FastDiskAnalyzer.FindLargeFiles(sysDrive, 50 * 1024 * 1024, 200));
+            var folderResult = await Task.Run(() =>
+            {
+                var items = FastDiskAnalyzer.AnalyzeDrive(sysDrive, out var usedFallback);
+                return (Items: items, UsedFallback: usedFallback);
+            });
+            var largeResult = await Task.Run(() =>
+            {
+                var items = FastDiskAnalyzer.FindLargeFiles(sysDrive, out var usedFallback, 50 * 1024 * 1024, 200);
+                return (Items: items, UsedFallback: usedFallback);
+            });
+            var folders = folderResult.Items;
+            var large = largeResult.Items;
+            var fallbackMode = folderResult.UsedFallback || largeResult.UsedFallback;
 
             DiskFolders.Clear();
             foreach (var f in folders) DiskFolders.Add(f);
@@ -472,7 +486,8 @@ public partial class MainViewModel : ObservableObject
 
             sw.Stop();
             StatusText = $"Found {folders.Count} top-level folders, {large.Count} large files " +
-                         $"({FormatSize(large.Sum(f => f.SizeBytes))}) in {sw.Elapsed.TotalSeconds:F1}s";
+                         $"({FormatSize(large.Sum(f => f.SizeBytes))})" +
+                         $"{(fallbackMode ? " (fallback mode)" : "")} in {sw.Elapsed.TotalSeconds:F1}s";
         }
         finally { IsBusy = false; }
     }
@@ -795,9 +810,9 @@ public partial class MainViewModel : ObservableObject
     private void CopyProgramsToClipboard()
     {
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine("Name\tVersion\tPublisher\tSource\tSignature\tSize\tInstalled");
+        sb.AppendLine("Name\tVersion\tPublisher\tSource\tFlags\tSignature\tSize\tInstalled");
         foreach (var p in FilteredPrograms)
-            sb.AppendLine($"{p.DisplayName}\t{p.DisplayVersion}\t{p.Publisher}\t{p.SourceDisplay}\t{p.SignatureDisplay}\t{p.EstimatedSizeDisplay}\t{p.InstallDateDisplay}");
+            sb.AppendLine($"{p.DisplayName}\t{p.DisplayVersion}\t{p.Publisher}\t{p.SourceDisplay}\t{p.FlagsDisplay}\t{p.SignatureDisplay}\t{p.EstimatedSizeDisplay}\t{p.InstallDateDisplay}");
         SetClipboard(sb.ToString());
     }
 
