@@ -3,11 +3,9 @@
 Living plan. Items sit here until they ship or get dropped; dropping is a valid outcome.
 Blocked items live in `Roadmap_Blocked.md`.
 
-## Ideas / not committed
+## Active items
 
-Things worth considering but not on a timeline:
-
-- **Tray icon** - background scheduled cleaning with tray notifications
+No active implementation items.
 
 ## What we will NOT ship
 

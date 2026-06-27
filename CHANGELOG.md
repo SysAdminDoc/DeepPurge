@@ -5,6 +5,7 @@ All notable changes to DeepPurge will be documented in this file.
 ## [Unreleased]
 
 ### Added (roadmap continuation)
+- **Tray icon for scheduled cleaning** — GUI now installs a Windows tray icon with Open, schedule status refresh, background dry-run clean preview, and Exit actions. Minimize/close hides DeepPurge to the tray without interrupting scheduled-cleaning visibility; the tray shows balloon notifications for schedule status and preview results.
 - **Chocolatey package discovery** — `PackageManagerScanner` now queries `choco list --local-only --limit-output`, merges matching entries into the installed programs list, and injects Chocolatey-only entries when they are absent from the registry inventory. CLI `list --json` and TSV output include the resulting source/package metadata.
 - **OEM bloat scoring** — installed programs now receive an `OemBloatScore` and reason string based on OEM publisher/name signals, support/trial utility terms, and driver/firmware suppression terms. GUI, CLI, CSV, HTML, and JSON exports expose the combined `Flags` value.
 - **Orphaned Windows Installer package scan** — Junk Cleaner now scans `%WINDIR%\Installer` for old MSI/MSP files not referenced by active Windows Installer `LocalPackage` registry values. The category is deselected by default and routed through the existing SafetyGuard deletion pipeline.

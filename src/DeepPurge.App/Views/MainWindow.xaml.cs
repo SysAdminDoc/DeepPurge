@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
+using DeepPurge.App.Tray;
 using DeepPurge.App.ViewModels;
 using DeepPurge.Core.Browsers;
 using DeepPurge.Core.Export;
@@ -23,6 +24,8 @@ public partial class MainWindow : Window
     private readonly MainViewModel _vm;
     private DispatcherTimer? _toastTimer;
     private string _currentPanel = "Programs";
+    private TrayIconService? _trayIcon;
+    private bool _exitRequested;
 
     public MainWindow()
     {
@@ -41,7 +44,9 @@ public partial class MainWindow : Window
             cmbTheme.SelectedIndex = 0;
         }
 
+        SourceInitialized += (_, _) => _trayIcon = new TrayIconService(this, _vm, RestoreFromTray, ExitFromTray, ShowToast);
         Loaded += OnWindowLoaded;
+        StateChanged += OnWindowStateChanged;
     }
 
     // =============================================================
@@ -135,6 +140,31 @@ public partial class MainWindow : Window
             toastPanel.BeginAnimation(OpacityProperty, fadeOut);
         };
         _toastTimer.Start();
+    }
+
+    private void OnWindowStateChanged(object? sender, EventArgs e)
+    {
+        if (WindowState != WindowState.Minimized) return;
+        HideToTray();
+    }
+
+    private void HideToTray()
+    {
+        Hide();
+        _trayIcon?.ShowBackgroundHint();
+    }
+
+    private void RestoreFromTray()
+    {
+        Show();
+        WindowState = WindowState.Normal;
+        Activate();
+    }
+
+    private void ExitFromTray()
+    {
+        _exitRequested = true;
+        Close();
     }
 
     // =============================================================
@@ -982,7 +1012,15 @@ public partial class MainWindow : Window
 
     protected override void OnClosing(CancelEventArgs e)
     {
+        if (!_exitRequested)
+        {
+            e.Cancel = true;
+            HideToTray();
+            return;
+        }
+
         _vm.CancelOperation();
+        _trayIcon?.Dispose();
         base.OnClosing(e);
     }
 
