@@ -97,10 +97,3 @@ Explicit "no" list, so anyone proposing these doesn't waste effort:
   Touches: `src/DeepPurge.App/Views/MainWindow.xaml`, `src/DeepPurge.App/ViewModels/MainViewModel.Extensions.cs`, `src/DeepPurge.Core/Security/DigitalSignatureInspector.cs`, update tests if helper logic is added.
   Acceptance: About/Updates shows current executable path, version, signing status, SHA256, latest release URL, and concise verification guidance without needing network for local facts.
   Complexity: M
-
-- [ ] P1 — Retire hidden free-space wipe primitive
-  Why: Core still exposes an unused public free-space fill routine even though SSD free-space wiping does not match DeepPurge's safety posture and can create heavy write amplification.
-  Evidence: `src/DeepPurge.Core/Safety/SecureDelete.cs:104-158`; `CHANGELOG.md:164`; NIST SP 800-88 Rev. 2; BleachBit wipe-empty-space SSD warning.
-  Touches: `src/DeepPurge.Core/Safety/SecureDelete.cs`, `tests/DeepPurge.Tests`, `README.md`, `CHANGELOG.md`.
-  Acceptance: `WipeFreeSpaceAsync` is removed or made non-public/obsolete with no GUI/CLI call path; tests/docs confirm DeepPurge supports selected-file secure delete only, not volume free-space fill; no current user-facing text invites future exposure.
-  Complexity: S

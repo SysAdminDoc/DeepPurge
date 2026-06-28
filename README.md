@@ -25,7 +25,7 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 - **Disk Analyzer** - Folder size breakdown and large file finder (50MB+) with delete capability. Uses WizTree's raw-MFT technique (`FSCTL_ENUM_USN_DATA` + `FSCTL_GET_NTFS_FILE_RECORD`) on NTFS volumes; parallel `FindFirstFileExW(FIND_FIRST_EX_LARGE_FETCH)` fallback on ReFS/exFAT/FAT32. Typical full-drive scan in seconds.
 - **MSI/MSP orphan cleanup** - Scans `%WINDIR%\Installer` for old MSI/MSP files not referenced by active Windows Installer products
 - **Dry-run / Preview mode** - Every destructive pipeline can be previewed: enumerate and size items without touching them *(inspired by BleachBit)*
-- **Secure Delete** - Privacy-grade wipe (single-pass cryptographic random + opaque rename + delete — multi-pass DoD wipes are obsolete on SSDs and deliberately omitted) *(inspired by BleachBit/PrivaZer)*
+- **Secure Delete** - Privacy-grade selected-file wipe (single-pass cryptographic random + opaque rename + delete; no volume free-space fill) *(inspired by BleachBit/PrivaZer)*
 - **Live progress bars** - Every long-running delete reports item / total / bytes-freed / current path in the status bar
 
 ### System Management
