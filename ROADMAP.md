@@ -28,6 +28,41 @@ Explicit "no" list, so anyone proposing these doesn't waste effort:
   Acceptance: Winget upgrades launch without `cmd.exe`; package ids outside a strict safe pattern are refused with a toast/log entry; tests cover quotes, spaces, shell metacharacters, and normal ids.
   Complexity: S
 
+- [ ] P0 - Harden scheduled-cleaning wrapper arguments against batch metacharacter execution
+  Why: `ScheduleManager` writes user-controlled CLI arguments verbatim into a `.cmd` wrapper that is run as a highest-privilege scheduled task.
+  Evidence: `src/DeepPurge.Core/Schedule/ScheduleManager.cs:120-129`; `src/DeepPurge.Cli/Program.cs:491-515`; NVD CVE-2024-24576; Microsoft Task Scheduler `ExecAction.Arguments`.
+  Touches: `src/DeepPurge.Core/Schedule/ScheduleManager.cs`, `src/DeepPurge.Cli/Program.cs`, `tests/DeepPurge.Tests/ScheduleManagerTests.cs`.
+  Acceptance: Scheduled jobs no longer execute raw batch syntax from `--args`; metacharacters including `&`, `|`, `<`, `>`, `^`, `%`, `!`, quotes, CR/LF, and delayed-expansion payloads are rejected or tokenized safely; tests inspect the generated task/wrapper command.
+  Complexity: M
+
+- [ ] P0 - Centralize registry deletion through backup and symlink-safe helper
+  Why: Cleaner/context-menu registry deletes record manifests but do not consistently export backups first or check registry symlinks, so rollback and TOCTOU protection lag behind uninstall leftovers.
+  Evidence: `src/DeepPurge.Core/Cleaning/Winapp2Parser.cs:279-288`; `src/DeepPurge.Core/Cleaning/CleanerDefinition.cs:163-172`; `src/DeepPurge.Core/Shell/ContextMenuCleaner.cs:75-80`; `src/DeepPurge.Core/Uninstall/UninstallEngine.cs:211-214,486-501`.
+  Touches: `src/DeepPurge.Core/Safety` or a new `src/DeepPurge.Core/Registry` helper, cleaner/context-menu/uninstall delete call sites, `tests/DeepPurge.Tests`.
+  Acceptance: Every registry key/value delete path runs one shared helper that validates SafetyGuard, skips symlinks, exports a `.reg` backup before deletion, records the deletion manifest only after success, and has tests for HKCU/HKLM/HKCR and malformed paths.
+  Complexity: M
+
+- [ ] P1 - Add custom cleaner schema validation and risk labels
+  Why: Local `*.cleaner.json` files can delete files and registry keys, but the CLI/GUI cannot lint unknown fields, broad wildcards, HKLM/HKCR targets, `RemoveSelf`, or suspicious environment expansion before execution.
+  Evidence: `src/DeepPurge.Core/Cleaning/CleanerDefinition.cs:18-180`; BleachBit cleaner-definition ecosystem; winapp2 community cleaner corpus.
+  Touches: `src/DeepPurge.Core/Cleaning/CleanerDefinition.cs`, `src/DeepPurge.Cli/Program.cs`, winapp2/custom cleaner GUI surfaces, tests and JSON schema fixture files.
+  Acceptance: `deeppurgecli cleaners validate <file>` and the GUI report schema errors, unknown fields, expanded targets, registry scope, risk level, estimated item count/bytes, and blocked rules; invalid rules cannot run unless corrected.
+  Complexity: M
+
+- [ ] P2 - Add source-native uninstall for winget, Scoop, and Chocolatey rows
+  Why: DeepPurge surfaces package-manager identities and synthetic package rows, but uninstall still depends on registry uninstall strings instead of calling the owning package manager for package-only apps.
+  Evidence: `src/DeepPurge.Core/Packages/PackageManagerScanner.cs:41-95`; `src/DeepPurge.Cli/Program.cs:129-153`; UniGetUI package-manager model; Microsoft winget uninstall docs; Chocolatey uninstall docs.
+  Touches: `src/DeepPurge.Core/Packages`, `src/DeepPurge.Core/Uninstall/UninstallEngine.cs`, `src/DeepPurge.Cli/Program.cs`, GUI uninstall handlers, package-manager scanner tests.
+  Acceptance: winget/Scoop/Chocolatey managed rows uninstall through strict source-specific command builders with dry-run text, timeout/cancellation, exit-code logging, and injection tests; package-only synthetic rows can be removed without a registry uninstaller.
+  Complexity: M
+
+- [ ] P2 - Add GUI scheduled-cleaning creation with constrained presets
+  Why: The GUI lists scheduled jobs but tells users to create them from the CLI, even though commercial cleaners expose schedule creation and DeepPurge already has `CreateScheduledJob` plumbing.
+  Evidence: `src/DeepPurge.App/Views/MainWindow.xaml:1318`; `src/DeepPurge.App/ViewModels/MainViewModel.Extensions.cs:435-450`; Revo/HiBit/Ashampoo scheduled-cleaning UX.
+  Touches: `src/DeepPurge.App/Views/MainWindow.xaml`, `src/DeepPurge.App/Views/MainWindow.xaml.cs`, `src/DeepPurge.App/ViewModels/MainViewModel.Extensions.cs`, `src/DeepPurge.Core/Schedule/ScheduleManager.cs`.
+  Acceptance: GUI can create/delete daily, weekly, and monthly scheduled jobs from safe presets such as dry-run preview, junk clean, evidence clean, and junk+evidence clean; no arbitrary CLI string is accepted from the GUI; created jobs appear in the existing schedule list and tray status.
+  Complexity: M
+
 - [ ] P1 — Restore visible keyboard focus indicators in shared WPF styles
   Why: Shared styles remove focus visuals for GridSplitter and DataGridCell without an accessible replacement.
   Evidence: `src/DeepPurge.App/Themes/BaseStyles.xaml:237-247`, `src/DeepPurge.App/Themes/BaseStyles.xaml:549-560`; WCAG 2.2 Focus Appearance.
