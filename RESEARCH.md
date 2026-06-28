@@ -1,157 +1,91 @@
 # Research — DeepPurge
 
 ## Executive Summary
-
-DeepPurge is a mature Windows uninstaller and system cleaner (C#/.NET 10 LTS, WPF + CLI, ~22k LOC, 195 tests, MIT) with the broadest feature set of any open-source tool in its category — combining uninstall, cleanup, driver/startup/service management, install monitoring, and a headless CLI in a single binary. Six research rounds have shipped 40+ improvements. All round 5 items are confirmed shipped: slim build target, deletion manifest, CLI `--json` output, and winapp2 update command.
-
-The competitive landscape continues to bifurcate: **consumer-facing tools** (WinUtil 56.4k stars, Win11Debloat 49.6k, Winhance 11.3k) dominate GitHub star counts but are PowerShell scripts or debloaters without uninstall depth. **Serious uninstallers** (BCU 19.9k, HiBit, Uninstalr) focus on removal accuracy but lack cleaning breadth. **Cleaners** (BleachBit 6.0.0, FluentCleaner 2.1k) lack uninstall capability. DeepPurge is the only open-source project that spans all three categories.
-
-The highest-value direction now is **trust and safety hardening** — cookie preservation during browser cleaning, automated deletion rollback, and signature verification on the programs list — followed by **ecosystem modernization** (xUnit v3 migration now unblocked, WPF Fluent style adoption).
-
-**Top 8 opportunities in priority order:**
-1. Cookie preservation whitelist for browser cleaning (BleachBit parity, high user trust)
-2. Automated deletion rollback from DeletionManifest (undo story is write-only today)
-3. Promote MSI/MSP orphan cleanup from Ideas to committed (InstallerClean proved the approach)
-4. xUnit v3 migration (Stryker.NET MTP runner now supports it — blocker resolved)
-5. Digital signature column on installed programs list (BCU v6.2 parity)
-6. Per-program notes/tags for IT technician workflows (BCU v6.3 in dev)
-7. WPF .NET 10 Fluent style adoption for 9 newly-supported controls (free polish)
-8. Copy scan results to clipboard across all panels
+DeepPurge is a safety-first Windows cleanup and uninstall workstation tool: .NET 10, WPF GUI, headless CLI, portable/local data paths, registry/file rollback primitives, dry-run flows, winapp2/community cleaner support, package-manager enrichment, and local-only release packaging. Verified current code shows that prior roadmap ideas have shipped since the last research file: xUnit v3, cookie whitelist plumbing, program notes, installed-program signature column, modern bundled cleaners, JSON CLI expansion, deletion manifest restore in Core/CLI, tray scheduled cleaning, and package-manager fallback flags. The highest-value direction is now trust completion rather than feature breadth: harden admin command launches, surface existing recovery/settings controls in the GUI, make update/database provenance visible, restore accessible focus indicators, and repair docs/release truth. Top opportunities: 1. harden GUI winget launch; 2. restore shared WPF focus indicators; 3. add GUI deletion-manifest recovery; 4. add GUI settings/privacy controls for existing AppSettings; 5. add winapp2 provenance/backups; 6. add release/package manifest validator; 7. add log retention/scrub controls; 8. fix stale docs; 9. replace hardcoded system-drive copy; 10. add About/update trust cues.
 
 ## Product Map
-
-- **Core workflows:** uninstall/batch/forced/manifest-replay removal; leftover scan (Safe/Moderate/Advanced); junk/evidence/winapp2/custom-cleaner/dev-directory cleanup with age-based retention; disk/duplicate(files+dirs)/empty-folder analysis; driver/startup/shortcut/service/task/orphan/repair/schedule/install-monitor/health/shell/history management; portable/game/bundleware/BAM/Amcache detection; system slimming; right-click-to-exclude; settings export/import; deletion manifest logging.
-- **User personas:** power users cleaning personal PCs; IT technicians deploying portable tools on USB; sysadmins scripting CLI via Intune/SCCM/Task Scheduler; privacy-focused users reviewing digital traces.
-- **Platforms:** Windows 10/11 x64/ARM64, .NET 10 LTS (10.0.9), WPF GUI + headless CLI (22 commands), self-contained (~66 MB) + framework-dependent slim (~2-5 MB) single-file builds, GitHub Releases with SHA256SUMS, winget/Scoop manifests (not yet submitted).
-- **Key integrations:** registry uninstall keys, winget/Scoop/Steam/Epic/GOG enrichment, winapp2.ini (3,715 rules), `pnputil`, `schtasks`, SFC/DISM/chkdsk, USN journal, NTFS MFT (`FSCTL_ENUM_USN_DATA`), Restart Manager, WinVerifyTrust, GitHub Releases API, Windows toast notifications.
+- Core workflows: uninstall/bulk/forced uninstall; leftover registry/file cleanup; junk/evidence cleaning; winapp2/custom/bundled cleaners; drivers/startup/services/tasks/shortcuts/duplicates/disk/repair/schedule/history/install-monitor/package-manager panels.
+- User personas: Windows power users, IT technicians with portable USB workflows, admins scripting via CLI/Intune/SCCM/Task Scheduler, privacy-focused users who need visible safety and rollback.
+- Platforms and distribution: Windows 10/11 x64 and ARM64, .NET 10 WPF GUI plus CLI, self-contained and slim framework-dependent binaries, GitHub Releases with SHA256SUMS, local winget/Scoop manifests not yet submitted.
+- Key integrations and data flows: HKLM/HKCU/HKU uninstall keys, MSI metadata, WinVerifyTrust, winget/Scoop/Steam/Epic/GOG enrichment, pnputil/schtasks/reg.exe/SFC/DISM/chkdsk, Restart Manager, USN/MFT scanning, GitHub Releases API, raw GitHub winapp2.ini download, `%LocalAppData%\DeepPurge` or portable `Data\`.
 
 ## Competitive Landscape
-
-**WinUtil** (56.4k stars, MIT, PowerShell): The largest project in the Windows optimization space. 30M+ runs, 200+ contributors, custom ISO builder. PowerShell-only with no binary distribution. DeepPurge's WPF GUI and compiled native performance are clear advantages. Avoid competing on debloat scope — WinUtil owns that niche.
-
-**BCUninstaller** (19.9k stars, Apache 2.0, C#/WinForms/.NET 6): Under active development by new maintainer org. v6.2 added certificate/integrity columns and install-date fallback. Custom Notes feature (#939) in development for v6.3. Still no dark mode after 10 years. DeepPurge should match the certificate column on the programs list (already on autoruns/services). Learn from BCU's MSI component enumeration and plugin-based detection architecture.
-
-**BleachBit** (6k stars, GPL-3.0, Python): v6.0.0 was the biggest release in years — Cookie Manager (whitelist sites during cleaning), Expert Mode, Vivaldi/Zen browser cleaners, deeper Chromium cleaning (component cache, shader cache, DIPS, IndexedDB). v6.0.1 beta fixes an arbitrary file deletion security bug during privileged cleaning (validates DeepPurge's SafetyGuard approach). The Cookie Manager is the standout feature DeepPurge lacks — users lose all saved logins during evidence cleaning without it.
-
-**FluentCleaner** (2.1k stars, MIT, C#/WinUI 3/.NET 10): Cleaning-only (no uninstall). Multi-database approach: winapp2.ini + winapp3.ini (aggressive) + winappx (AppX bloatware). AI-assisted cleaner creation via Groq. WinUI 3 deployment failures remain the most common issue. DeepPurge's WPF deployment simplicity and combined uninstaller+cleaner scope are key differentiators.
-
-**Winhance** (11.3k stars, PolyForm Shield — NOT open source): Builder Mode for deployment configs, Change History logging, 29 languages. 90K+ downloads for latest release. PolyForm Shield license restricts competitive use — DeepPurge's MIT is a genuine differentiator. Avoid scope creep into ISO customization and debloat.
-
-**InstallerClean** (109 stars, MIT, C#/WPF/.NET 10): Focused tool for orphaned MSI/MSP files in `%WINDIR%\Installer`. Queries Windows Installer API to identify unregistered files. Can recover 1-100+ GB on heavily patched systems. Nearly identical tech stack to DeepPurge. The approach is proven and ready to integrate — DeepPurge should promote this from Ideas to committed.
-
-**Win11Debloat** (49.6k stars, MIT, PowerShell): Added WhatIf dry-run mode in June 2026 — DeepPurge already has this. GPO domain policy override warning is a nice touch for enterprise deployments. PowerShell-only, no GUI.
-
-**Uninstalr** (v3.0, $39 perpetual): 94.33% accuracy in self-published benchmark (March 2026). Free version has no feature restrictions. Sets the accuracy ceiling for the category. DeepPurge's open-source transparency is the counter-positioning.
+- BCUninstaller: strong uninstall/remnant depth; v6.2 added invalid-uninstaller presets, certificate/integrity columns, Scoop path detection, and hardening for startup/uninstall-list loading. DeepPurge should keep matching safety metadata and list robustness; avoid BCU's long-standing dark-mode/localization UI debt.
+- BleachBit: strongest cleaner UX signal in 6.0 with Cookie Manager, deeper Chromium/Firefox cleaning, Vivaldi/Zen cleaners, and a 6.0.1 beta privileged-delete security fix. DeepPurge already shipped cookie whitelist plumbing; learn from making privacy-preserving choices discoverable in the GUI and continue treating delete chokepoints as security-critical.
+- FluentCleaner: modern WinUI 3 cleaner with database-update UX, settings, localization, and fresh visual language; its 26.06.04 hotfix fixed settings-page and failed-database-update crashes. DeepPurge should learn from update-state resilience and translation workflow; avoid WinUI deployment churn and AI/cloud cleaner generation.
+- DriverStoreExplorer: v1.0.26 added WinGet update support plus SHA256-verified in-place self-update with rollback. DeepPurge should borrow provenance/hash/rollback cues for downloaded databases and release trust surfaces; self-applying updates remain blocked separately.
+- Revo/HiBit/Uninstalr commercial uninstallers: traced uninstall, forced uninstall, backup/restore, and accuracy messaging are category trust primitives. DeepPurge's CLI/core manifest restore is a strength; the GUI still needs parity.
+- WinUtil/Win11Debloat/Winhance: dominate Windows optimization attention with scripts, presets, WhatIf/dry-run, deployment config, and broad debloat posture. DeepPurge should keep the safety-first workstation-cleaner position and avoid broad debloat/ISO customization already rejected by project policy.
+- Czkawka and analogous duplicate/media cleaners: show high polish around scan/export/filter flows and cross-platform duplicate workflows. DeepPurge should borrow scan-state clarity and export consistency where it fits; media optimization and cross-platform work do not match the Windows-admin product.
+- winapp2 community database: remains the de facto Windows cleaner-definition corpus and is already integrated. DeepPurge should add local provenance/backup metadata because the current updater writes raw downloaded content directly to `DataPaths.Cleaners`.
 
 ## Security, Privacy, and Reliability
-
-**All round 5 codebase items — FIXED:**
-- Slim build target → framework-dependent publish added (commit `b43be56`)
-- Deletion manifest (`deletions.jsonl`) → DeletionManifest.Record/RecordFile/RecordDirectory (commit `b43be56`)
-- CLI `--json` output mode → list and orphans commands support `--json` (commit `b43be56`)
-- Winapp2 staleness check → `update-winapp2 [--check-only]` CLI command (commit `b43be56`)
-
-**Remaining architectural gaps:**
-- `DeletionManifest` is write-only (`src/DeepPurge.Core/Diagnostics/DeletionManifest.cs`). Records every deletion as JSONL but provides no `Restore()`, `ListManifests()`, or CLI surface. The undo story is half-built — manifests exist but aren't actionable without manual JSON parsing.
-- Browser cleaning (`EvidenceRemover`) has no cookie preservation — all cookies are deleted wholesale. No grep hits for "cookie" or "Cookie" in the Core project. Users lose all saved logins during evidence cleanup. BleachBit's Cookie Manager is the competitive bar.
-- `DeletionManifest.Record` has an empty `catch { }` block (line 33) — the one remaining silent catch after the 57-block cleanup. Should log to prevent invisible manifest write failures.
-- Activity log (`DataPaths.Logs`) may contain PII (file paths, registry keys, program names). No documented retention policy or scrubbing mechanism. Not a vulnerability, but a data-hygiene gap.
-
-**External CVEs (current as of June 2026 — no new advisories since round 5):**
-- CVE-2026-45490 — .NET SDK named pipe EoP. Build-time only. Fixed in SDK 10.0.109+.
-- CVE-2026-45491 — System.Formats.Tar symlink traversal. Not relevant (DeepPurge doesn't extract archives).
-- CVE-2026-45591 — ASP.NET Core SignalR DoS. Not relevant.
-- CVE-2026-32177 — WPF heap overflow. Fixed in .NET 10.0.8+; DeepPurge at 10.0.9.
-- BleachBit v6.0.1 beta fixed an arbitrary file deletion bug during privileged cleaning (no CVE assigned). Validates DeepPurge's SafetyGuard choke-point design.
-
-**Recovery and rollback:** Restore points before uninstall; registry backups via BackupManager; dry-run on all delete paths; DeletionManifest JSONL recording (write-only — no automated restore); locked files queued for reboot via Restart Manager; Recycle Bin default; right-click-to-exclude; settings export/import.
+- Verified bug/risk: `src/DeepPurge.App/Views/MainWindow.xaml.cs:1106-1110` launches `cmd.exe /k winget upgrade --id "{p.PackageId}" ...` with a package id sourced from scanner data. Use `ProcessStartInfo.ArgumentList` or tight package-id validation and avoid command-shell interpolation for admin-launched package upgrades.
+- Verified accessibility risk: `src/DeepPurge.App/Themes/BaseStyles.xaml:237-247` and `:549-560` set `FocusVisualStyle="{x:Null}"` for GridSplitter/DataGridCell without a visible replacement. This is a bounded focus-indicator bug, separate from the blocked full WCAG/Narrator pass.
+- Verified recovery gap: `src/DeepPurge.Core/Diagnostics/DeletionManifest.cs:65-159` and `src/DeepPurge.Cli/Program.cs:835-870` can list/load/dry-run/restore deletion manifests, but no GUI panel exposes this recovery flow; GUI rollback trust is weaker than CLI/Core capability.
+- Verified privacy gap: `src/DeepPurge.Core/App/DataPaths.cs:26-33` centralizes logs/settings, and activity/deletion manifests record program names and paths, but there is no retention or scrub setting. Privacy tooling should let users prune or redact local operational history.
+- Verified provenance gap: `src/DeepPurge.Core/Cleaning/Winapp2Updater.cs:39-55` downloads raw winapp2.ini and overwrites the local file after a size check, without storing commit SHA, SHA256, previous-file backup, or visible source metadata.
+- Verified UX truth bug: `src/DeepPurge.App/Views/MainWindow.xaml.cs:226-229` displays `Scan C:\` even though system-drive handling elsewhere is dynamic. Non-C Windows installs see misleading copy.
+- Verified docs drift: `CONTRIBUTING.md:28,40,97`, `ARCHITECTURE.md:12,154`, and `packaging/README.md:32` still mention xUnit 2.9, GitHub Actions workflows, old test counts, and a placeholder that does not match current manifests.
+- Missing guardrails: no local validator proves packaging placeholder replacement, GitHub release asset/hash consistency, README/test/doc truth, or release manifest readiness before shipping.
 
 ## Architecture Assessment
-
-- **Testing at 195 tests across 19 files.** No stubs or `NotImplementedException` found. Coverage gaps remain for RegistryLeftoverScanner, FileLeftoverScanner, BrowserExtensionScanner, ServiceScanner, UninstallEngine — all require live system state. Stryker.NET 4.14.2 MTP runner now supports xUnit v3 (`--test-runner mtp`), resolving the migration blocker (Stryker #3117). xUnit v3 3.2.2 is stable.
-- **NuGet packages are current.** System.Management/ServiceProcess/IO.Hashing 10.0.9, CommunityToolkit.Mvvm 8.4.2 (no newer release), Test SDK 18.7.0, xUnit 2.9.3. No updates available except the xUnit 2→3 major version.
-- **WPF .NET 10 expanded Fluent styles** to DatePicker, GridSplitter, GroupBox, Hyperlink, Label, NavigationWindow, RichTextBox, TextBox, GridView. DeepPurge could adopt these for incremental visual polish without custom control templates. New `ColumnDefinitions="..."` shorthand syntax available for cleaner XAML.
-- **Windows 11 26H2** ships built-in Sysmon (disabled by default). Could supplement USN journal for registry change tracking during install monitoring. WinUI Run dialog and redesigned context menus are opt-in, no impact on DeepPurge's shell integration. Low Latency Profile and nested context menus do not add cleanup APIs.
-- **Winapp2.ini last updated November 2025** (v251109, 3,715 entries). 7+ months stale. FluentCleaner adopted a multi-database approach (winapp2/winapp3/winappx). DeepPurge should consider maintaining supplementary definitions for modern apps not covered by the community database.
-- **Self-contained build size (~66 MB) mitigated** by the slim framework-dependent build target (`build/slim/`, ~2-5 MB) shipped in round 5. No further action needed.
-- **Zero-dependency Core library** (only System.* packages from the runtime). This is a significant architectural strength — no NuGet supply-chain risk beyond the runtime itself.
-- **MainViewModel is 1,708 lines across 2 partials.** ViewModel decomposition remains blocked (requires visual testing of XAML binding changes). Manageable for now.
+- Core and CLI are ahead of GUI for several trust controls: settings export/import/show, cookie whitelist/min-age/excluded paths/program notes, deletion restore, JSON outputs, and doctor checks are scriptable but not centrally discoverable in WPF.
+- `MainWindow.xaml` plus `MainWindow.xaml.cs` remains the broadest user-facing boundary, so small GUI parity items should be added surgically before any larger ViewModel decomposition already parked in `Roadmap_Blocked.md`.
+- `AppSettings.Save()` writes through a temp file (`src/DeepPurge.Core/App/AppSettings.cs:19-31`), so a GUI settings/privacy panel can reuse existing persistence without inventing storage.
+- Tests cover newer primitives (`CookieWhitelistTests`, `ProgramNotesTests`, `DeletionManifestTests`, xUnit v3), but there is no rendered GUI automation harness; new GUI features should isolate logic in testable helpers and visually verify manually.
+- Documentation and packaging are now the largest non-code trust gap. `.github/workflows` is gone, but top-level docs still describe CI/release automation that no longer exists.
+- Category coverage: security, privacy, accessibility, observability, testing, docs, distribution, offline/update resilience, and upgrade trust are active recommendations; i18n, plugin ecosystem, mobile/cross-platform, multi-user collaboration, and large migration work are consciously rejected or already blocked below.
 
 ## Rejected Ideas
-
-*Carried forward from previous rounds (still valid):*
-- Generic registry cleaner — contradicts safety-first philosophy. (Microsoft Support KB)
-- Multi-pass DoD wipes — project policy; single-pass sufficient. (NIST SP 800-88r2)
-- Free-space wiping on SSDs — wears flash, TRIM renders ineffective. (PrivaZer v4.0.123)
-- AI-assisted cleaner creation — cloud dependency contradicts zero-telemetry. (FluentCleaner/Groq)
-- WinUI 3 rewrite — WPF adequate; WinUI 3 has deployment friction. (FluentCleaner #18, #40)
-- Extension marketplace — supply-chain risk. (FluentCleaner extensions)
-- Cross-platform — Windows-only by design. (Czkawka/BleachBit contrast)
-- Software updater — winget upgrade detection sufficient. (IObit v15.4.0)
-- Broad debloat presets — conflicts with safety philosophy. (Win11Debloat 49.6k, Winhance 11.2k own this niche)
-- Country-of-origin display — publisher-to-country database maintenance. (Uninstalr 3.0)
-- Community install footprint database — infrastructure cost, uncertain value. (Revo Pro 63% accuracy)
-- App relocation between drives — different product category. (Ashampoo 16)
-- Crash analyzer — Windows Event Viewer serves this. (Ashampoo 16)
-- ISO/autounattend.xml customization — scope creep. (Winhance Builder Mode)
-- Policy-based MSIX removal — Enterprise/Education only. (Windows 11 25H2)
-- Floating toolbar / Widgets — consumer pattern, conflicts with admin positioning. (PC Manager v3.21)
-- Video/audio duplicate detection — separate tool territory. (Czkawka v11)
-- Declarative tweak system — debloat/tweaker, not uninstaller. (Win11Debloat, Sophia Script)
-- BleachBit CleanerML format — INI (winapp2.ini) is the de facto standard. (BleachBit docs)
-
-*New rejections from round 6:*
-- Cross-platform Electron rewrite — overhead vs native C# performance, contradicts single-binary philosophy. (Kudu, Sparkle both have 250-1.8k stars vs DeepPurge's native perf advantage)
-- Malware scanning integration — out of scope, Windows Defender/third-party AV handles this. (Kudu bundles 70+ signatures but it's a different product category)
-- System monitoring dashboard — real-time CPU/RAM/network/disk is Task Manager territory. (Kudu, Sparkle feature this but it's tangential to cleanup)
-- GPO domain policy override warnings — enterprise-only scenario, adds complexity without broad user value. (Win11Debloat 2026.06.24 added this but it's niche)
-- Winapp3.ini (aggressive) database support — "aggressive" rules contradict safety-first philosophy. (FluentCleaner supports this but it's the opposite of DeepPurge's SafetyGuard approach)
-- EXIF metadata stripping — separate tool territory, not cleanup. (Czkawka v11 added this)
-- Video re-encoding/optimization — not cleanup. (Czkawka v11 added this)
-- Config-export-for-fleet-deployment (Builder Mode) — interesting but scope creep into deployment tooling. (Winhance)
+- WinUI 3 rewrite — FluentCleaner still shows settings/update crash churn; WPF remains simpler for a portable admin binary.
+- Self-applying Velopack/updater work — already parked in `Roadmap_Blocked.md`; add trust cues and provenance now, not a second updater path.
+- Code-signing certificate work — already blocked on purchase/enrollment; do not create duplicate roadmap items.
+- Full WCAG 2.2 certification item — already blocked pending contrast-theme and Narrator testing; keep only the bounded shared focus-style fix active.
+- Full XAML `.resx` localization wiring — already blocked; adding another i18n item would duplicate `Roadmap_Blocked.md`.
+- Plugin marketplace or arbitrary cleaner marketplace — external executable/delete rules add supply-chain risk; current local JSON cleaner/signature files are sufficient.
+- Multi-user collaboration or cloud team dashboard — DeepPurge already scans relevant local machine/user hives where applicable, but shared state would add accounts, sync, and privacy burden to a local workstation tool.
+- Broad debloat presets, ISO customization, or policy-based tweak engine — WinUtil/Win11Debloat/Winhance own that category and it conflicts with DeepPurge's removal/cleanup safety posture.
+- Mobile, Linux, or macOS ports — the product depends on Windows registry, MSI, shell, WMI/service, driver store, and Win32 APIs.
+- Cloud sync/telemetry/community footprint database — adds privacy and infrastructure burden without matching local-first positioning.
+- Multi-pass DoD wipes and SSD free-space wiping — already rejected in `ROADMAP.md` because they are harmful or obsolete for the target threat model.
 
 ## Sources
-
-OSS competitors:
-- https://github.com/BCUninstaller/Bulk-Crap-Uninstaller (v6.2, Jun 2026, custom notes #939 in dev)
-- https://github.com/bleachbit/bleachbit (v6.0.0 stable, v6.0.1 beta Jun 2026)
-- https://github.com/builtbybel/FluentCleaner (v26.06.02, 2,070+ stars)
-- https://github.com/builtbybel/FluentTweaker (3,158 stars)
-- https://github.com/memstechtips/Winhance (v26.06.12, 11,252 stars)
-- https://github.com/raphire/win11debloat (49.6k stars, v2026.06.24)
-- https://github.com/ChrisTitusTech/winutil (56.4k stars, v26.06.23)
-- https://github.com/ravendevteam/talon (1,930 stars, v2026.6.5.17)
-- https://github.com/qarmin/czkawka (31.7k stars, v11.0.1, GTK deprecated for Krokiet/Slint)
-- https://github.com/lostindark/DriverStoreExplorer (v1.0.26)
-- https://github.com/no-faff/InstallerClean (v1.9.2, MIT, C#/WPF/.NET 10)
-- https://github.com/farag2/Sophia-Script-for-Windows (v7.1.5, 8.9k stars)
-- https://github.com/MoscaDotTo/Winapp2 (v251109, 3,715 entries, last update Nov 2025)
-- https://github.com/adventdevinc/kudu (268 stars, Electron, new entrant)
-- https://github.com/thedogecraft/sparkle (1.8k stars, Electron, new entrant)
+OSS and adjacent projects:
+- https://github.com/BCUninstaller/Bulk-Crap-Uninstaller/releases/tag/v6.2
+- https://github.com/bleachbit/bleachbit/releases/tag/v6.0.0
+- https://www.bleachbit.org/news/bleachbit-600
+- https://www.bleachbit.org/news/bleachbit-601-beta
+- https://github.com/builtbybel/FluentCleaner/releases/tag/26.06.04
+- https://github.com/lostindark/DriverStoreExplorer/releases/tag/v1.0.26
+- https://github.com/MoscaDotTo/Winapp2
+- https://github.com/Raphire/Win11Debloat/pull/611
+- https://github.com/ChrisTitusTech/winutil
+- https://github.com/no-faff/InstallerClean
+- https://github.com/qarmin/czkawka
+- https://github.com/BCUninstaller/Bulk-Crap-Uninstaller/issues/941
 
 Commercial and benchmarks:
+- https://www.revouninstaller.com/products/revo-uninstaller-pro/
 - https://uninstalr.com/blog/windows-uninstaller-performance-comparison-2026/
-- https://www.hibitsoft.ir/Uninstaller.html (v4.0.10, 89.90% accuracy)
-- https://www.ashampoo.com/en-us/uninstaller (v16, Forensic Analysis)
+- https://www.hibitsoft.ir/Uninstaller.html
+- https://www.ccleaner.com/ccleaner/features
+- https://www.ashampoo.com/en-us/uninstaller
 
-Security and platform:
-- https://devblogs.microsoft.com/dotnet/dotnet-and-dotnet-framework-june-2026-servicing-updates/
+Standards and platform APIs:
+- https://learn.microsoft.com/en-us/dotnet/api/system.diagnostics.processstartinfo.argumentlist
 - https://learn.microsoft.com/en-us/dotnet/desktop/wpf/whats-new/net100
-- https://github.com/dotnet/announcements/issues/403 (CVE-2026-45490)
-- https://xunit.net/releases/v3/3.2.2 (xUnit 3.2.2 stable)
-- https://stryker-mutator.io/blog/stryker-net-mtp-runner/ (MTP runner supports xUnit v3)
-- https://www.nuget.org/packages/CommunityToolkit.Mvvm (8.4.2, no newer)
-- https://www.bleepingcomputer.com/news/microsoft/microsoft-rolls-out-native-windows-11-sysmon-security-monitoring/
+- https://learn.microsoft.com/en-us/windows/win32/api/msi/nf-msi-msienumproductsexa
+- https://learn.microsoft.com/en-us/windows/win32/rstmgr/restart-manager-portal
+- https://learn.microsoft.com/en-us/windows/package-manager/winget/
+- https://www.w3.org/TR/WCAG22/#focus-appearance
 
-Windows 11:
-- https://www.pcworld.com/article/3063498/windows-11-26h2-is-coming-meet-all-the-new-features.html
-- https://techcommunity.microsoft.com/blog/windows-itpro-blog/get-ready-for-windows-11-version-26h2/4529367
-
-Community:
+Dependencies, advisories, and community:
+- https://devblogs.microsoft.com/dotnet/dotnet-and-dotnet-framework-june-2026-servicing-updates/
+- https://www.nuget.org/packages/CommunityToolkit.Mvvm
+- https://xunit.net/releases/v3/3.2.2
+- https://stryker-mutator.io/blog/stryker-net-mtp-runner/
 - https://www.windowscentral.com/microsoft/windows-11/fluent-cleaner-may-be-the-best-ccleaner-alternative-for-windows-11-users
-- https://www.bleachbit.org/news/bleachbit-600 (Cookie Manager, Expert Mode)
-- https://www.bleachbit.org/news/bleachbit-601-beta (security fix for privileged file deletion)
 
 ## Open Questions
-
-None that block prioritization. All items are actionable with current information.
+None that block prioritization or implementation.
