@@ -21,13 +21,6 @@ Explicit "no" list, so anyone proposing these doesn't waste effort:
 
 ## Research-Driven Additions
 
-- [ ] P0 - Harden scheduled-cleaning wrapper arguments against batch metacharacter execution
-  Why: `ScheduleManager` writes user-controlled CLI arguments verbatim into a `.cmd` wrapper that is run as a highest-privilege scheduled task.
-  Evidence: `src/DeepPurge.Core/Schedule/ScheduleManager.cs:120-129`; `src/DeepPurge.Cli/Program.cs:491-515`; NVD CVE-2024-24576; Microsoft Task Scheduler `ExecAction.Arguments`.
-  Touches: `src/DeepPurge.Core/Schedule/ScheduleManager.cs`, `src/DeepPurge.Cli/Program.cs`, `tests/DeepPurge.Tests/ScheduleManagerTests.cs`.
-  Acceptance: Scheduled jobs no longer execute raw batch syntax from `--args`; metacharacters including `&`, `|`, `<`, `>`, `^`, `%`, `!`, quotes, CR/LF, and delayed-expansion payloads are rejected or tokenized safely; tests inspect the generated task/wrapper command.
-  Complexity: M
-
 - [ ] P0 - Centralize registry deletion through backup and symlink-safe helper
   Why: Cleaner/context-menu registry deletes record manifests but do not consistently export backups first or check registry symlinks, so rollback and TOCTOU protection lag behind uninstall leftovers.
   Evidence: `src/DeepPurge.Core/Cleaning/Winapp2Parser.cs:279-288`; `src/DeepPurge.Core/Cleaning/CleanerDefinition.cs:163-172`; `src/DeepPurge.Core/Shell/ContextMenuCleaner.cs:75-80`; `src/DeepPurge.Core/Uninstall/UninstallEngine.cs:211-214,486-501`.
