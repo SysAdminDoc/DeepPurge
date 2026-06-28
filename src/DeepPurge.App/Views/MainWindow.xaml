@@ -24,13 +24,15 @@
             <Setter Property="FontSize" Value="12.5"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Margin" Value="6,1,10,1"/>
+            <Setter Property="FocusVisualStyle" Value="{DynamicResource DeepPurgeFocusVisual}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
                         <Grid>
                             <Border x:Name="indicator" Width="3" HorizontalAlignment="Left" CornerRadius="0,2,2,0"
                                     Background="{DynamicResource AccentBrush}" Opacity="0" Margin="-6,6,0,6"/>
-                            <Border x:Name="bg" Padding="12,9,14,9" CornerRadius="8" Background="Transparent">
+                            <Border x:Name="bg" Padding="12,9,14,9" CornerRadius="8" Background="Transparent"
+                                    BorderBrush="Transparent" BorderThickness="2">
                                 <ContentPresenter VerticalAlignment="Center"/>
                             </Border>
                         </Grid>
@@ -52,6 +54,10 @@
                                 </Setter>
                                 <Setter Property="Foreground" Value="{DynamicResource SubtextBrush}"/>
                             </MultiTrigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="bg" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+                            </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>

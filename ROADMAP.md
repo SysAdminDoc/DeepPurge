@@ -35,13 +35,6 @@ Explicit "no" list, so anyone proposing these doesn't waste effort:
   Acceptance: GUI can create/delete daily, weekly, and monthly scheduled jobs from safe presets such as dry-run preview, junk clean, evidence clean, and junk+evidence clean; no arbitrary CLI string is accepted from the GUI; created jobs appear in the existing schedule list and tray status.
   Complexity: M
 
-- [ ] P1 — Restore visible keyboard focus indicators in shared WPF styles
-  Why: Shared styles remove focus visuals for GridSplitter and DataGridCell without an accessible replacement.
-  Evidence: `src/DeepPurge.App/Themes/BaseStyles.xaml:237-247`, `src/DeepPurge.App/Themes/BaseStyles.xaml:549-560`; WCAG 2.2 Focus Appearance.
-  Touches: `src/DeepPurge.App/Themes/BaseStyles.xaml`, theme dictionaries if focus brushes need per-theme tuning.
-  Acceptance: Tab/arrow navigation shows a visible 2px-or-better focus treatment for buttons, inputs, grids, grid cells, and splitters in every DeepPurge theme; no interactive style nulls focus without replacement.
-  Complexity: M
-
 - [ ] P1 — Add GUI deletion-manifest recovery panel
   Why: Core and CLI can list, preview, dry-run, and restore deletion manifests, but GUI users cannot discover the rollback path.
   Evidence: `src/DeepPurge.Core/Diagnostics/DeletionManifest.cs:65-159`; `src/DeepPurge.Cli/Program.cs:835-870`; Revo/HiBit backup-and-restore trust patterns.
