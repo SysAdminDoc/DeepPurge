@@ -21,13 +21,6 @@ Explicit "no" list, so anyone proposing these doesn't waste effort:
 
 ## Research-Driven Additions
 
-- [ ] P0 — Harden GUI winget upgrade launch against command-line injection
-  Why: The GUI starts an elevated command shell with a package id interpolated into the command string.
-  Evidence: `src/DeepPurge.App/Views/MainWindow.xaml.cs:1106-1110`; Microsoft `ProcessStartInfo.ArgumentList`; DriverStoreExplorer v1.0.26 WinGet update support.
-  Touches: `src/DeepPurge.App/Views/MainWindow.xaml.cs`, package-manager launch tests or a small launch-command helper.
-  Acceptance: Winget upgrades launch without `cmd.exe`; package ids outside a strict safe pattern are refused with a toast/log entry; tests cover quotes, spaces, shell metacharacters, and normal ids.
-  Complexity: S
-
 - [ ] P0 - Harden scheduled-cleaning wrapper arguments against batch metacharacter execution
   Why: `ScheduleManager` writes user-controlled CLI arguments verbatim into a `.cmd` wrapper that is run as a highest-privilege scheduled task.
   Evidence: `src/DeepPurge.Core/Schedule/ScheduleManager.cs:120-129`; `src/DeepPurge.Cli/Program.cs:491-515`; NVD CVE-2024-24576; Microsoft Task Scheduler `ExecAction.Arguments`.

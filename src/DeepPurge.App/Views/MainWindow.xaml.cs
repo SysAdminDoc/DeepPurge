@@ -11,6 +11,7 @@ using DeepPurge.Core.Browsers;
 using DeepPurge.Core.Export;
 using DeepPurge.Core.FileSystem;
 using DeepPurge.Core.Models;
+using DeepPurge.Core.Packages;
 using DeepPurge.Core.Safety;
 using DeepPurge.Core.Services;
 using DeepPurge.Core.Shell;
@@ -1103,14 +1104,14 @@ public partial class MainWindow : Window
 
         try
         {
-            var psi = new ProcessStartInfo
-            {
-                FileName = "cmd.exe",
-                Arguments = $"/k winget upgrade --id \"{p.PackageId}\" --accept-source-agreements --accept-package-agreements",
-                UseShellExecute = true,
-            };
+            var psi = PackageManagerCommandBuilder.CreateWingetUpgradeStartInfo(p.PackageId);
             Process.Start(psi);
             ShowToast($"Launching winget upgrade for {p.DisplayName}");
+        }
+        catch (ArgumentException)
+        {
+            DeepPurge.Core.Diagnostics.Log.Warn($"Blocked unsafe winget package id: {p.PackageId}");
+            ShowToast($"Unsafe winget package id blocked: {p.PackageId}", isWarning: true);
         }
         catch (Exception ex) { ShowToast($"winget launch failed: {ex.Message}", isError: true); }
     }

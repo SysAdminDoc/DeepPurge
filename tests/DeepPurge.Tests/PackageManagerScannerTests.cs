@@ -46,4 +46,47 @@ public class PackageManagerScannerTests
         Assert.False(programs[1].IsOemBloatCandidate);
         Assert.Equal("", programs[1].OemBloatReason);
     }
+
+    [Theory]
+    [InlineData("Microsoft.PowerToys")]
+    [InlineData("VideoLAN.VLC")]
+    [InlineData("Git.Git")]
+    [InlineData("7zip.7zip")]
+    [InlineData("Some-Publisher.App_2")]
+    public void Winget_upgrade_builder_accepts_normal_ids(string packageId)
+    {
+        var psi = PackageManagerCommandBuilder.CreateWingetUpgradeStartInfo(packageId);
+
+        Assert.Equal("winget.exe", psi.FileName);
+        Assert.True(psi.UseShellExecute);
+        Assert.DoesNotContain("cmd", psi.FileName, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(new[]
+        {
+            "upgrade",
+            "--id",
+            packageId,
+            "--exact",
+            "--accept-source-agreements",
+            "--accept-package-agreements",
+        }, psi.ArgumentList);
+        Assert.Equal("", psi.Arguments);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" Microsoft.PowerToys")]
+    [InlineData("Microsoft.PowerToys ")]
+    [InlineData("Publisher App")]
+    [InlineData("Publisher.App&calc")]
+    [InlineData("Publisher.App|calc")]
+    [InlineData("Publisher.App\"")]
+    [InlineData("Publisher.App%PATH%")]
+    [InlineData("Publisher.App\r\ncalc")]
+    [InlineData("-starts-with-dash")]
+    public void Winget_upgrade_builder_rejects_shell_metacharacters(string packageId)
+    {
+        Assert.False(PackageManagerCommandBuilder.IsSafeWingetPackageId(packageId));
+        Assert.Throws<ArgumentException>(() =>
+            PackageManagerCommandBuilder.CreateWingetUpgradeStartInfo(packageId));
+    }
 }
