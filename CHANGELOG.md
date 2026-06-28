@@ -4,6 +4,9 @@ All notable changes to DeepPurge will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed (P0 security)
+- **GUI winget upgrade launch hardening** - the Programs context-menu upgrade action now launches `winget.exe` directly through a strict package-id command builder instead of interpolating scanner data into `cmd.exe`. Unsafe IDs with spaces, quotes, shell metacharacters, CR/LF, environment expansion, or leading dashes are blocked with a toast and log entry.
+
 ### Added (roadmap continuation)
 - **Tray icon for scheduled cleaning** — GUI now installs a Windows tray icon with Open, schedule status refresh, background dry-run clean preview, and Exit actions. Minimize/close hides DeepPurge to the tray without interrupting scheduled-cleaning visibility; the tray shows balloon notifications for schedule status and preview results.
 - **Chocolatey package discovery** — `PackageManagerScanner` now queries `choco list --local-only --limit-output`, merges matching entries into the installed programs list, and injects Chocolatey-only entries when they are absent from the registry inventory. CLI `list --json` and TSV output include the resulting source/package metadata.
