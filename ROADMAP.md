@@ -21,13 +21,6 @@ Explicit "no" list, so anyone proposing these doesn't waste effort:
 
 ## Research-Driven Additions
 
-- [ ] P1 - Add custom cleaner schema validation and risk labels
-  Why: Local `*.cleaner.json` files can delete files and registry keys, but the CLI/GUI cannot lint unknown fields, broad wildcards, HKLM/HKCR targets, `RemoveSelf`, or suspicious environment expansion before execution.
-  Evidence: `src/DeepPurge.Core/Cleaning/CleanerDefinition.cs:18-180`; BleachBit cleaner-definition ecosystem; winapp2 community cleaner corpus.
-  Touches: `src/DeepPurge.Core/Cleaning/CleanerDefinition.cs`, `src/DeepPurge.Cli/Program.cs`, winapp2/custom cleaner GUI surfaces, tests and JSON schema fixture files.
-  Acceptance: `deeppurgecli cleaners validate <file>` and the GUI report schema errors, unknown fields, expanded targets, registry scope, risk level, estimated item count/bytes, and blocked rules; invalid rules cannot run unless corrected.
-  Complexity: M
-
 - [ ] P2 - Add source-native uninstall for winget, Scoop, and Chocolatey rows
   Why: DeepPurge surfaces package-manager identities and synthetic package rows, but uninstall still depends on registry uninstall strings instead of calling the owning package manager for package-only apps.
   Evidence: `src/DeepPurge.Core/Packages/PackageManagerScanner.cs:41-95`; `src/DeepPurge.Cli/Program.cs:129-153`; UniGetUI package-manager model; Microsoft winget uninstall docs; Chocolatey uninstall docs.

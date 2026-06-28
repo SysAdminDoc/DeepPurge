@@ -1243,13 +1243,31 @@
                           AutomationProperties.HelpText="Winapp2.ini community-maintained cleaner definitions. Run applicable rules to clean third-party app caches.">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="180"/>
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
                         <Border Grid.Row="0" Padding="24,14" Background="{DynamicResource MantleBrush}">
-                            <TextBlock FontSize="12" Foreground="{DynamicResource SubtextBrush}"
-                                       Text="{Binding Winapp2Source, StringFormat=Source: {0}}"/>
+                            <StackPanel>
+                                <TextBlock FontSize="12" Foreground="{DynamicResource SubtextBrush}"
+                                           Text="{Binding Winapp2Source, StringFormat=winapp2 source: {0}}"/>
+                                <TextBlock Margin="0,4,0,0" FontSize="12" Foreground="{DynamicResource TextBrush}"
+                                           Text="{Binding CleanerValidationSummary}"/>
+                            </StackPanel>
                         </Border>
-                        <DataGrid Grid.Row="1" AutoGenerateColumns="False" ItemsSource="{Binding Winapp2Entries}">
+                        <DataGrid Grid.Row="1" AutoGenerateColumns="False" ItemsSource="{Binding CleanerValidationReports}"
+                                  AutomationProperties.Name="Custom JSON cleaner validation results">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Binding="{Binding FileName}" Header="FILE" Width="160"/>
+                                <DataGridTextColumn Binding="{Binding Status}" Header="STATUS" Width="80"/>
+                                <DataGridTextColumn Binding="{Binding RiskLabel}" Header="RISK" Width="80"/>
+                                <DataGridTextColumn Binding="{Binding EstimatedItems}" Header="ITEMS" Width="70"/>
+                                <DataGridTextColumn Binding="{Binding EstimatedBytes, Converter={StaticResource BytesToSizeConverter}}" Header="BYTES" Width="90"/>
+                                <DataGridTextColumn Binding="{Binding RegistryScopesDisplay}" Header="REGISTRY" Width="120"/>
+                                <DataGridTextColumn Binding="{Binding ExpandedTargetsDisplay}" Header="TARGETS" Width="2*"/>
+                                <DataGridTextColumn Binding="{Binding IssuesDisplay}" Header="ISSUES" Width="2*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                        <DataGrid Grid.Row="2" AutoGenerateColumns="False" ItemsSource="{Binding Winapp2Entries}">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Binding="{Binding Section}" Header="ENTRY" Width="2*"/>
                                 <DataGridTextColumn Binding="{Binding LangSecRef}" Header="CATEGORY" Width="100"/>

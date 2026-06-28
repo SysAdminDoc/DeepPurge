@@ -52,7 +52,7 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 
 ### Community Cleaner Definitions
 - **winapp2.ini integration** - Parses the community-maintained [winapp2.ini](https://github.com/MoscaDotTo/Winapp2) database (2,500+ third-party cleaners). Auto-downloads on first run, honours `Detect=` / `DetectFile=` gating so only applicable rules fire. Gated through SafetyGuard on every path.
-- **Custom JSON cleaners** - Define your own cleaning rules in `*.cleaner.json` files (detect by registry/file, target files with patterns, recurse, and remove-self). Exposed via `deeppurgecli cleaners list|preview|run [--dry-run]`.
+- **Validated custom JSON cleaners** - Define `*.cleaner.json` rules with schema linting, risk labels, expanded target previews, registry scope checks, and estimates. Use `deeppurgecli cleaners validate <file>` before `list|preview|run [--dry-run]`.
 
 ### Duplicate Finder
 - **Three-stage hash** - Group by exact byte-size → XXH3 first-MB head-hash → XXH3 full-file for remaining collisions. Skips reparse points / junctions to avoid infinite loops. *(algorithm from Czkawka / fdupes)*

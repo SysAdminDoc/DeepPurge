@@ -1,4 +1,5 @@
 using DeepPurge.Core.Cleaning;
+using DeepPurge.Core.Safety;
 using Xunit;
 
 namespace DeepPurge.Tests;
@@ -52,5 +53,125 @@ public class CleanerDefinitionTests
         var (size, count) = CleanerDefinitionRunner.Preview(rule);
         Assert.Equal(0, size);
         Assert.Equal(0, count);
+    }
+
+    [Fact]
+    public void ValidateFile_reports_unknown_fields_as_blocking_schema_errors()
+    {
+        var file = WriteCleanerJson("""
+[
+  {
+    "Name": "Bad schema",
+    "UnknownField": true,
+    "Files": [
+      { "Path": "%TEMP%", "Pattern": "*.tmp", "Unexpected": "x" }
+    ]
+  }
+]
+""");
+
+        try
+        {
+            var report = CleanerDefinitionRunner.ValidateFile(file);
+
+            Assert.False(report.IsValid);
+            Assert.Equal(CleanerRiskLevel.Blocked, report.RiskLevel);
+            Assert.Contains(report.Issues, i => i.Field == "UnknownField" && i.Severity == CleanerValidationSeverity.Error);
+            Assert.Contains(report.Issues, i => i.Field == "Files[0].Unexpected" && i.Severity == CleanerValidationSeverity.Error);
+        }
+        finally { TryDelete(file); }
+    }
+
+    [Fact]
+    public void ValidateFile_labels_high_risk_registry_and_remove_self_rules()
+    {
+        var file = WriteCleanerJson("""
+[
+  {
+    "Name": "High risk but valid",
+    "Files": [
+      { "Path": "%TEMP%\\DeepPurgeCleanerValidation", "Pattern": "*", "Recurse": true, "RemoveSelf": true }
+    ],
+    "Registry": [ "HKLM\\SOFTWARE\\DeepPurgeValidation" ]
+  }
+]
+""");
+
+        try
+        {
+            var report = CleanerDefinitionRunner.ValidateFile(file);
+
+            Assert.True(report.IsValid);
+            Assert.Equal(CleanerRiskLevel.High, report.RiskLevel);
+            Assert.Contains("HKLM", report.RegistryScopesDisplay);
+            Assert.Contains(report.Issues, i => i.Severity == CleanerValidationSeverity.Warning && i.Field == "Registry");
+            Assert.Contains(report.Issues, i => i.Severity == CleanerValidationSeverity.Warning && i.Field == "Files.RemoveSelf");
+        }
+        finally { TryDelete(file); }
+    }
+
+    [Fact]
+    public void ValidateFile_reports_expanded_targets_and_estimates()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"dp_cleaner_validate_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "a.tmp"), "12345");
+        var escaped = dir.Replace("\\", "\\\\");
+        var file = WriteCleanerJson($$"""
+[
+  {
+    "Name": "Estimate",
+    "Files": [
+      { "Path": "{{escaped}}", "Pattern": "*.tmp", "Recurse": false, "RemoveSelf": false }
+    ]
+  }
+]
+""");
+
+        try
+        {
+            var report = CleanerDefinitionRunner.ValidateFile(file);
+
+            Assert.True(report.IsValid);
+            Assert.Equal(CleanerRiskLevel.Medium, report.RiskLevel);
+            Assert.Equal(1, report.EstimatedItems);
+            Assert.True(report.EstimatedBytes >= 5);
+            Assert.Contains(dir, report.ExpandedTargetsDisplay);
+        }
+        finally
+        {
+            TryDelete(file);
+            try { Directory.Delete(dir, recursive: true); } catch { /* test cleanup */ }
+        }
+    }
+
+    [Fact]
+    public void Execute_blocks_invalid_rules_before_deletion()
+    {
+        var rule = new CleanerRule
+        {
+            Name = "Blocked",
+            Files = new List<CleanerFileRule>
+            {
+                new() { Path = @"C:\Windows", Pattern = "*", Recurse = false, RemoveSelf = false }
+            }
+        };
+
+        var result = CleanerDefinitionRunner.Execute(rule, new DeleteOptions(DryRun: false, SecureDelete: false, UseRecycleBin: false));
+
+        Assert.Equal(0, result.ItemsDeleted);
+        Assert.Equal(1, result.ItemsSkipped);
+    }
+
+    private static string WriteCleanerJson(string json)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"dp_cleaner_{Guid.NewGuid():N}.cleaner.json");
+        File.WriteAllText(path, json);
+        return path;
+    }
+
+    private static void TryDelete(string path)
+    {
+        try { if (File.Exists(path)) File.Delete(path); } catch { /* test cleanup */ }
     }
 }

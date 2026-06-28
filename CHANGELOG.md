@@ -4,6 +4,9 @@ All notable changes to DeepPurge will be documented in this file.
 
 ## [Unreleased]
 
+### Added (P1 safety)
+- **Custom cleaner validation** - `deeppurgecli cleaners validate <file.cleaner.json>` now reports schema errors, unknown fields, risk level, expanded targets, registry scopes, estimates, and blocked rules. CLI cleaner runs skip invalid files, and the GUI Community Cleaners panel shows ready/blocked validation reports for local JSON cleaners.
+
 ### Fixed (P0 security)
 - **Registry deletion safety funnel** - registry key/value deletes now use one backup-aware helper that validates SafetyGuard, skips registry symlinks, exports a `.reg` backup before deletion, and records deletion manifests only after successful cleanup.
 - **Scheduled-cleaning wrapper hardening** - scheduled task wrappers now normalize safe CLI tokens and reject cmd.exe metacharacters, environment expansion, delayed expansion, quotes, and line breaks before writing highest-privilege `.cmd` jobs.
