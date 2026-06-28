@@ -5,6 +5,7 @@ All notable changes to DeepPurge will be documented in this file.
 ## [Unreleased]
 
 ### Added (P1 safety)
+- **winapp2 update provenance** - `update-winapp2` and the GUI Community Cleaners panel now show local and remote commit/date/hash facts; successful updates save SHA256/byte metadata and back up the previous `winapp2.ini` before replacement.
 - **Custom cleaner validation** - `deeppurgecli cleaners validate <file.cleaner.json>` now reports schema errors, unknown fields, risk level, expanded targets, registry scopes, estimates, and blocked rules. CLI cleaner runs skip invalid files, and the GUI Community Cleaners panel shows ready/blocked validation reports for local JSON cleaners.
 
 ### Fixed (P1 accessibility)

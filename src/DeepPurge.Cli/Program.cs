@@ -850,30 +850,70 @@ if ($app) {{
 
     private static async Task<int> CmdUpdateWinapp2Async(ParsedArgs a, CancellationToken ct)
     {
-        var (isStale, localDate, remoteDate) = await Winapp2Updater.CheckStalenessAsync(ct);
-        Console.WriteLine($"Local:  {(localDate.HasValue ? localDate.Value.ToString("yyyy-MM-dd HH:mm UTC") : "(not downloaded)")}");
-        Console.WriteLine($"Remote: {(remoteDate.HasValue ? remoteDate.Value.ToString("yyyy-MM-dd HH:mm UTC") : "(check failed)")}");
+        var provenance = await Winapp2Updater.GetProvenanceAsync(ct);
+        PrintWinapp2Provenance(provenance);
 
         if (a.HasFlag("check-only"))
         {
-            Console.WriteLine(isStale ? "Update available." : "Up to date.");
-            return isStale ? 1 : 0;
+            if (provenance.Remote is null)
+            {
+                Console.WriteLine("Remote check failed.");
+                return 1;
+            }
+            Console.WriteLine(provenance.IsStale ? "Update available." : "Up to date.");
+            return provenance.IsStale ? 1 : 0;
         }
 
-        if (!isStale)
+        if (provenance.Remote is null && provenance.LocalExists)
+        {
+            Console.WriteLine("Remote provenance unavailable; keeping the current local database.");
+            return 1;
+        }
+
+        if (!provenance.IsStale)
         {
             Console.WriteLine("Already up to date.");
             return 0;
         }
 
         Console.Write("Downloading latest winapp2.ini... ");
-        if (await Winapp2Updater.UpdateAsync(ct))
+        var result = await Winapp2Updater.UpdateDetailedAsync(ct);
+        if (result.Success)
         {
             Console.WriteLine("done.");
+            Console.WriteLine($"Downloaded: {result.Metadata!.ShortCommit} ({result.Metadata.CommitDateUtc:yyyy-MM-dd HH:mm UTC}), {FormatBytes(result.Metadata.ByteCount)}, sha256 {result.Metadata.ShortSha256}");
+            Console.WriteLine($"Backup:     {(string.IsNullOrWhiteSpace(result.BackupPath) ? "(none)" : result.BackupPath)}");
             return 0;
         }
-        Console.WriteLine("failed.");
+        Console.WriteLine($"failed: {result.ErrorMessage}");
         return 1;
+    }
+
+    private static void PrintWinapp2Provenance(Winapp2Provenance provenance)
+    {
+        if (!provenance.LocalExists)
+        {
+            Console.WriteLine("Local:  (not downloaded)");
+        }
+        else if (provenance.LocalMetadata is { } metadata)
+        {
+            Console.WriteLine($"Local:  {metadata.ShortCommit} ({metadata.CommitDateUtc:yyyy-MM-dd HH:mm UTC}), {FormatBytes(metadata.ByteCount)}, sha256 {metadata.ShortSha256}");
+            Console.WriteLine($"File:   {provenance.LocalPath}");
+            Console.WriteLine($"Backup: {(string.IsNullOrWhiteSpace(metadata.BackupPath) ? "(none)" : metadata.BackupPath)}");
+        }
+        else
+        {
+            var date = provenance.LocalWriteTimeUtc.HasValue
+                ? provenance.LocalWriteTimeUtc.Value.ToString("yyyy-MM-dd HH:mm UTC")
+                : "date unknown";
+            Console.WriteLine($"Local:  file {date}, {FormatBytes(provenance.LocalByteCount ?? 0)}, sha256 {ShortHash(provenance.LocalSha256)} (metadata missing)");
+            Console.WriteLine($"File:   {provenance.LocalPath}");
+        }
+
+        if (provenance.Remote is { } remote)
+            Console.WriteLine($"Remote: {remote.ShortCommit} ({remote.CommitDateUtc:yyyy-MM-dd HH:mm UTC})");
+        else
+            Console.WriteLine($"Remote: (check failed{(string.IsNullOrWhiteSpace(provenance.RemoteError) ? "" : $": {provenance.RemoteError}")})");
     }
 
     private static int CmdRestore(ParsedArgs a)
@@ -955,6 +995,9 @@ if ($app) {{
 
     private static string Truncate(string s, int max)
         => string.IsNullOrEmpty(s) ? "" : (s.Length <= max ? s : s[..(max - 1)] + "…");
+
+    private static string ShortHash(string? hash)
+        => string.IsNullOrWhiteSpace(hash) ? "unknown" : hash.Length <= 12 ? hash : hash[..12];
 
     private static string FormatBytes(long bytes) => DeepPurge.Core.Diagnostics.SizeFormatter.Format(bytes);
 
