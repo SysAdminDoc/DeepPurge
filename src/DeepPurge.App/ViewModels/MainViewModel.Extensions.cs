@@ -249,7 +249,9 @@ public partial class MainViewModel
     //  WINAPP2 COMMUNITY CLEANERS
     // ═══════════════════════════════════════════════════════
     public ObservableCollection<Winapp2Entry> Winapp2Entries { get; } = new();
+    public ObservableCollection<CleanerValidationReport> CleanerValidationReports { get; } = new();
     [ObservableProperty] public partial string Winapp2Source { get; set; } = "";
+    [ObservableProperty] public partial string CleanerValidationSummary { get; set; } = "";
 
     [RelayCommand]
     private async Task LoadWinapp2Async()
@@ -273,7 +275,19 @@ public partial class MainViewModel
             {
                 Winapp2Entries.Clear();
                 foreach (var e in entries.Where(e => e.IsApplicable())) Winapp2Entries.Add(e);
-                StatusText = $"{Winapp2Entries.Count} applicable / {entries.Count} total cleaners";
+
+                var reports = CleanerDefinitionRunner.ValidateAll();
+                CleanerValidationReports.Clear();
+                foreach (var report in reports.OrderByDescending(r => r.RiskLevel).ThenBy(r => r.FileName))
+                    CleanerValidationReports.Add(report);
+
+                var blocked = reports.Count(r => !r.IsValid);
+                var ready = reports.Count - blocked;
+                CleanerValidationSummary = reports.Count == 0
+                    ? "Custom JSON cleaners: none found"
+                    : $"Custom JSON cleaners: {ready} ready, {blocked} blocked";
+
+                StatusText = $"{Winapp2Entries.Count} applicable / {entries.Count} winapp2 cleaners; {CleanerValidationSummary}";
             });
         }
         catch (TaskCanceledException)

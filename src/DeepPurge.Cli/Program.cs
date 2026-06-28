@@ -634,16 +634,37 @@ if ($app) {{
     private static int CmdCleaners(ParsedArgs a)
     {
         var sub = a.Positional.Count > 0 ? a.Positional[0].ToLowerInvariant() : "list";
-        var rules = CleanerDefinitionRunner.LoadAll();
+        if (sub == "validate")
+        {
+            var path = a.Positional.Count > 1 ? a.Positional[1] : null;
+            if (string.IsNullOrWhiteSpace(path))
+                return Fail("usage: deeppurgecli cleaners validate <file.cleaner.json> [--json]");
+
+            var report = CleanerDefinitionRunner.ValidateFile(path);
+            if (a.HasFlag("json")) WriteJson(report);
+            else PrintCleanerValidationReport(report);
+            return report.IsValid ? 0 : 1;
+        }
+
+        var reports = CleanerDefinitionRunner.ValidateAll();
+        var invalidReports = reports.Where(r => !r.IsValid).ToList();
+        var rules = reports.Where(r => r.IsValid).SelectMany(r => r.Rules).ToList();
         var applicable = CleanerDefinitionRunner.FilterApplicable(rules);
+
+        if (invalidReports.Count > 0)
+            Console.Error.WriteLine($"{invalidReports.Count} invalid cleaner definition file(s) skipped. Run 'deeppurgecli cleaners validate <file>' for details.");
 
         switch (sub)
         {
             case "list":
                 if (applicable.Count == 0) { Console.WriteLine("No applicable custom cleaners found."); return 0; }
-                Console.WriteLine($"{"Name",-30} {"Description",-40} Rules");
+                Console.WriteLine($"{"Name",-30} {"Risk",-8} {"Estimate",-14} {"Description",-40} Rules");
                 foreach (var r in applicable)
-                    Console.WriteLine($"{r.Name,-30} {r.Description,-40} {r.Files.Count}F/{r.Registry.Count}R");
+                {
+                    var report = FindCleanerReport(reports, r);
+                    var estimate = report == null ? "(unknown)" : $"{report.EstimatedItems} / {FormatBytes(report.EstimatedBytes)}";
+                    Console.WriteLine($"{r.Name,-30} {report?.RiskLabel ?? "Low",-8} {estimate,-14} {r.Description,-40} {r.Files.Count}F/{r.Registry.Count}R");
+                }
                 Console.WriteLine($"\n# {applicable.Count} applicable cleaners (from {rules.Count} loaded)");
                 return 0;
 
@@ -668,8 +689,32 @@ if ($app) {{
                 return 0;
 
             default:
-                return Fail("usage: deeppurgecli cleaners [list|preview|run [--dry-run]]");
+                return Fail("usage: deeppurgecli cleaners [list|preview|run [--dry-run]|validate <file.cleaner.json>]");
         }
+    }
+
+    private static CleanerValidationReport? FindCleanerReport(IEnumerable<CleanerValidationReport> reports, CleanerRule rule)
+        => reports.FirstOrDefault(r => r.Rules.Contains(rule));
+
+    private static void PrintCleanerValidationReport(CleanerValidationReport report)
+    {
+        Console.WriteLine($"File:            {report.FilePath}");
+        Console.WriteLine($"Status:          {report.Status}");
+        Console.WriteLine($"Risk:            {report.RiskLabel}");
+        Console.WriteLine($"Rules:           {report.Rules.Count}");
+        Console.WriteLine($"Estimate:        {report.EstimatedItems} item(s), {FormatBytes(report.EstimatedBytes)}");
+        Console.WriteLine($"Registry scopes: {report.RegistryScopesDisplay}");
+        Console.WriteLine($"Targets:         {report.ExpandedTargetsDisplay}");
+
+        if (report.Issues.Count == 0)
+        {
+            Console.WriteLine("Issues:          none");
+            return;
+        }
+
+        Console.WriteLine("Issues:");
+        foreach (var issue in report.Issues)
+            Console.WriteLine($"  [{issue.Severity}] {issue.RuleName}.{issue.Field}: {issue.Message}");
     }
 
     private static int CmdSettings(ParsedArgs a)
@@ -968,7 +1013,8 @@ if ($app) {{
         Console.WriteLine("  schedule remove --name N");
         Console.WriteLine("  orphans                                  Scan for orphaned services, tasks, firewall rules, PATH entries");
         Console.WriteLine("  orphans --remnants                       Include BAM execution evidence in orphan scan");
-        Console.WriteLine("  cleaners list|preview|run [--dry-run]    Manage custom JSON cleaner definitions");
+        Console.WriteLine("  cleaners list|preview|run [--dry-run]    Manage validated custom JSON cleaner definitions");
+        Console.WriteLine("  cleaners validate <file.cleaner.json>     Lint schema, risk, targets, and estimates");
         Console.WriteLine("  register-shell                           Add 'Uninstall with DeepPurge' to .exe right-click menu");
         Console.WriteLine("  unregister-shell                         Remove the shell context menu entry");
         Console.WriteLine("  settings [show|export <path>|import <path>]  View or transfer settings");
