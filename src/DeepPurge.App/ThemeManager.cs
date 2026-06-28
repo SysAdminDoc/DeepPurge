@@ -13,7 +13,7 @@ public static class ThemeManager
 {
     public record ThemeInfo(string Name, string FileName, string Category);
 
-    // Five themes, dark-first (per global CLAUDE.md preference).
+    // Five themes, dark-first (dark-first default).
     private static readonly ThemeInfo[] Themes =
     {
         new("Catppuccin Mocha", "CatppuccinMocha.xaml", "Dark"),
