@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Net.Http;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DeepPurge.Core.App;
@@ -28,20 +27,6 @@ namespace DeepPurge.App.ViewModels;
 /// </summary>
 public partial class MainViewModel
 {
-    // Single shared HttpClient for any VM-side network work. Reusing one
-    // instance prevents socket-exhaustion under repeated polling and picks
-    // up DNS changes correctly under .NET 8. Timeout is set to 15s — any
-    // winapp2 mirror slower than that should fail fast rather than freeze
-    // the UI behind a spinner.
-    private static readonly HttpClient _vmHttp = CreateVmHttp();
-    private static HttpClient CreateVmHttp()
-    {
-        var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
-        var ver = typeof(MainViewModel).Assembly.GetName().Version?.ToString(2) ?? "0.9";
-        http.DefaultRequestHeaders.UserAgent.ParseAdd($"DeepPurge/{ver} (+https://github.com/SysAdminDoc/DeepPurge)");
-        return http;
-    }
-
     // ═══════════════════════════════════════════════════════
     //  DRIVER STORE
     // ═══════════════════════════════════════════════════════
@@ -256,19 +241,27 @@ public partial class MainViewModel
     [RelayCommand]
     private async Task LoadWinapp2Async()
     {
-        var localIni = Path.Combine(DataPaths.Cleaners, "winapp2.ini");
+        var localIni = Winapp2Updater.LocalPath;
         try
         {
+            StatusText = File.Exists(localIni)
+                ? "Loading winapp2.ini..."
+                : "Downloading winapp2.ini...";
+
+            var provenance = await Winapp2Updater.GetProvenanceAsync();
             if (!File.Exists(localIni))
             {
-                StatusText = "Downloading winapp2.ini...";
-                // The shared HttpClient.Timeout already caps this — no extra CTS needed.
-                var url = "https://raw.githubusercontent.com/MoscaDotTo/Winapp2/master/Winapp2.ini";
-                var ini = await _vmHttp.GetStringAsync(url);
-                await File.WriteAllTextAsync(localIni, ini);
-                Winapp2Source = $"downloaded from {url}";
+                var update = await Winapp2Updater.UpdateDetailedAsync();
+                if (!update.Success)
+                {
+                    Winapp2Source = FormatWinapp2Provenance(provenance);
+                    StatusText = $"winapp2.ini download failed: {update.ErrorMessage}";
+                    return;
+                }
+                provenance = await Winapp2Updater.GetProvenanceAsync();
             }
-            else Winapp2Source = localIni;
+
+            Winapp2Source = FormatWinapp2Provenance(provenance);
 
             var entries = Winapp2Parser.ParseFile(localIni);
             _dispatcher.Invoke(() =>
@@ -294,17 +287,34 @@ public partial class MainViewModel
         {
             StatusText = "winapp2.ini download timed out. Check connection and retry.";
         }
-        catch (HttpRequestException ex)
-        {
-            Log.Warn($"winapp2 download: {ex.Message}");
-            StatusText = $"winapp2.ini unreachable: {ex.Message}";
-        }
         catch (Exception ex)
         {
             Log.Error("LoadWinapp2Async", ex);
             StatusText = $"winapp2 load failed: {ex.Message}";
         }
     }
+
+    private static string FormatWinapp2Provenance(Winapp2Provenance provenance)
+    {
+        var local = provenance.LocalExists
+            ? provenance.LocalMetadata is { } metadata
+                ? $"local {metadata.ShortCommit} ({metadata.CommitDateUtc:yyyy-MM-dd}), {FormatBytes(metadata.ByteCount)}, sha256 {metadata.ShortSha256}"
+                : $"local file {(provenance.LocalWriteTimeUtc.HasValue ? provenance.LocalWriteTimeUtc.Value.ToString("yyyy-MM-dd") : "date unknown")}, {FormatBytes(provenance.LocalByteCount ?? 0)}, sha256 {ShortHash(provenance.LocalSha256)}"
+            : "not downloaded";
+
+        var remote = provenance.Remote is { } remoteInfo
+            ? $"remote {remoteInfo.ShortCommit} ({remoteInfo.CommitDateUtc:yyyy-MM-dd})"
+            : $"remote unavailable{(string.IsNullOrWhiteSpace(provenance.RemoteError) ? "" : $": {provenance.RemoteError}")}";
+
+        var backup = provenance.LocalMetadata?.BackupPath is { Length: > 0 } path
+            ? $"; previous backup {Path.GetFileName(path)}"
+            : "";
+
+        return $"{local}; {remote}{backup}";
+    }
+
+    private static string ShortHash(string? hash)
+        => string.IsNullOrWhiteSpace(hash) ? "unknown" : hash.Length <= 12 ? hash : hash[..12];
 
     [RelayCommand]
     private async Task RunWinapp2Async()

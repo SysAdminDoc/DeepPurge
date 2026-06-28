@@ -51,7 +51,7 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 - Manifests persisted in `%LocalAppData%\DeepPurge\Snapshots\<name>.manifest.json` (or `./Data/Snapshots/` in portable mode)
 
 ### Community Cleaner Definitions
-- **winapp2.ini integration** - Parses the community-maintained [winapp2.ini](https://github.com/MoscaDotTo/Winapp2) database (2,500+ third-party cleaners). Auto-downloads on first run, honours `Detect=` / `DetectFile=` gating so only applicable rules fire. Gated through SafetyGuard on every path.
+- **winapp2.ini integration** - Parses the community-maintained [winapp2.ini](https://github.com/MoscaDotTo/Winapp2) database (2,500+ third-party cleaners). Auto-downloads on first run with commit/date/SHA256 provenance and a previous-file backup, honours `Detect=` / `DetectFile=` gating so only applicable rules fire, and gates every path through SafetyGuard.
 - **Validated custom JSON cleaners** - Define `*.cleaner.json` rules with schema linting, risk labels, expanded target previews, registry scope checks, and estimates. Use `deeppurgecli cleaners validate <file>` before `list|preview|run [--dry-run]`.
 
 ### Duplicate Finder
@@ -126,6 +126,7 @@ DeepPurgeCli drivers --old                  # Old driver packages ready to remov
 DeepPurgeCli startup-impact                 # High/Medium/Low per autorun process
 DeepPurgeCli duplicates C:\Users\you        # Duplicate file groups
 DeepPurgeCli snapshot trace "MyApp" setup.exe  # Record install delta
+DeepPurgeCli update-winapp2 --check-only       # Show local/remote database provenance
 DeepPurgeCli winapp2 .\winapp2.ini --dry-run   # Run community cleaner database
 DeepPurgeCli schedule add --name Nightly --freq weekly --time 03:00 --day Mon --args "clean junk evidence"
 DeepPurgeCli schedule list

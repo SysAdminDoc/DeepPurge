@@ -49,13 +49,6 @@ Explicit "no" list, so anyone proposing these doesn't waste effort:
   Acceptance: GUI can view/edit cookie whitelist, excluded paths, min-age values, expert mode, and settings import/export; changes persist atomically; invalid paths/domains show inline errors; CLI settings still round-trip.
   Complexity: L
 
-- [ ] P1 — Add winapp2 database provenance, backup, and rollback metadata
-  Why: The updater overwrites the local cleaner database from a raw GitHub URL without recording commit SHA, SHA256, source date, or the previous file.
-  Evidence: `src/DeepPurge.Core/Cleaning/Winapp2Updater.cs:39-55`; DriverStoreExplorer v1.0.26 SHA256/rollback update flow; FluentCleaner 26.06.04 database-update failure fix; `MoscaDotTo/Winapp2`.
-  Touches: `src/DeepPurge.Core/Cleaning/Winapp2Updater.cs`, `src/DeepPurge.App/ViewModels/MainViewModel.Extensions.cs`, `src/DeepPurge.Cli/Program.cs`, tests around update metadata.
-  Acceptance: Each update stores source commit/date, SHA256, byte count, and previous-file backup; failed downloads preserve the previous database; GUI/CLI display local and remote provenance.
-  Complexity: M
-
 - [ ] P2 — Add local release and package-manifest readiness validator
   Why: Winget/Scoop manifests intentionally contain release-time placeholders, and docs drift has already left packaging guidance inconsistent.
   Evidence: `packaging/winget/SysAdminDoc.DeepPurge.yaml:39,46`; `packaging/scoop/deeppurge.json:14-25`; latest GitHub release assets `DeepPurge.exe`, `DeepPurgeCli.exe`, `SHA256SUMS.txt`.
