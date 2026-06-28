@@ -5,6 +5,7 @@ All notable changes to DeepPurge will be documented in this file.
 ## [Unreleased]
 
 ### Fixed (P0 security)
+- **Registry deletion safety funnel** - registry key/value deletes now use one backup-aware helper that validates SafetyGuard, skips registry symlinks, exports a `.reg` backup before deletion, and records deletion manifests only after successful cleanup.
 - **Scheduled-cleaning wrapper hardening** - scheduled task wrappers now normalize safe CLI tokens and reject cmd.exe metacharacters, environment expansion, delayed expansion, quotes, and line breaks before writing highest-privilege `.cmd` jobs.
 - **GUI winget upgrade launch hardening** - the Programs context-menu upgrade action now launches `winget.exe` directly through a strict package-id command builder instead of interpolating scanner data into `cmd.exe`. Unsafe IDs with spaces, quotes, shell metacharacters, CR/LF, environment expansion, or leading dashes are blocked with a toast and log entry.
 

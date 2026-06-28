@@ -1,4 +1,5 @@
 using DeepPurge.Core.Diagnostics;
+using DeepPurge.Core.Registry;
 using DeepPurge.Core.Safety;
 
 namespace DeepPurge.Core.Cleaning;
@@ -275,19 +276,10 @@ public class Winapp2Runner
 
     private static void RunRegKey(string raw, DeleteOptions opt)
     {
-        if (opt.DryRun) return;
-        if (!SafetyGuard.IsRegistryPathSafeToDelete(raw)) return;
+        var result = RegistryDeletion.DeleteKeyTree(raw, "winapp2-regkey", opt.DryRun);
+        if (result.Status is RegistryDeletionStatus.Deleted or RegistryDeletionStatus.DryRun or RegistryDeletionStatus.SkippedMissing)
+            return;
 
-        var (hive, sub) = Winapp2Entry.SplitHive(raw);
-        if (hive == null || string.IsNullOrEmpty(sub)) return;
-
-        try
-        {
-            using var baseKey = Microsoft.Win32.RegistryKey.OpenBaseKey(hive.Value, Microsoft.Win32.RegistryView.Default);
-            baseKey.DeleteSubKeyTree(sub, throwOnMissingSubKey: false);
-            Diagnostics.DeletionManifest.RecordRegistry(raw, "winapp2-regkey");
-        }
-        catch (UnauthorizedAccessException) { /* policy-locked: skip */ }
-        catch (Exception ex) { Log.Warn($"DeleteSubKeyTree '{raw}' failed: {ex.Message}"); }
+        Log.Warn($"winapp2 RegKey '{raw}' skipped: {result.Status} {result.ErrorMessage}");
     }
 }

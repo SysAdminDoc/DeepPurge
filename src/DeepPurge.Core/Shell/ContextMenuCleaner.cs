@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using DeepPurge.Core.Registry;
 
 namespace DeepPurge.Core.Shell;
 
@@ -69,16 +70,8 @@ public static class ContextMenuCleaner
         {
             try
             {
-                var parent = GetParentPath(entry.RegistryPath);
-                if (string.IsNullOrEmpty(parent)) continue;
-
-                using var key = global::Microsoft.Win32.Registry.ClassesRoot.OpenSubKey(parent, writable: true);
-                if (key == null) continue;
-
-                var subName = Path.GetFileName(entry.RegistryPath);
-                key.DeleteSubKeyTree(subName, throwOnMissingSubKey: false);
-                Diagnostics.DeletionManifest.RecordRegistry($"HKCR\\{entry.RegistryPath}", "contextmenu-delete");
-                removed++;
+                var result = RegistryDeletion.DeleteKeyTree($"HKCR\\{entry.RegistryPath}", "contextmenu-delete");
+                if (result.Deleted) removed++;
             }
             catch { /* skip unreachable entries */ }
         }
@@ -258,9 +251,4 @@ public static class ContextMenuCleaner
         _ => path,
     };
 
-    private static string GetParentPath(string path)
-    {
-        var lastSlash = path.LastIndexOf('\\');
-        return lastSlash > 0 ? path[..lastSlash] : path;
-    }
 }

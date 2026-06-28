@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
-using global::Microsoft.Win32;
 using DeepPurge.Core.FileSystem;
 using DeepPurge.Core.Models;
 using DeepPurge.Core.Registry;
@@ -193,14 +192,6 @@ public class UninstallEngine
                 ct.ThrowIfCancellationRequested();
                 index++;
 
-                if (!SafetyGuard.IsRegistryPathSafeToDelete(item.Path))
-                {
-                    StatusChanged?.Invoke($"Blocked by SafetyGuard (registry): {item.Path}");
-                    skipped++;
-                    progress?.Report(new DeleteProgress(index, total, freed, item.Path, Skipped: true));
-                    continue;
-                }
-
                 if (options.DryRun)
                 {
                     regDeleted++;
@@ -210,9 +201,16 @@ public class UninstallEngine
 
                 try
                 {
-                    _backupManager.BackupRegistryKey(item.Path);
-                    DeleteRegistryItem(item);
-                    regDeleted++;
+                    var result = DeleteRegistryItem(item);
+                    if (result.Deleted)
+                    {
+                        regDeleted++;
+                    }
+                    else
+                    {
+                        skipped++;
+                        StatusChanged?.Invoke($"Skipped registry: {item.Path} - {result.Status}");
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -457,51 +455,10 @@ public class UninstallEngine
     //  Deletion primitives
     // ═══════════════════════════════════════════════════════
 
-    private static void DeleteRegistryItem(LeftoverItem item)
-    {
-        var path = item.Path;
-        RegistryKey? hive;
-        string subPath;
-
-        // Recognise every hive a leftover scanner can produce. Previously HKU
-        // paths silently returned — the delete would succeed-looking with
-        // zero effect, which breaks "Delete selected" for HKU-scoped leftovers.
-        if (path.StartsWith("HKLM\\", StringComparison.OrdinalIgnoreCase))
-        { hive = global::Microsoft.Win32.Registry.LocalMachine; subPath = path[5..]; }
-        else if (path.StartsWith("HKCU\\", StringComparison.OrdinalIgnoreCase))
-        { hive = global::Microsoft.Win32.Registry.CurrentUser; subPath = path[5..]; }
-        else if (path.StartsWith("HKCR\\", StringComparison.OrdinalIgnoreCase))
-        { hive = global::Microsoft.Win32.Registry.ClassesRoot; subPath = path[5..]; }
-        else if (path.StartsWith("HKU\\", StringComparison.OrdinalIgnoreCase))
-        { hive = global::Microsoft.Win32.Registry.Users; subPath = path[4..]; }
-        else return;
-
-        if (item.Type == LeftoverType.RegistryValue)
-        {
-            var lastBackslash = subPath.LastIndexOf('\\');
-            if (lastBackslash < 0) return;
-            var keyPath = subPath[..lastBackslash];
-            var valueName = subPath[(lastBackslash + 1)..];
-            using var key = hive.OpenSubKey(keyPath, writable: true);
-            if (key != null && SafetyGuard.IsRegistrySymlink(key))
-            {
-                Diagnostics.Log.Warn($"Skipping registry symlink: {path}");
-                return;
-            }
-            key?.DeleteValue(valueName, throwOnMissingValue: false);
-        }
-        else
-        {
-            using var checkKey = hive.OpenSubKey(subPath);
-            if (checkKey != null && SafetyGuard.IsRegistrySymlink(checkKey))
-            {
-                Diagnostics.Log.Warn($"Skipping registry symlink: {path}");
-                return;
-            }
-            hive.DeleteSubKeyTree(subPath, throwOnMissingSubKey: false);
-            Diagnostics.DeletionManifest.RecordRegistry(path, "uninstall-leftover");
-        }
-    }
+    private static RegistryDeletionResult DeleteRegistryItem(LeftoverItem item)
+        => item.Type == LeftoverType.RegistryValue
+            ? RegistryDeletion.DeleteValue(item.Path, "uninstall-leftover")
+            : RegistryDeletion.DeleteKeyTree(item.Path, "uninstall-leftover");
 
     private static void DeleteFileItem(LeftoverItem item)
     {
