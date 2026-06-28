@@ -1,6 +1,7 @@
 using System.Text.Json;
 using DeepPurge.Core.App;
 using DeepPurge.Core.Diagnostics;
+using DeepPurge.Core.Registry;
 using DeepPurge.Core.Safety;
 
 namespace DeepPurge.Core.Cleaning;
@@ -155,23 +156,11 @@ public static class CleanerDefinitionRunner
 
         foreach (var regPath in rule.Registry)
         {
-            if (!SafetyGuard.IsRegistryPathSafeToDelete(regPath)) continue;
-            if (options.DryRun) continue;
-            try
-            {
-                var parts = regPath.Split('\\', 2);
-                if (parts.Length < 2 || string.IsNullOrEmpty(parts[1])) continue;
-                var hive = parts[0].ToUpperInvariant() switch
-                {
-                    "HKCU" => Microsoft.Win32.Registry.CurrentUser,
-                    "HKLM" => Microsoft.Win32.Registry.LocalMachine,
-                    "HKCR" => Microsoft.Win32.Registry.ClassesRoot,
-                    _ => null
-                };
-                hive?.DeleteSubKeyTree(parts[1], throwOnMissingSubKey: false);
-                DeletionManifest.RecordRegistry(regPath, "cleaner-regkey");
-            }
-            catch (Exception ex) { Log.Warn($"Cleaner registry delete '{regPath}': {ex.Message}"); }
+            var result = RegistryDeletion.DeleteKeyTree(regPath, "cleaner-regkey", options.DryRun);
+            if (result.Status is RegistryDeletionStatus.Deleted or RegistryDeletionStatus.DryRun or RegistryDeletionStatus.SkippedMissing)
+                continue;
+
+            Log.Warn($"Cleaner registry delete '{regPath}' skipped: {result.Status} {result.ErrorMessage}");
         }
 
         if (!options.DryRun && cleaned > 0)

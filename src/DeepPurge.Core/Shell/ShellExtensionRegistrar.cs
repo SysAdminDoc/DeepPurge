@@ -1,4 +1,5 @@
 using DeepPurge.Core.Diagnostics;
+using DeepPurge.Core.Registry;
 
 namespace DeepPurge.Core.Shell;
 
@@ -38,9 +39,15 @@ public static class ShellExtensionRegistrar
     {
         try
         {
-            Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(MenuKeyPath, throwOnMissingSubKey: false);
-            Log.Info("Shell extension unregistered");
-            return true;
+            var result = RegistryDeletion.DeleteKeyTree($@"HKCU\{MenuKeyPath}", "shell-extension-unregister");
+            if (result.Deleted || result.Status == RegistryDeletionStatus.SkippedMissing)
+            {
+                Log.Info("Shell extension unregistered");
+                return true;
+            }
+
+            Log.Warn($"Shell extension unregister skipped: {result.Status} {result.ErrorMessage}");
+            return false;
         }
         catch (Exception ex)
         {

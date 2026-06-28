@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text;
+using DeepPurge.Core.Registry;
 using DeepPurge.Core.Safety;
 using DeepPurge.Core.Security;
 using global::Microsoft.Win32;
@@ -416,11 +417,9 @@ public static class AutorunScanner
             {
                 case AutorunType.RegistryRun:
                 case AutorunType.RegistryRunOnce:
-                    var (hive, path) = ResolveHiveAndPath(entry.RegistryPath);
-                    if (hive == null) return false;
-                    using (var key = hive.OpenSubKey(path, writable: true))
-                        key?.DeleteValue(entry.Name, throwOnMissingValue: false);
-                    return true;
+                    return RegistryDeletion.DeleteValue(
+                        $@"{entry.RegistryPath}\{entry.Name}",
+                        "autorun-delete").Deleted;
 
                 case AutorunType.StartupFolder:
                     if (File.Exists(entry.Command) && SafetyGuard.IsPathSafeToDelete(entry.Command))

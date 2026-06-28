@@ -13,7 +13,7 @@ public class BackupManager
     // Anything else is rejected rather than sanitized — if we saw a weird key,
     // something upstream is wrong and we shouldn't be blindly issuing reg.exe.
     private static readonly Regex SafeRegistryPath =
-        new(@"^(HKLM|HKCU|HKCR|HKU|HKEY_[A-Z_]+)(\\[^""<>|*?\r\n]*)?$", RegexOptions.Compiled);
+        new(@"^(HKLM|HKCU|HKCR|HKU|HKEY_[A-Z_]+)(\\[^""<>|\r\n]*)?$", RegexOptions.Compiled);
 
     public BackupManager()
     {

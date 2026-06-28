@@ -21,13 +21,6 @@ Explicit "no" list, so anyone proposing these doesn't waste effort:
 
 ## Research-Driven Additions
 
-- [ ] P0 - Centralize registry deletion through backup and symlink-safe helper
-  Why: Cleaner/context-menu registry deletes record manifests but do not consistently export backups first or check registry symlinks, so rollback and TOCTOU protection lag behind uninstall leftovers.
-  Evidence: `src/DeepPurge.Core/Cleaning/Winapp2Parser.cs:279-288`; `src/DeepPurge.Core/Cleaning/CleanerDefinition.cs:163-172`; `src/DeepPurge.Core/Shell/ContextMenuCleaner.cs:75-80`; `src/DeepPurge.Core/Uninstall/UninstallEngine.cs:211-214,486-501`.
-  Touches: `src/DeepPurge.Core/Safety` or a new `src/DeepPurge.Core/Registry` helper, cleaner/context-menu/uninstall delete call sites, `tests/DeepPurge.Tests`.
-  Acceptance: Every registry key/value delete path runs one shared helper that validates SafetyGuard, skips symlinks, exports a `.reg` backup before deletion, records the deletion manifest only after success, and has tests for HKCU/HKLM/HKCR and malformed paths.
-  Complexity: M
-
 - [ ] P1 - Add custom cleaner schema validation and risk labels
   Why: Local `*.cleaner.json` files can delete files and registry keys, but the CLI/GUI cannot lint unknown fields, broad wildcards, HKLM/HKCR targets, `RemoveSelf`, or suspicious environment expansion before execution.
   Evidence: `src/DeepPurge.Core/Cleaning/CleanerDefinition.cs:18-180`; BleachBit cleaner-definition ecosystem; winapp2 community cleaner corpus.
