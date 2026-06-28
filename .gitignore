@@ -39,3 +39,9 @@ CODEX_CHANGELOG.md
 *.p12
 *.snk
 signing.pfx
+
+# AI config
+.codex/
+.ai/
+PROJECT_CONTEXT.md
+CONTINUATION_PROMPT.md
