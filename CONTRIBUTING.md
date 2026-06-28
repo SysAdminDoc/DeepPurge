@@ -84,12 +84,11 @@ All version strings must match. The canonical version number lives in:
 2. `src/DeepPurge.Core/DeepPurge.Core.csproj` `<Version>`
 3. `src/DeepPurge.Cli/DeepPurge.Cli.csproj` `<Version>`
 4. `README.md` shields.io badge + heading
-5. `CLAUDE.md` heading
-6. `Build.ps1` title banner
-7. `BUILD.bat` title
-8. `packaging/winget/SysAdminDoc.DeepPurge.yaml` `PackageVersion`
-9. `packaging/scoop/deeppurge.json` `version`
-10. `CHANGELOG.md` new section heading
+5. `Build.ps1` title banner
+6. `BUILD.bat` title
+7. `packaging/winget/SysAdminDoc.DeepPurge.yaml` `PackageVersion`
+8. `packaging/scoop/deeppurge.json` `version`
+9. `CHANGELOG.md` new section heading
 
 ## Releasing
 
