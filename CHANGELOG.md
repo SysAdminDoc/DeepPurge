@@ -7,6 +7,9 @@ All notable changes to DeepPurge will be documented in this file.
 ### Added (P1 safety)
 - **Custom cleaner validation** - `deeppurgecli cleaners validate <file.cleaner.json>` now reports schema errors, unknown fields, risk level, expanded targets, registry scopes, estimates, and blocked rules. CLI cleaner runs skip invalid files, and the GUI Community Cleaners panel shows ready/blocked validation reports for local JSON cleaners.
 
+### Fixed (P1 accessibility)
+- **Keyboard focus visibility** - shared WPF styles now use a visible accent focus treatment for buttons, inputs, splitters, selectors, tabs, DataGrid cells, and sidebar navigation instead of nulling focus visuals.
+
 ### Removed (P1 safety)
 - **Hidden free-space wipe primitive** - removed the unused public `SecureDelete.WipeFreeSpaceAsync` volume-fill API. DeepPurge now exposes selected-file and directory secure delete only.
 
