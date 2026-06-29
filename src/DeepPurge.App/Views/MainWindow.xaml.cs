@@ -145,6 +145,12 @@ public partial class MainWindow : Window
         _toastTimer.Start();
     }
 
+    private void WarnStatus(string message)
+    {
+        _vm.StatusText = message;
+        ShowToast(message, isWarning: true);
+    }
+
     private void OnWindowStateChanged(object? sender, EventArgs e)
     {
         if (WindowState != WindowState.Minimized) return;
@@ -366,7 +372,7 @@ public partial class MainWindow : Window
     private async void DeleteDrivers_Click(object s, RoutedEventArgs e)
     {
         var row = dgDrivers.SelectedItem as DeepPurge.Core.Drivers.DriverPackage;
-        if (row == null) { _vm.StatusText = "Select a driver row first"; return; }
+        if (row == null) { WarnStatus("Select a driver row first."); return; }
         if (MessageBox.Show(this,
                 $"Remove driver package '{row.PublishedName}' ({row.OriginalName})?\n\nThis calls pnputil /delete-driver.",
                 "Confirm driver removal", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
@@ -394,7 +400,7 @@ public partial class MainWindow : Window
 
     private void DeleteDuplicates_Click(object s, RoutedEventArgs e)
     {
-        if (_vm.DuplicateGroups.Count == 0) { _vm.StatusText = "Run a scan first."; return; }
+        if (_vm.DuplicateGroups.Count == 0) { WarnStatus("Run a duplicate scan first."); return; }
         if (MessageBox.Show(this,
                 $"Delete the oldest copy from each of {_vm.DuplicateGroups.Count} duplicate group(s)?",
                 "Confirm duplicate cleanup", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
@@ -407,7 +413,7 @@ public partial class MainWindow : Window
 
     private void RunWinapp2_Click(object s, RoutedEventArgs e)
     {
-        if (_vm.Winapp2Entries.Count == 0) { _vm.StatusText = "Load cleaners first."; return; }
+        if (_vm.Winapp2Entries.Count == 0) { WarnStatus("Load community cleaners first."); return; }
         if (MessageBox.Show(this,
                 $"Run {_vm.Winapp2Entries.Count} applicable cleaners?\n\n" +
                 (_vm.DryRunEnabled ? "(dry-run — no files will be deleted)" : "Files will be deleted."),
@@ -421,15 +427,13 @@ public partial class MainWindow : Window
         var name = txtScheduleName.Text.Trim();
         if (string.IsNullOrWhiteSpace(name))
         {
-            _vm.StatusText = "Enter a scheduled job name.";
-            ShowToast(_vm.StatusText, isWarning: true);
+            WarnStatus("Enter a scheduled job name.");
             return;
         }
 
         if (!TryParseScheduleTime(txtScheduleTime.Text, out var hour, out var minute))
         {
-            _vm.StatusText = "Enter schedule time as HH:MM.";
-            ShowToast(_vm.StatusText, isWarning: true);
+            WarnStatus("Enter schedule time as HH:MM.");
             return;
         }
 
@@ -445,8 +449,7 @@ public partial class MainWindow : Window
     {
         if (lstScheduledJobs.SelectedItem is not string name || string.IsNullOrWhiteSpace(name))
         {
-            _vm.StatusText = "Select a scheduled job first.";
-            ShowToast(_vm.StatusText, isWarning: true);
+            WarnStatus("Select a scheduled job first.");
             return;
         }
 
@@ -621,7 +624,7 @@ public partial class MainWindow : Window
     private async void Uninstall_Click(object sender, RoutedEventArgs e)
     {
         var program = GetSelectedProgram();
-        if (program == null) { _vm.StatusText = "Select a program to uninstall"; return; }
+        if (program == null) { WarnStatus("Select a program to uninstall."); return; }
 
         try
         {
@@ -650,7 +653,7 @@ public partial class MainWindow : Window
     private async void ScanLeftovers_Click(object sender, RoutedEventArgs e)
     {
         var program = GetSelectedProgram();
-        if (program == null) { _vm.StatusText = "Select a program to scan"; return; }
+        if (program == null) { WarnStatus("Select a program to scan."); return; }
 
         try
         {
@@ -668,7 +671,7 @@ public partial class MainWindow : Window
     private async void ForcedScan_Click(object sender, RoutedEventArgs e)
     {
         var name = txtForcedName.Text.Trim();
-        if (string.IsNullOrEmpty(name)) { _vm.StatusText = "Enter a program name"; return; }
+        if (string.IsNullOrEmpty(name)) { WarnStatus("Enter a program name."); return; }
 
         try
         {
@@ -686,13 +689,13 @@ public partial class MainWindow : Window
 
     private async void DeleteLeftovers_Click(object sender, RoutedEventArgs e)
     {
-        if (_vm.CurrentScanResult == null) { _vm.StatusText = "Nothing to delete"; return; }
+        if (_vm.CurrentScanResult == null) { WarnStatus("Scan leftovers before deleting."); return; }
 
         var regItems = _vm.RegistryLeftovers.Where(i => i.IsSelected).ToList();
         var fileItems = _vm.FileLeftovers.Where(i => i.IsSelected).ToList();
         if (regItems.Count == 0 && fileItems.Count == 0)
         {
-            _vm.StatusText = "Nothing selected";
+            WarnStatus("Select registry or file leftovers to delete.");
             return;
         }
 
@@ -748,7 +751,7 @@ public partial class MainWindow : Window
     private async void CleanJunk_Click(object sender, RoutedEventArgs e)
     {
         var selected = _vm.JunkCategories.Where(c => c.IsSelected && c.Files.Count > 0).ToList();
-        if (selected.Count == 0) { _vm.StatusText = "Nothing selected to clean"; return; }
+        if (selected.Count == 0) { WarnStatus("Select at least one junk category with detected files."); return; }
 
         try { await _vm.CleanJunkAsync(selected); }
         catch (Exception ex) { ShowToast($"Clean error: {ex.Message}", isError: true); }
@@ -759,7 +762,7 @@ public partial class MainWindow : Window
     private async void CleanEvidence_Click(object sender, RoutedEventArgs e)
     {
         var selected = _vm.TraceCategories.Where(c => c.IsSelected).ToList();
-        if (selected.Count == 0) { _vm.StatusText = "Nothing selected"; return; }
+        if (selected.Count == 0) { WarnStatus("Select at least one evidence category to clean."); return; }
         try
         {
             await _vm.CleanEvidenceAsync(selected);
@@ -775,7 +778,7 @@ public partial class MainWindow : Window
         var selected = _vm.EmptyFolders
             .Where(f => f.IsSelected && SafetyGuard.IsPathSafeToDelete(f.Path))
             .ToList();
-        if (selected.Count == 0) { _vm.StatusText = "Nothing selected"; return; }
+        if (selected.Count == 0) { WarnStatus("Select at least one empty folder to delete."); return; }
 
         await _vm.DeleteEmptyFoldersAsync(selected);
         ShowToast($"Deleted {selected.Count} empty folders");
@@ -786,7 +789,7 @@ public partial class MainWindow : Window
     private async void DeleteLargeFiles_Click(object sender, RoutedEventArgs e)
     {
         var selected = _vm.LargeFiles.Where(f => f.IsSelected).ToList();
-        if (selected.Count == 0) { _vm.StatusText = "Nothing selected"; return; }
+        if (selected.Count == 0) { WarnStatus("Select at least one large file to delete."); return; }
         _vm.IsBusy = true;
         _vm.StatusText = $"Deleting {selected.Count} files...";
         int deleted = 0, skipped = 0;
@@ -810,7 +813,7 @@ public partial class MainWindow : Window
     private void RemoveContextMenu_Click(object sender, RoutedEventArgs e)
     {
         var selected = _vm.ContextMenuEntries.Where(c => c.IsSelected).ToList();
-        if (selected.Count == 0) { _vm.StatusText = "Nothing selected"; return; }
+        if (selected.Count == 0) { WarnStatus("Select at least one context menu entry to remove."); return; }
         var removed = ContextMenuCleaner.RemoveOrphanedEntries(selected);
         foreach (var item in selected) _vm.ContextMenuEntries.Remove(item);
         ShowToast($"Removed {removed} context menu entries");
@@ -821,7 +824,7 @@ public partial class MainWindow : Window
     private void DisableService_Click(object sender, RoutedEventArgs e)
     {
         if (dgServices.SelectedItem is not ServiceEntry svc)
-        { _vm.StatusText = "Select a service"; return; }
+        { WarnStatus("Select a service first."); return; }
         if (!SafetyGuard.IsServiceSafeToModify(svc.Name))
         { ShowToast($"{svc.DisplayName} is a protected Windows service", isWarning: true); return; }
 
@@ -833,7 +836,7 @@ public partial class MainWindow : Window
     private void DeleteService_Click(object sender, RoutedEventArgs e)
     {
         if (dgServices.SelectedItem is not ServiceEntry svc)
-        { _vm.StatusText = "Select a service"; return; }
+        { WarnStatus("Select a service first."); return; }
         if (!SafetyGuard.IsServiceSafeToModify(svc.Name))
         { ShowToast($"{svc.DisplayName} is a protected Windows service", isWarning: true); return; }
 
@@ -847,7 +850,7 @@ public partial class MainWindow : Window
     private void DeleteTask_Click(object sender, RoutedEventArgs e)
     {
         if (dgTasks.SelectedItem is not ScheduledTaskInfo task)
-        { _vm.StatusText = "Select a task"; return; }
+        { WarnStatus("Select a scheduled task first."); return; }
         if (!SafetyGuard.IsTaskSafeToDelete(task.Path ?? task.Name))
         { ShowToast($"{task.Name} is a protected Windows task", isWarning: true); return; }
 
@@ -877,7 +880,7 @@ public partial class MainWindow : Window
     private void DeleteAutorun_Click(object sender, RoutedEventArgs e)
     {
         if (dgAutorun.SelectedItem is not AutorunEntry entry)
-        { _vm.StatusText = "Select an autorun entry"; return; }
+        { WarnStatus("Select an autorun entry first."); return; }
         if (!SafetyGuard.IsAutorunSafeToDelete(entry.Command))
         { ShowToast($"{entry.Name} is a protected system entry", isWarning: true); return; }
 
@@ -889,7 +892,7 @@ public partial class MainWindow : Window
     private async void RemoveWindowsApp_Click(object sender, RoutedEventArgs e)
     {
         if (dgWindowsApps.SelectedItem is not WindowsApp app)
-        { _vm.StatusText = "Select an app"; return; }
+        { WarnStatus("Select a Windows app first."); return; }
         if (app.IsNonRemovable)
         { ShowToast($"{app.DisplayName} is non-removable", isWarning: true); return; }
 
@@ -906,7 +909,7 @@ public partial class MainWindow : Window
     private void RemoveBrowserExt_Click(object sender, RoutedEventArgs e)
     {
         if (dgBrowserExt.SelectedItem is not BrowserExtension ext)
-        { _vm.StatusText = "Select an extension"; return; }
+        { WarnStatus("Select a browser extension first."); return; }
 
         var ok = BrowserExtensionScanner.RemoveExtension(ext);
         if (ok) { _vm.BrowserExtensions.Remove(ext); ShowToast($"Removed {ext.Name}. Restart {ext.Browser}."); }
@@ -957,7 +960,7 @@ public partial class MainWindow : Window
     {
         if (dgPrograms.SelectedItem is InstalledProgram p && !string.IsNullOrEmpty(p.InstallLocation))
             TryStart("explorer.exe", p.InstallLocation);
-        else _vm.StatusText = "No install location available";
+        else WarnStatus("No install location is available for this program.");
     }
 
     private void Ctx_OpenRegistry_Click(object sender, RoutedEventArgs e)
@@ -977,7 +980,7 @@ public partial class MainWindow : Window
             key?.SetValue("LastKey", fullPath);
             TryStart("regedit.exe");
         }
-        catch { _vm.StatusText = "Could not open Registry Editor"; }
+        catch { WarnStatus("Could not open Registry Editor."); }
     }
 
     private void Ctx_CopyName_Click(object sender, RoutedEventArgs e)
@@ -1021,7 +1024,7 @@ public partial class MainWindow : Window
     private void Ctx_ExcludePath_Click(object sender, RoutedEventArgs e)
     {
         var grid = FindParentGrid(sender);
-        if (grid?.SelectedItem == null) { _vm.StatusText = "Nothing selected"; return; }
+        if (grid?.SelectedItem == null) { WarnStatus("Select an item before excluding its path."); return; }
         var item = grid.SelectedItem;
         string? path = null;
         foreach (var propName in new[] { "Path", "DisplayPath", "Directory" })
@@ -1029,7 +1032,7 @@ public partial class MainWindow : Window
             var prop = item.GetType().GetProperty(propName);
             if (prop != null) { path = prop.GetValue(item)?.ToString(); if (!string.IsNullOrEmpty(path)) break; }
         }
-        if (string.IsNullOrEmpty(path)) { _vm.StatusText = "No path available for exclusion"; return; }
+        if (string.IsNullOrEmpty(path)) { WarnStatus("No path is available for exclusion."); return; }
         var settings = DeepPurge.Core.App.AppSettings.Current;
         if (!settings.ExcludedPaths.Contains(path, StringComparer.OrdinalIgnoreCase))
         {
@@ -1192,7 +1195,7 @@ public partial class MainWindow : Window
         var args = txtMonitorArgs.Text.Trim();
         if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(installer))
         {
-            _vm.StatusText = "Enter a program name and installer path first.";
+            WarnStatus("Enter a program name and installer path first.");
             return;
         }
         _vm.StatusText = "Tracing installer — do not close DeepPurge...";
@@ -1200,6 +1203,7 @@ public partial class MainWindow : Window
         if (delta != null)
         {
             DeepPurge.Core.Diagnostics.ActivityLog.Record("snapshot", $"{name}: +{delta.AddedFiles.Count} files, +{delta.AddedRegistryKeys.Count} keys", delta.TotalAddedBytes, delta.AddedFiles.Count);
+            ShowToast($"Trace captured for {name}");
         }
     }
 
@@ -1281,7 +1285,7 @@ public partial class MainWindow : Window
 
     private void RestoreDeletionManifest_Click(object sender, RoutedEventArgs e)
     {
-        if (_vm.SelectedDeletionManifest == null) { _vm.StatusText = "Select a deletion manifest first."; return; }
+        if (_vm.SelectedDeletionManifest == null) { WarnStatus("Select a deletion manifest first."); return; }
         if (MessageBox.Show(this,
                 $"Restore registry backups referenced by {_vm.SelectedDeletionManifest.Date:yyyy-MM-dd}?\n\n" +
                 "Files are not restored automatically; DeepPurge reports Recycle Bin recovery candidates.",

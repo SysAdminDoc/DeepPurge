@@ -99,6 +99,23 @@ public class WpfPolishContractTests
         Assert.Contains("DigitalSignatureInspector.Inspect", viewModelExtensions);
     }
 
+    [Fact]
+    public void Selection_and_validation_failures_use_warning_toasts()
+    {
+        var root = FindRepoRoot();
+        var codeBehind = File.ReadAllText(Path.Combine(root, "src", "DeepPurge.App", "Views", "MainWindow.xaml.cs"));
+
+        Assert.Contains("private void WarnStatus(string message)", codeBehind);
+        Assert.Contains("ShowToast(message, isWarning: true);", codeBehind);
+        Assert.Contains("WarnStatus(\"Select a program to uninstall.\")", codeBehind);
+        Assert.Contains("WarnStatus(\"Enter a program name and installer path first.\")", codeBehind);
+        Assert.Contains("WarnStatus(\"Select a deletion manifest first.\")", codeBehind);
+        Assert.Contains("ShowToast($\"Trace captured for {name}\");", codeBehind);
+        Assert.DoesNotContain("_vm.StatusText = \"Select", codeBehind);
+        Assert.DoesNotContain("_vm.StatusText = \"Nothing selected", codeBehind);
+        Assert.DoesNotContain("_vm.StatusText = \"Enter a program", codeBehind);
+    }
+
     private static string FindRepoRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
