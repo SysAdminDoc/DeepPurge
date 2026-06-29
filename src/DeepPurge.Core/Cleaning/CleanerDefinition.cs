@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using DeepPurge.Core.App;
 using DeepPurge.Core.Diagnostics;
 using DeepPurge.Core.Registry;
@@ -14,6 +15,15 @@ public class CleanerRule
     public List<string> DetectFile { get; set; } = new();
     public List<CleanerFileRule> Files { get; set; } = new();
     public List<string> Registry { get; set; } = new();
+}
+
+public class CleanerDefinitionDocument
+{
+    [JsonPropertyName("$schema")]
+    public string Schema { get; set; } = CleanerDefinitionRunner.SchemaId;
+    public int SchemaVersion { get; set; } = CleanerDefinitionRunner.CurrentSchemaVersion;
+    public string Provenance { get; set; } = "";
+    public List<CleanerRule> Rules { get; set; } = new();
 }
 
 public class CleanerFileRule
@@ -37,6 +47,9 @@ public record CleanerValidationIssue(
 public class CleanerValidationReport
 {
     public string FilePath { get; init; } = "";
+    public int SchemaVersion { get; init; } = CleanerDefinitionRunner.CurrentSchemaVersion;
+    public string SchemaId { get; init; } = CleanerDefinitionRunner.SchemaId;
+    public string Provenance { get; init; } = "";
     public List<CleanerRule> Rules { get; init; } = new();
     public List<CleanerValidationIssue> Issues { get; init; } = new();
     public CleanerRiskLevel RiskLevel { get; init; } = CleanerRiskLevel.Low;
@@ -47,6 +60,8 @@ public class CleanerValidationReport
     public bool IsValid => !Issues.Any(i => i.Severity == CleanerValidationSeverity.Error);
     public string FileName => string.IsNullOrWhiteSpace(FilePath) ? "(memory)" : Path.GetFileName(FilePath);
     public string Status => IsValid ? "Ready" : "Blocked";
+    public string SchemaDisplay => SchemaVersion <= 0 ? "legacy array" : $"v{SchemaVersion}";
+    public string ProvenanceDisplay => string.IsNullOrWhiteSpace(Provenance) ? "(none)" : Provenance;
     public string RiskLabel => RiskLevel.ToString();
     public int ErrorCount => Issues.Count(i => i.Severity == CleanerValidationSeverity.Error);
     public int WarningCount => Issues.Count(i => i.Severity == CleanerValidationSeverity.Warning);
@@ -59,6 +74,11 @@ public class CleanerValidationReport
 
 public static class CleanerDefinitionRunner
 {
+    public const int CurrentSchemaVersion = 1;
+    public const string SchemaId = "https://sysadmindoc.github.io/deeppurge/schemas/cleaner-definition.v1.json";
+
+    private const string SchemaResourceName = "DeepPurge.CleanerDefinition.Schema.v1.json";
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -74,6 +94,11 @@ public static class CleanerDefinitionRunner
     private static readonly HashSet<string> FileRuleFields = new(StringComparer.OrdinalIgnoreCase)
     {
         "Path", "Pattern", "Recurse", "RemoveSelf",
+    };
+
+    private static readonly HashSet<string> DocumentFields = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "$schema", "Schema", "SchemaVersion", "Rules", "Provenance",
     };
 
     public static List<CleanerRule> LoadAll()
@@ -134,9 +159,14 @@ public static class CleanerDefinitionRunner
         try
         {
             var json = File.ReadAllText(filePath);
-            var issues = InspectSchema(json);
-            var rules = JsonSerializer.Deserialize<List<CleanerRule>>(json, JsonOptions) ?? new();
-            return ValidateRules(rules, filePath, issues);
+            var document = ParseDocument(json);
+            return ValidateRules(
+                document.Rules,
+                filePath,
+                document.Issues,
+                document.SchemaVersion,
+                document.SchemaId,
+                document.Provenance);
         }
         catch (JsonException ex)
         {
@@ -178,7 +208,10 @@ public static class CleanerDefinitionRunner
     public static CleanerValidationReport ValidateRules(
         IEnumerable<CleanerRule> rules,
         string source = "(memory)",
-        List<CleanerValidationIssue>? initialIssues = null)
+        List<CleanerValidationIssue>? initialIssues = null,
+        int schemaVersion = CurrentSchemaVersion,
+        string? schemaId = null,
+        string provenance = "")
     {
         var ruleList = rules.ToList();
         var issues = initialIssues ?? new List<CleanerValidationIssue>();
@@ -235,6 +268,9 @@ public static class CleanerDefinitionRunner
         return new CleanerValidationReport
         {
             FilePath = source,
+            SchemaVersion = schemaVersion,
+            SchemaId = string.IsNullOrWhiteSpace(schemaId) ? SchemaId : schemaId,
+            Provenance = provenance,
             Rules = ruleList,
             Issues = issues,
             RiskLevel = risk,
@@ -243,6 +279,22 @@ public static class CleanerDefinitionRunner
             ExpandedTargets = expandedTargets.Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
             RegistryScopes = registryScopes.Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
         };
+    }
+
+    public static string GetSchemaJson()
+    {
+        try
+        {
+            using var stream = typeof(CleanerDefinitionRunner).Assembly.GetManifestResourceStream(SchemaResourceName);
+            if (stream is not null)
+            {
+                using var reader = new StreamReader(stream);
+                return reader.ReadToEnd();
+            }
+        }
+        catch (Exception ex) { Log.Warn($"Cleaner schema resource read failed: {ex.Message}"); }
+
+        return "{}";
     }
 
     public static List<CleanerRule> FilterApplicable(List<CleanerRule> rules)
@@ -371,7 +423,14 @@ public static class CleanerDefinitionRunner
         return new DeleteSummary(cleaned, skipped, freed, options.DryRun);
     }
 
-    private static List<CleanerValidationIssue> InspectSchema(string json)
+    private sealed record ParsedCleanerDocument(
+        List<CleanerRule> Rules,
+        int SchemaVersion,
+        string SchemaId,
+        string Provenance,
+        List<CleanerValidationIssue> Issues);
+
+    private static ParsedCleanerDocument ParseDocument(string json)
     {
         var issues = new List<CleanerValidationIssue>();
         using var doc = JsonDocument.Parse(json, new JsonDocumentOptions
@@ -380,14 +439,85 @@ public static class CleanerDefinitionRunner
             CommentHandling = JsonCommentHandling.Skip,
         });
 
-        if (doc.RootElement.ValueKind != JsonValueKind.Array)
+        if (doc.RootElement.ValueKind == JsonValueKind.Array)
         {
-            AddIssue(issues, CleanerValidationSeverity.Error, "(file)", "Schema", "Root value must be an array of cleaner rules.");
-            return issues;
+            InspectRuleArray(doc.RootElement, issues);
+            AddIssue(
+                issues,
+                CleanerValidationSeverity.Warning,
+                "(file)",
+                "SchemaVersion",
+                "Legacy root-array cleaner format is supported, but new cleaner files should declare SchemaVersion 1 with a Rules array.");
+            var legacyRules = JsonSerializer.Deserialize<List<CleanerRule>>(json, JsonOptions) ?? new();
+            return new ParsedCleanerDocument(legacyRules, 0, "", "", issues);
         }
 
+        if (doc.RootElement.ValueKind != JsonValueKind.Object)
+        {
+            AddIssue(issues, CleanerValidationSeverity.Error, "(file)", "Schema", "Root value must be a cleaner document object.");
+            return new ParsedCleanerDocument(new List<CleanerRule>(), CurrentSchemaVersion, SchemaId, "", issues);
+        }
+
+        foreach (var prop in doc.RootElement.EnumerateObject())
+        {
+            if (!DocumentFields.Contains(prop.Name))
+                AddIssue(issues, CleanerValidationSeverity.Error, "(file)", prop.Name, "Unknown cleaner document field.");
+        }
+
+        var schemaId = ReadOptionalString(doc.RootElement, "$schema") ??
+                       ReadOptionalString(doc.RootElement, "Schema") ??
+                       SchemaId;
+        var provenance = ReadOptionalString(doc.RootElement, "Provenance") ?? "";
+        var schemaVersion = CurrentSchemaVersion;
+
+        if (!doc.RootElement.TryGetProperty("SchemaVersion", out var versionElement))
+        {
+            AddIssue(issues, CleanerValidationSeverity.Error, "(file)", "SchemaVersion", "SchemaVersion is required.");
+        }
+        else if (versionElement.ValueKind != JsonValueKind.Number || !versionElement.TryGetInt32(out schemaVersion))
+        {
+            AddIssue(issues, CleanerValidationSeverity.Error, "(file)", "SchemaVersion", "SchemaVersion must be an integer.");
+        }
+        else if (schemaVersion > CurrentSchemaVersion)
+        {
+            AddIssue(
+                issues,
+                CleanerValidationSeverity.Error,
+                "(file)",
+                "SchemaVersion",
+                $"Unsupported future schema version {schemaVersion}; this DeepPurge build supports version {CurrentSchemaVersion}.");
+        }
+        else if (schemaVersion < CurrentSchemaVersion)
+        {
+            AddIssue(
+                issues,
+                CleanerValidationSeverity.Warning,
+                "(file)",
+                "SchemaVersion",
+                $"Older schema version {schemaVersion}; validate and migrate to version {CurrentSchemaVersion}.");
+        }
+
+        if (!doc.RootElement.TryGetProperty("Rules", out var rulesElement))
+        {
+            AddIssue(issues, CleanerValidationSeverity.Error, "(file)", "Rules", "Rules array is required.");
+            return new ParsedCleanerDocument(new List<CleanerRule>(), schemaVersion, schemaId, provenance, issues);
+        }
+
+        if (rulesElement.ValueKind != JsonValueKind.Array)
+        {
+            AddIssue(issues, CleanerValidationSeverity.Error, "(file)", "Rules", "Rules must be an array.");
+            return new ParsedCleanerDocument(new List<CleanerRule>(), schemaVersion, schemaId, provenance, issues);
+        }
+
+        InspectRuleArray(rulesElement, issues);
+        var rules = JsonSerializer.Deserialize<List<CleanerRule>>(rulesElement.GetRawText(), JsonOptions) ?? new();
+        return new ParsedCleanerDocument(rules, schemaVersion, schemaId, provenance, issues);
+    }
+
+    private static void InspectRuleArray(JsonElement rulesElement, List<CleanerValidationIssue> issues)
+    {
         int index = 0;
-        foreach (var ruleElement in doc.RootElement.EnumerateArray())
+        foreach (var ruleElement in rulesElement.EnumerateArray())
         {
             var ruleName = JsonRuleName(ruleElement, index);
             if (ruleElement.ValueKind != JsonValueKind.Object)
@@ -410,8 +540,17 @@ public static class CleanerDefinitionRunner
 
             index++;
         }
+    }
 
-        return issues;
+    private static string? ReadOptionalString(JsonElement root, string propertyName)
+    {
+        foreach (var prop in root.EnumerateObject())
+        {
+            if (prop.Name.Equals(propertyName, StringComparison.OrdinalIgnoreCase) &&
+                prop.Value.ValueKind == JsonValueKind.String)
+                return prop.Value.GetString();
+        }
+        return null;
     }
 
     private static void ValidateRulePropertyShape(
@@ -665,7 +804,7 @@ public static class CleanerDefinitionRunner
             Directory.CreateDirectory(dir);
             var target = Path.Combine(dir, "bundled-modern-apps.cleaner.json");
             if (File.Exists(target)) return;
-            File.WriteAllText(target, BundledCleaners.ModernApps, System.Text.Encoding.UTF8);
+            File.WriteAllText(target, BundledCleaners.Wrap(BundledCleaners.ModernApps, "DeepPurge bundled modern-app cleaners"), System.Text.Encoding.UTF8);
         }
         catch (Exception ex) { Log.Warn($"Bundled cleaner extract: {ex.Message}"); }
     }
@@ -693,6 +832,16 @@ public static class CleanerDefinitionRunner
 
 internal static class BundledCleaners
 {
+    internal static string Wrap(string rulesJson, string provenance)
+        => $$"""
+{
+  "$schema": "{{CleanerDefinitionRunner.SchemaId}}",
+  "SchemaVersion": {{CleanerDefinitionRunner.CurrentSchemaVersion}},
+  "Provenance": "{{provenance.Replace("\"", "\\\"")}}",
+  "Rules": {{rulesJson}}
+}
+""";
+
     internal const string ModernApps = """
 [
   {

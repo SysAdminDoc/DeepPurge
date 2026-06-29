@@ -32,6 +32,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Data\leftover-signatures.json" />
+    <EmbeddedResource Include="Cleaning\cleaner-definition.schema.json" LogicalName="DeepPurge.CleanerDefinition.Schema.v1.json" />
   </ItemGroup>
 
   <ItemGroup>

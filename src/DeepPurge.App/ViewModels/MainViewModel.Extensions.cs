@@ -279,9 +279,13 @@ public partial class MainViewModel
 
                 var blocked = reports.Count(r => !r.IsValid);
                 var ready = reports.Count - blocked;
+                var schemaWarnings = reports.Sum(r => r.Issues.Count(i =>
+                    i.Field.Equals("SchemaVersion", StringComparison.OrdinalIgnoreCase) ||
+                    i.Field.Equals("Schema", StringComparison.OrdinalIgnoreCase)));
                 CleanerValidationSummary = reports.Count == 0
                     ? "Custom JSON cleaners: none found"
-                    : $"Custom JSON cleaners: {ready} ready, {blocked} blocked";
+                    : $"Custom JSON cleaners: {ready} ready, {blocked} blocked" +
+                      (schemaWarnings > 0 ? $", {schemaWarnings} schema warning(s)" : "");
 
                 StatusText = $"{Winapp2Entries.Count} applicable / {entries.Count} winapp2 cleaners; {CleanerValidationSummary}";
             });

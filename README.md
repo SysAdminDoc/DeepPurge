@@ -52,7 +52,7 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 
 ### Community Cleaner Definitions
 - **winapp2.ini integration** - Parses the community-maintained [winapp2.ini](https://github.com/MoscaDotTo/Winapp2) database (2,500+ third-party cleaners). Auto-downloads on first run with commit/date/SHA256 provenance and a previous-file backup, honours `Detect=` / `DetectFile=` gating so only applicable rules fire, and gates every path through SafetyGuard.
-- **Validated custom JSON cleaners** - Define `*.cleaner.json` rules with schema linting, risk labels, expanded target previews, registry scope checks, and estimates. Use `deeppurgecli cleaners validate <file>` before `list|preview|run [--dry-run]`.
+- **Validated custom JSON cleaners** - Define versioned `*.cleaner.json` documents with schema linting, risk labels, provenance, expanded target previews, registry scope checks, and estimates. Use `deeppurgecli cleaners schema` and `deeppurgecli cleaners validate <file>` before `list|preview|run [--dry-run]`.
 
 ### Duplicate Finder
 - **Three-stage hash** - Group by exact byte-size → XXH3 first-MB head-hash → XXH3 full-file for remaining collisions. Skips reparse points / junctions to avoid infinite loops. *(algorithm from Czkawka / fdupes)*
@@ -145,7 +145,7 @@ DeepPurgeCli doctor                         # Environment self-test (16 checks, 
 dotnet test tests/DeepPurge.Tests/DeepPurge.Tests.csproj
 ```
 
-The current suite has 308 tests covering parser routing, shared external-process execution, package-manager command builders and source diagnostics, release validation, privacy retention, SafetyGuard block/allow lists, schedule sanitisation, recovery manifests, and settings import/export contracts.
+The current suite has 312 tests covering parser routing, shared external-process execution, package-manager command builders and source diagnostics, cleaner schema validation, release validation, privacy retention, SafetyGuard block/allow lists, schedule sanitisation, recovery manifests, and settings import/export contracts.
 
 ## Packaging
 

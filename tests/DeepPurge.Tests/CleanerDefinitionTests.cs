@@ -83,6 +83,96 @@ public class CleanerDefinitionTests
     }
 
     [Fact]
+    public void ValidateFile_accepts_versioned_document_with_provenance()
+    {
+        var file = WriteCleanerJson("""
+{
+  "$schema": "https://sysadmindoc.github.io/deeppurge/schemas/cleaner-definition.v1.json",
+  "SchemaVersion": 1,
+  "Provenance": "unit-test",
+  "Rules": [
+    {
+      "Name": "Versioned",
+      "Files": [
+        { "Path": "%TEMP%\\DeepPurgeCleanerValidation", "Pattern": "*.tmp", "Recurse": false, "RemoveSelf": false }
+      ]
+    }
+  ]
+}
+""");
+
+        try
+        {
+            var report = CleanerDefinitionRunner.ValidateFile(file);
+
+            Assert.True(report.IsValid);
+            Assert.Equal(1, report.SchemaVersion);
+            Assert.Equal("unit-test", report.Provenance);
+            Assert.Equal("v1", report.SchemaDisplay);
+        }
+        finally { TryDelete(file); }
+    }
+
+    [Fact]
+    public void ValidateFile_warns_for_legacy_root_array()
+    {
+        var file = WriteCleanerJson("""
+[
+  { "Name": "Legacy", "Files": [] }
+]
+""");
+
+        try
+        {
+            var report = CleanerDefinitionRunner.ValidateFile(file);
+
+            Assert.True(report.IsValid);
+            Assert.Equal(0, report.SchemaVersion);
+            Assert.Equal("legacy array", report.SchemaDisplay);
+            Assert.Contains(report.Issues, i =>
+                i.Severity == CleanerValidationSeverity.Warning &&
+                i.Field == "SchemaVersion");
+        }
+        finally { TryDelete(file); }
+    }
+
+    [Fact]
+    public void ValidateFile_blocks_unknown_future_schema_version()
+    {
+        var file = WriteCleanerJson("""
+{
+  "SchemaVersion": 99,
+  "Rules": [
+    { "Name": "Future", "Files": [] }
+  ]
+}
+""");
+
+        try
+        {
+            var report = CleanerDefinitionRunner.ValidateFile(file);
+
+            Assert.False(report.IsValid);
+            Assert.Equal(CleanerRiskLevel.Blocked, report.RiskLevel);
+            Assert.Contains(report.Issues, i =>
+                i.Severity == CleanerValidationSeverity.Error &&
+                i.Field == "SchemaVersion" &&
+                i.Message.Contains("Unsupported future schema version"));
+        }
+        finally { TryDelete(file); }
+    }
+
+    [Fact]
+    public void Embedded_schema_asset_describes_current_document_version()
+    {
+        var schema = CleanerDefinitionRunner.GetSchemaJson();
+
+        Assert.Contains("\"SchemaVersion\"", schema);
+        Assert.Contains("\"const\": 1", schema);
+        Assert.Contains(CleanerDefinitionRunner.SchemaId, schema);
+    }
+
+    [Fact]
     public void ValidateFile_labels_high_risk_registry_and_remove_self_rules()
     {
         var file = WriteCleanerJson("""

@@ -640,6 +640,23 @@ if ($app) {{
     private static int CmdCleaners(ParsedArgs a)
     {
         var sub = a.Positional.Count > 0 ? a.Positional[0].ToLowerInvariant() : "list";
+        if (sub == "schema")
+        {
+            var schema = CleanerDefinitionRunner.GetSchemaJson();
+            var exportPath = ValidateExportPath(a.GetOption("export"));
+            if (a.GetOption("export") != null && exportPath == null) return 2;
+            if (exportPath != null)
+            {
+                File.WriteAllText(exportPath, schema, System.Text.Encoding.UTF8);
+                Console.WriteLine($"Cleaner schema written to {exportPath}");
+            }
+            else
+            {
+                Console.WriteLine(schema);
+            }
+            return 0;
+        }
+
         if (sub == "validate")
         {
             var path = a.Positional.Count > 1 ? a.Positional[1] : null;
@@ -695,7 +712,7 @@ if ($app) {{
                 return 0;
 
             default:
-                return Fail("usage: deeppurgecli cleaners [list|preview|run [--dry-run]|validate <file.cleaner.json>]");
+                return Fail("usage: deeppurgecli cleaners [list|preview|run [--dry-run]|validate <file.cleaner.json>|schema [--export file.json]]");
         }
     }
 
@@ -705,6 +722,8 @@ if ($app) {{
     private static void PrintCleanerValidationReport(CleanerValidationReport report)
     {
         Console.WriteLine($"File:            {report.FilePath}");
+        Console.WriteLine($"Schema:          {report.SchemaDisplay} ({report.SchemaId})");
+        Console.WriteLine($"Provenance:      {report.ProvenanceDisplay}");
         Console.WriteLine($"Status:          {report.Status}");
         Console.WriteLine($"Risk:            {report.RiskLabel}");
         Console.WriteLine($"Rules:           {report.Rules.Count}");
@@ -1094,6 +1113,7 @@ if ($app) {{
         Console.WriteLine("  orphans --remnants                       Include BAM execution evidence in orphan scan");
         Console.WriteLine("  cleaners list|preview|run [--dry-run]    Manage validated custom JSON cleaner definitions");
         Console.WriteLine("  cleaners validate <file.cleaner.json>     Lint schema, risk, targets, and estimates");
+        Console.WriteLine("  cleaners schema [--export file.json]      Print or export the cleaner JSON schema");
         Console.WriteLine("  register-shell                           Add 'Uninstall with DeepPurge' to .exe right-click menu");
         Console.WriteLine("  unregister-shell                         Remove the shell context menu entry");
         Console.WriteLine("  settings [show|export <path>|import <path>|prune [--dry-run]]  View settings or prune old privacy logs");
