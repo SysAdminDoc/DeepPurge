@@ -177,7 +177,7 @@ public partial class MainWindow : Window
         dgPrograms, panelForced, dgWindowsApps, dgJunk, dgEvidence,
         dgEmptyFolders, panelDisk, dgAutorun, dgBrowserExt, dgContextMenu,
         dgServices, dgTasks, dgRestore, panelLeftovers,
-        panelHunter, panelOrphans, panelBackups,
+        panelHunter, panelOrphans, panelDeletionRecovery, panelBackups,
         // v0.9.0 system-tools panels
         dgDrivers, dgStartupImpact, dgShortcuts, dgDuplicates,
         panelWinapp2, panelRepair, panelSchedule, panelInstallMonitor, dgHistory, panelAbout,
@@ -256,6 +256,16 @@ public partial class MainWindow : Window
             case "Restore":
                 dgRestore.Visibility = Visibility.Visible; txtPanelTitle.Text = "System Restore Points";
                 AppendToolbarButton("Create New", CreateRestorePoint_Click, "AccentButton");
+                break;
+            case "DeletionRecovery":
+                panelDeletionRecovery.Visibility = Visibility.Visible; txtPanelTitle.Text = "Deletion Recovery";
+                AppendToolbarButton("Refresh", RefreshDeletionManifests_Click, "AccentButton");
+                AppendToolbarButton("Preview", PreviewDeletionManifest_Click);
+                AppendToolbarButton("Dry-run Restore", DryRunDeletionManifest_Click, "AccentButton");
+                AppendToolbarButton("Restore Selected", RestoreDeletionManifest_Click, "DangerButton");
+                AppendToolbarButton("Open Logs", OpenDeletionManifestFolder_Click);
+                AppendToolbarButton("Open Backups", OpenDeletionBackupFolder_Click);
+                MaybeAutoLoad("DeletionRecovery", () => _vm.LoadDeletionManifestsCommand.Execute(null));
                 break;
             case "Hunter":
                 panelHunter.Visibility = Visibility.Visible; txtPanelTitle.Text = "Registry Hunter";
@@ -1077,6 +1087,32 @@ public partial class MainWindow : Window
     }
 
     private void OpenBackupFolder_Click(object sender, RoutedEventArgs e) => _vm.OpenBackupFolder();
+
+    private void RefreshDeletionManifests_Click(object sender, RoutedEventArgs e)
+        => _vm.LoadDeletionManifestsCommand.Execute(null);
+
+    private void PreviewDeletionManifest_Click(object sender, RoutedEventArgs e)
+        => _vm.PreviewSelectedDeletionManifestCommand.Execute(null);
+
+    private void DryRunDeletionManifest_Click(object sender, RoutedEventArgs e)
+        => _vm.DryRunRestoreDeletionManifestCommand.Execute(null);
+
+    private void RestoreDeletionManifest_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm.SelectedDeletionManifest == null) { _vm.StatusText = "Select a deletion manifest first."; return; }
+        if (MessageBox.Show(this,
+                $"Restore registry backups referenced by {_vm.SelectedDeletionManifest.Date:yyyy-MM-dd}?\n\n" +
+                "Files are not restored automatically; DeepPurge reports Recycle Bin recovery candidates.",
+                "Confirm deletion manifest restore", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
+            return;
+        _vm.RestoreSelectedDeletionManifestCommand.Execute(null);
+    }
+
+    private void OpenDeletionManifestFolder_Click(object sender, RoutedEventArgs e)
+        => _vm.OpenDeletionManifestFolderCommand.Execute(null);
+
+    private void OpenDeletionBackupFolder_Click(object sender, RoutedEventArgs e)
+        => _vm.OpenDeletionBackupFolderCommand.Execute(null);
 
     private void OrphanScan_Click(object sender, RoutedEventArgs e)
         => _vm.ScanOrphansCommand.Execute(null);
