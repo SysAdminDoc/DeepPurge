@@ -73,6 +73,7 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 ### Shell Integration
 - **Context menu** - `deeppurgecli register-shell` adds "Uninstall with DeepPurge" to the right-click menu for `.exe` files. `unregister-shell` removes it. The GUI accepts `--target <path>` to pre-populate the forced-uninstall panel.
 - **Expert / Safe mode** - Toggle visibility of advanced operations (secure delete, advanced scan, registry hunter, service deletion). Persists between sessions via `settings.json`.
+- **Versioned settings import/export** - Move excluded paths, cookie whitelist, program notes, privacy retention, and safety defaults between installed/portable deployments with schema metadata, redacted previews, validation errors, and rollback backups.
 
 ### Safety
 - **System Restore Points** - View, create, and manage restore points
@@ -135,6 +136,7 @@ DeepPurgeCli schedule add --name Nightly --freq weekly --time 03:00 --day Mon --
 DeepPurgeCli schedule list
 DeepPurgeCli schedule remove --name Nightly
 DeepPurgeCli settings prune --dry-run       # Preview expired logs/activity/manifests to remove
+DeepPurgeCli settings import settings.json --preview  # Validate an import without changing local settings
 DeepPurgeCli check-update
 DeepPurgeCli doctor                         # Environment self-test (16 checks, including package sources)
 ```
@@ -145,7 +147,7 @@ DeepPurgeCli doctor                         # Environment self-test (16 checks, 
 dotnet test tests/DeepPurge.Tests/DeepPurge.Tests.csproj
 ```
 
-The current suite has 312 tests covering parser routing, shared external-process execution, package-manager command builders and source diagnostics, cleaner schema validation, release validation, privacy retention, SafetyGuard block/allow lists, schedule sanitisation, recovery manifests, and settings import/export contracts.
+The current suite has 317 tests covering parser routing, shared external-process execution, package-manager command builders and source diagnostics, cleaner schema validation, release validation, privacy retention, SafetyGuard block/allow lists, schedule sanitisation, recovery manifests, and versioned settings import/export contracts.
 
 ## Packaging
 

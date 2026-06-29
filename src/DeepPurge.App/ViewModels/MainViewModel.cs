@@ -205,8 +205,8 @@ public partial class MainViewModel : ObservableObject
         try
         {
             if (!SaveSettingsEditor()) return false;
-            AppSettings.Current.ExportTo(path);
-            StatusText = $"Settings exported to {path}";
+            var preview = AppSettings.Current.ExportTo(path);
+            StatusText = $"Settings exported to {path} ({preview.ToRedactedSummary()})";
             return true;
         }
         catch (Exception ex)
@@ -220,21 +220,19 @@ public partial class MainViewModel : ObservableObject
     {
         try
         {
-            var imported = AppSettings.ImportFrom(path);
-            var current = AppSettings.Current;
-            current.ExpertMode = imported.ExpertMode;
-            current.MinAgeDaysJunk = imported.MinAgeDaysJunk;
-            current.MinAgeDaysEvidence = imported.MinAgeDaysEvidence;
-            current.RetentionDaysLogs = imported.RetentionDaysLogs;
-            current.RetentionDaysActivity = imported.RetentionDaysActivity;
-            current.RetentionDaysDeletionManifests = imported.RetentionDaysDeletionManifests;
-            current.ScrubSensitivePathsInReports = imported.ScrubSensitivePathsInReports;
-            current.ExcludedPaths = imported.ExcludedPaths ?? new();
-            current.CookieWhitelist = imported.CookieWhitelist ?? new();
-            current.ProgramNotes = imported.ProgramNotes ?? new();
-            current.Save();
+            var plan = AppSettings.PreviewImportFromFile(path);
+            if (!plan.IsValid)
+            {
+                StatusText = $"Settings import failed: {plan.ErrorSummary}";
+                return false;
+            }
+
+            var outcome = AppSettings.ImportAndApply(path);
             ReloadSettingsEditor(showStatus: false);
-            StatusText = $"Settings imported from {path}";
+            var backup = string.IsNullOrWhiteSpace(outcome.BackupPath)
+                ? "no previous settings file"
+                : $"rollback backup {Path.GetFileName(outcome.BackupPath)}";
+            StatusText = $"Settings imported from {path} ({outcome.Preview.ToRedactedSummary()}; {backup})";
             return true;
         }
         catch (Exception ex)
