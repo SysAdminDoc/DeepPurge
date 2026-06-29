@@ -585,11 +585,16 @@ public partial class MainViewModel
         try
         {
             var entries = DeletionManifest.LoadManifest(selected.Date);
+            var redact = AppSettings.Current.ScrubSensitivePathsInReports;
             _dispatcher.Invoke(() =>
             {
                 DeletionManifestEntries.Clear();
                 foreach (var entry in entries.OrderByDescending(e => e.TimestampUtc))
-                    DeletionManifestEntries.Add(entry);
+                {
+                    DeletionManifestEntries.Add(redact
+                        ? entry with { Path = PrivacyRedactor.RedactPaths(entry.Path) }
+                        : entry);
+                }
 
                 DeletionRestoreDetails.Clear();
                 SetDeletionRestoreCounts(new RestoreResult(0, 0, 0, new()));
@@ -631,7 +636,9 @@ public partial class MainViewModel
                 SetDeletionRestoreCounts(result);
                 DeletionRestoreDetails.Clear();
                 foreach (var detail in result.Details)
-                    DeletionRestoreDetails.Add(new DeletionRestoreDetail(detail));
+                    DeletionRestoreDetails.Add(new DeletionRestoreDetail(AppSettings.Current.ScrubSensitivePathsInReports
+                        ? PrivacyRedactor.RedactPaths(detail)
+                        : detail));
 
                 DeletionRestoreSummary = $"{(dryRun ? "Dry-run" : "Restore")} result: " +
                                          $"{result.RegistryRestored} registry, " +
@@ -693,7 +700,10 @@ public partial class MainViewModel
     {
         try
         {
-            var entries = ActivityLog.LoadRecent(200);
+            var redact = AppSettings.Current.ScrubSensitivePathsInReports;
+            var entries = ActivityLog.LoadRecent(200)
+                .Select(e => redact ? e with { Summary = PrivacyRedactor.RedactPaths(e.Summary) } : e)
+                .ToList();
             var daily = ActivityLog.GetCleanHistory(90);
             _dispatcher.Invoke(() =>
             {

@@ -134,6 +134,7 @@ DeepPurgeCli winapp2 .\winapp2.ini --dry-run   # Run community cleaner database
 DeepPurgeCli schedule add --name Nightly --freq weekly --time 03:00 --day Mon --args "clean junk evidence"
 DeepPurgeCli schedule list
 DeepPurgeCli schedule remove --name Nightly
+DeepPurgeCli settings prune --dry-run       # Preview expired logs/activity/manifests to remove
 DeepPurgeCli check-update
 DeepPurgeCli doctor                         # Environment self-test (14 checks)
 ```

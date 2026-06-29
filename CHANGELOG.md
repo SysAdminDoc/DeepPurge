@@ -8,6 +8,9 @@ All notable changes to DeepPurge will be documented in this file.
 - **Source-native package-manager uninstall** - winget, Scoop, and Chocolatey managed rows now uninstall through strict source-specific command builders before falling back to registry uninstall strings. CLI `uninstall --dry-run` previews the exact native command, package-only synthetic rows can be removed without a registry uninstaller, and injection tests cover unsafe package IDs.
 - **Release readiness validator** - `Build.ps1` now emits `SHA256SUMS.txt` and can validate version alignment, package release URLs, asset names, manifest hashes, and placeholder removal before publishing winget/Scoop manifests.
 
+### Added (P2 privacy)
+- **Retention and scrub controls** - Settings / Privacy now configures log, activity, and deletion-manifest retention windows plus optional local-path redaction for reports. The GUI can prune expired data, and CLI `settings prune [--dry-run]` reports files, bytes, and activity entries affected.
+
 ### Added (P1 safety)
 - **GUI deletion recovery panel** - the WPF Safety section now lists deletion manifests, previews valid JSONL entries, runs dry-run restore checks, shows registry/recoverable/unrecoverable counts, and opens the manifest/backup folders.
 - **winapp2 update provenance** - `update-winapp2` and the GUI Community Cleaners panel now show local and remote commit/date/hash facts; successful updates save SHA256/byte metadata and back up the previous `winapp2.ini` before replacement.

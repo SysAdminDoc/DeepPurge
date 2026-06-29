@@ -1790,6 +1790,46 @@
                                 </Grid>
                             </GroupBox>
 
+                            <GroupBox Header="Logs and recovery data" Margin="0,0,0,18">
+                                <StackPanel>
+                                    <TextBlock Text="Retention values use days. Set a value to 0 to keep that data until you prune it manually."
+                                               Foreground="{DynamicResource SubtextBrush}" TextWrapping="Wrap" FontSize="12.5"
+                                               Margin="0,0,0,12"/>
+                                    <Grid Margin="0,0,0,12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="14"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="14"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="Log retention" FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
+                                            <TextBox Text="{Binding SettingsRetentionLogsText, UpdateSourceTrigger=PropertyChanged}"
+                                                     AutomationProperties.Name="Log retention in days"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2">
+                                            <TextBlock Text="Activity retention" FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
+                                            <TextBox Text="{Binding SettingsRetentionActivityText, UpdateSourceTrigger=PropertyChanged}"
+                                                     AutomationProperties.Name="Activity retention in days"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="4">
+                                            <TextBlock Text="Manifest retention" FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
+                                            <TextBox Text="{Binding SettingsRetentionDeletionManifestsText, UpdateSourceTrigger=PropertyChanged}"
+                                                     AutomationProperties.Name="Deletion manifest retention in days"/>
+                                        </StackPanel>
+                                    </Grid>
+                                    <CheckBox IsChecked="{Binding SettingsScrubSensitivePaths}" HorizontalAlignment="Left"
+                                              AutomationProperties.Name="Scrub local paths in reports">
+                                        <TextBlock Text="Scrub local paths in history and manifest previews. Rollback manifests stay intact for recovery."
+                                                   TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}"/>
+                                    </CheckBox>
+                                </StackPanel>
+                            </GroupBox>
+
                             <GroupBox Header="Cookie preservation" Margin="0,0,0,18">
                                 <StackPanel>
                                     <TextBlock Text="One domain per line or comma-separated. When any domain is listed, browser cookie databases are preserved during Evidence cleaning."

@@ -32,8 +32,12 @@ public class WpfPolishContractTests
         Assert.Contains("x:Name=\"panelSettings\"", xaml);
         Assert.Contains("SettingsCookieWhitelistText", xaml);
         Assert.Contains("SettingsExcludedPathsText", xaml);
+        Assert.Contains("SettingsRetentionLogsText", xaml);
+        Assert.Contains("SettingsScrubSensitivePaths", xaml);
         Assert.Contains("AppendToolbarButton(\"Save Settings\"", codeBehind);
+        Assert.Contains("AppendToolbarButton(\"Prune Old Data\"", codeBehind);
         Assert.Contains("SaveSettingsEditor", viewModel);
+        Assert.Contains("PrunePrivacyData", viewModel);
         Assert.Contains("ImportSettingsFrom", viewModel);
         Assert.Contains("ExportSettingsTo", viewModel);
     }

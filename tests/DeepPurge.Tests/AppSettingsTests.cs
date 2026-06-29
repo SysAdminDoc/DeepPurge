@@ -20,6 +20,17 @@ public class AppSettingsTests
     }
 
     [Fact]
+    public void Privacy_retention_defaults_are_initialized()
+    {
+        var settings = new AppSettings();
+
+        Assert.Equal(30, settings.RetentionDaysLogs);
+        Assert.Equal(90, settings.RetentionDaysActivity);
+        Assert.Equal(90, settings.RetentionDaysDeletionManifests);
+        Assert.False(settings.ScrubSensitivePathsInReports);
+    }
+
+    [Fact]
     public void Save_does_not_throw()
     {
         var ex = Record.Exception(() => AppSettings.Current.Save());

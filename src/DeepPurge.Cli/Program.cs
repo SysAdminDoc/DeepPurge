@@ -754,13 +754,36 @@ if ($app) {{
                 Console.WriteLine($"ExpertMode:         {s.ExpertMode}");
                 Console.WriteLine($"MinAgeDaysJunk:     {s.MinAgeDaysJunk}");
                 Console.WriteLine($"MinAgeDaysEvidence: {s.MinAgeDaysEvidence}");
+                Console.WriteLine($"RetentionDaysLogs:  {s.RetentionDaysLogs}");
+                Console.WriteLine($"RetentionDaysActivity: {s.RetentionDaysActivity}");
+                Console.WriteLine($"RetentionDaysDeletionManifests: {s.RetentionDaysDeletionManifests}");
+                Console.WriteLine($"ScrubSensitivePathsInReports: {s.ScrubSensitivePathsInReports}");
                 Console.WriteLine($"ExcludedPaths:      {(s.ExcludedPaths.Count > 0 ? string.Join("; ", s.ExcludedPaths) : "(none)")}");
                 Console.WriteLine($"CookieWhitelist:    {(s.CookieWhitelist.Count > 0 ? string.Join(", ", s.CookieWhitelist) : "(none — cookies will be cleaned)")}");
                 Console.WriteLine($"ProgramNotes:       {(s.ProgramNotes.Count > 0 ? $"{s.ProgramNotes.Count} program(s)" : "(none)")}");
                 return 0;
             }
+            case "prune":
+            {
+                var dryRun = a.HasFlag("dry-run");
+                var result = PrivacyMaintenance.Apply(AppSettings.Current, dryRun);
+                if (a.HasFlag("json"))
+                {
+                    WriteJson(result);
+                    return 0;
+                }
+
+                Console.WriteLine(dryRun ? "Privacy retention preview:" : "Privacy retention complete:");
+                Console.WriteLine($"  Files deleted:       {result.FilesDeleted}");
+                Console.WriteLine($"  Bytes deleted:       {FormatBytes(result.BytesDeleted)}");
+                Console.WriteLine($"  Activity removed:    {result.ActivityEntriesDeleted}");
+                Console.WriteLine($"  Files scrubbed:      {result.FilesScrubbed}");
+                foreach (var detail in result.Details)
+                    Console.WriteLine($"  - {detail}");
+                return 0;
+            }
             default:
-                return Fail("usage: deeppurgecli settings [show|export <path>|import <path>]");
+                return Fail("usage: deeppurgecli settings [show|export <path>|import <path>|prune [--dry-run]]");
         }
     }
 
@@ -947,13 +970,20 @@ if ($app) {{
 
         if (a.HasFlag("list"))
         {
+            var redact = AppSettings.Current.ScrubSensitivePathsInReports;
             foreach (var e in entries)
-                Console.WriteLine($"  [{e.Type,-9}] {e.Operation,-15} {FormatBytes(e.SizeBytes),10}  {e.Path}");
+            {
+                var path = redact ? PrivacyRedactor.RedactPaths(e.Path) : e.Path;
+                Console.WriteLine($"  [{e.Type,-9}] {e.Operation,-15} {FormatBytes(e.SizeBytes),10}  {path}");
+            }
             return 0;
         }
 
         var result = DpDiag.DeletionManifest.RestoreFromManifest(date, dryRun);
-        foreach (var d in result.Details) Console.WriteLine($"  {d}");
+        foreach (var d in result.Details)
+        {
+            Console.WriteLine($"  {(AppSettings.Current.ScrubSensitivePathsInReports ? PrivacyRedactor.RedactPaths(d) : d)}");
+        }
         Console.WriteLine();
         Console.WriteLine($"Registry restored: {result.RegistryRestored}");
         Console.WriteLine($"Files to check Recycle Bin: {result.FilesRecoverable}");
@@ -1066,7 +1096,7 @@ if ($app) {{
         Console.WriteLine("  cleaners validate <file.cleaner.json>     Lint schema, risk, targets, and estimates");
         Console.WriteLine("  register-shell                           Add 'Uninstall with DeepPurge' to .exe right-click menu");
         Console.WriteLine("  unregister-shell                         Remove the shell context menu entry");
-        Console.WriteLine("  settings [show|export <path>|import <path>]  View or transfer settings");
+        Console.WriteLine("  settings [show|export <path>|import <path>|prune [--dry-run]]  View settings or prune old privacy logs");
         Console.WriteLine("  detection-script --program \"Name\" [--export file.ps1]   Generate Intune/SCCM detection script");
         Console.WriteLine("  update-winapp2 [--check-only]            Download latest winapp2.ini from GitHub");
         Console.WriteLine("  restore [--date YYYY-MM-DD] [--list] [--dry-run]  List or restore from deletion manifests");
