@@ -21,6 +21,34 @@ public class WpfPolishContractTests
     }
 
     [Fact]
+    public void Settings_privacy_panel_is_reachable_and_saveable()
+    {
+        var root = FindRepoRoot();
+        var xaml = File.ReadAllText(Path.Combine(root, "src", "DeepPurge.App", "Views", "MainWindow.xaml"));
+        var codeBehind = File.ReadAllText(Path.Combine(root, "src", "DeepPurge.App", "Views", "MainWindow.xaml.cs"));
+        var viewModel = File.ReadAllText(Path.Combine(root, "src", "DeepPurge.App", "ViewModels", "MainViewModel.cs"));
+
+        Assert.Contains("Tag=\"Settings\"", xaml);
+        Assert.Contains("x:Name=\"panelSettings\"", xaml);
+        Assert.Contains("SettingsCookieWhitelistText", xaml);
+        Assert.Contains("SettingsExcludedPathsText", xaml);
+        Assert.Contains("AppendToolbarButton(\"Save Settings\"", codeBehind);
+        Assert.Contains("SaveSettingsEditor", viewModel);
+        Assert.Contains("ImportSettingsFrom", viewModel);
+        Assert.Contains("ExportSettingsTo", viewModel);
+    }
+
+    [Fact]
+    public void Checkbox_template_preserves_label_content()
+    {
+        var root = FindRepoRoot();
+        var baseStyles = File.ReadAllText(Path.Combine(root, "src", "DeepPurge.App", "Themes", "BaseStyles.xaml"));
+
+        Assert.Contains("<ContentPresenter x:Name=\"content\"", baseStyles);
+        Assert.Contains("<Trigger Property=\"HasContent\" Value=\"False\">", baseStyles);
+    }
+
+    [Fact]
     public void Generated_toolbar_actions_have_accessible_metadata()
     {
         var root = FindRepoRoot();

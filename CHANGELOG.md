@@ -11,6 +11,7 @@ All notable changes to DeepPurge will be documented in this file.
 
 ### Added (premium polish)
 - **Intentional empty states and accessible panel actions** - the WPF shell now uses shared empty-state cards for no-result/first-run states across Programs, Safety, System Tools, Winapp2, Schedule, Repair, and History panels. Generated toolbar actions now include tooltips and automation metadata, and Disk Analyzer no longer hardcodes `C:\` in its action label.
+- **Settings / Privacy panel** - the GUI now exposes saved AppSettings controls for expert mode, cleanup age guardrails, cookie-domain preservation, excluded cleanup paths, and JSON import/export instead of leaving these controls CLI-only.
 
 ### Fixed (P1 accessibility)
 - **Keyboard focus visibility** - shared WPF styles now use a visible accent focus treatment for buttons, inputs, splitters, selectors, tabs, DataGrid cells, and sidebar navigation instead of nulling focus visuals.

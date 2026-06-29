@@ -586,6 +586,13 @@
                                 </StackPanel>
                             </RadioButton>
 
+                            <RadioButton GroupName="nav" Tag="Settings" Checked="NavButton_Checked" Style="{StaticResource NavRadioButton}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE713;" Style="{StaticResource NavIcon}"/>
+                                    <TextBlock Text="Settings / Privacy" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </RadioButton>
+
                             <RadioButton GroupName="nav" Tag="About" Checked="NavButton_Checked" Style="{StaticResource NavRadioButton}">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="&#xE946;" Style="{StaticResource NavIcon}"/>
@@ -1650,6 +1657,92 @@
                                        Style="{StaticResource EmptyStateBody}"/>
                         </StackPanel>
                     </Border>
+
+                    <!-- SETTINGS / PRIVACY -->
+                    <ScrollViewer x:Name="panelSettings" Visibility="Collapsed" Padding="36,28"
+                                  VerticalScrollBarVisibility="Auto"
+                                  AutomationProperties.Name="Settings and Privacy panel"
+                                  AutomationProperties.HelpText="Saved DeepPurge settings for exclusions, cookie preservation, age filters, and safety defaults.">
+                        <StackPanel MaxWidth="900" HorizontalAlignment="Left">
+                            <TextBlock Text="Settings / Privacy" FontSize="26" FontWeight="Bold"
+                                       Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
+                            <TextBlock Text="{Binding SettingsSummary}" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource SubtextBrush}" FontSize="12.5"
+                                       Margin="0,0,0,24"/>
+
+                            <GroupBox Header="Safety defaults" Margin="0,0,0,18">
+                                <StackPanel>
+                                    <CheckBox IsChecked="{Binding ExpertMode}" HorizontalAlignment="Left" Margin="0,0,0,12"
+                                              AutomationProperties.Name="Enable expert mode">
+                                        <TextBlock Text="Expert mode shows advanced operations such as registry hunter, service deletion, and high-risk cleanup controls."
+                                                   TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}"/>
+                                    </CheckBox>
+                                    <CheckBox IsChecked="{Binding DryRunEnabled}" HorizontalAlignment="Left" Margin="0,0,0,12"
+                                              AutomationProperties.Name="Enable dry run by default for this session">
+                                        <TextBlock Text="Dry Run previews cleanup results without deleting anything during this session."
+                                                   TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}"/>
+                                    </CheckBox>
+                                    <CheckBox IsChecked="{Binding SecureDeleteEnabled}" HorizontalAlignment="Left"
+                                              AutomationProperties.Name="Enable secure delete by default for this session">
+                                        <TextBlock Text="Secure Delete overwrites selected files before deletion and disables Recycle Bin recovery."
+                                                   TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}"/>
+                                    </CheckBox>
+                                </StackPanel>
+                            </GroupBox>
+
+                            <GroupBox Header="Age guardrails" Margin="0,0,0,18">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="18"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Junk minimum age (days)" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
+                                        <TextBox Text="{Binding SettingsMinAgeJunkText, UpdateSourceTrigger=PropertyChanged}"
+                                                 AutomationProperties.Name="Junk minimum age in days"/>
+                                        <TextBlock Text="0 cleans eligible junk immediately. Higher values preserve newer cache files."
+                                                   Style="{StaticResource EmptyStateBody}" TextAlignment="Left"
+                                                   HorizontalAlignment="Left" Margin="0,8,0,0"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Text="Evidence minimum age (days)" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
+                                        <TextBox Text="{Binding SettingsMinAgeEvidenceText, UpdateSourceTrigger=PropertyChanged}"
+                                                 AutomationProperties.Name="Evidence minimum age in days"/>
+                                        <TextBlock Text="Use this to keep very recent browser and privacy traces during cleanup."
+                                                   Style="{StaticResource EmptyStateBody}" TextAlignment="Left"
+                                                   HorizontalAlignment="Left" Margin="0,8,0,0"/>
+                                    </StackPanel>
+                                </Grid>
+                            </GroupBox>
+
+                            <GroupBox Header="Cookie preservation" Margin="0,0,0,18">
+                                <StackPanel>
+                                    <TextBlock Text="One domain per line or comma-separated. When any domain is listed, browser cookie databases are preserved during Evidence cleaning."
+                                               Foreground="{DynamicResource SubtextBrush}" TextWrapping="Wrap" FontSize="12.5"
+                                               Margin="0,0,0,10"/>
+                                    <TextBox Text="{Binding SettingsCookieWhitelistText, UpdateSourceTrigger=PropertyChanged}"
+                                             AcceptsReturn="True" TextWrapping="Wrap" Height="120"
+                                             VerticalScrollBarVisibility="Auto"
+                                             AutomationProperties.Name="Cookie whitelist domains"/>
+                                </StackPanel>
+                            </GroupBox>
+
+                            <GroupBox Header="Excluded paths" Margin="0,0,0,18">
+                                <StackPanel>
+                                    <TextBlock Text="One path per line. Safety checks skip these paths when scanning or deleting leftovers."
+                                               Foreground="{DynamicResource SubtextBrush}" TextWrapping="Wrap" FontSize="12.5"
+                                               Margin="0,0,0,10"/>
+                                    <TextBox Text="{Binding SettingsExcludedPathsText, UpdateSourceTrigger=PropertyChanged}"
+                                             AcceptsReturn="True" TextWrapping="Wrap" Height="130"
+                                             VerticalScrollBarVisibility="Auto"
+                                             AutomationProperties.Name="Excluded cleanup paths"/>
+                                </StackPanel>
+                            </GroupBox>
+                        </StackPanel>
+                    </ScrollViewer>
 
                     <!-- ═══════════════════════════════════════════════════════ -->
                     <!-- ABOUT / UPDATES                                         -->
