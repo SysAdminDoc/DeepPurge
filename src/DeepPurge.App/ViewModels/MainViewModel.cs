@@ -940,6 +940,7 @@ public partial class MainViewModel : ObservableObject
             try
             {
                 await PackageManagerScanner.EnrichAsync(list, ct).ConfigureAwait(false);
+                var sourceHealth = await Task.Run(() => PackageManagerScanner.GetSourceHealth(ct), ct).ConfigureAwait(false);
 
                 // Add any new synthetic scoop entries back to the VM lists.
                 var existingNames = new HashSet<string>(Programs.Select(p => p.DisplayName),
@@ -964,7 +965,13 @@ public partial class MainViewModel : ObservableObject
                 _ = _dispatcher.BeginInvoke(() =>
                 {
                     var upgradeable = Programs.Count(p => !string.IsNullOrEmpty(p.UpgradeAvailable));
-                    if (upgradeable > 0)
+                    var degraded = sourceHealth
+                        .Where(h => h.Status != SelfTestStatus.Ok)
+                        .Select(h => h.Source)
+                        .ToList();
+                    if (degraded.Count > 0)
+                        StatusText = $"Package source warning: {string.Join(", ", degraded)} unavailable or degraded. Run deeppurgecli doctor for details.";
+                    else if (upgradeable > 0)
                         StatusText = $"{upgradeable} programs have winget upgrades available";
                 });
             }

@@ -7,12 +7,16 @@ All notable changes to DeepPurge will be documented in this file.
 ### Added (P2 package managers)
 - **Source-native package-manager uninstall** - winget, Scoop, and Chocolatey managed rows now uninstall through strict source-specific command builders before falling back to registry uninstall strings. CLI `uninstall --dry-run` previews the exact native command, package-only synthetic rows can be removed without a registry uninstaller, and injection tests cover unsafe package IDs.
 - **Release readiness validator** - `Build.ps1` now emits `SHA256SUMS.txt` and can validate version alignment, package release URLs, asset names, manifest hashes, and placeholder removal before publishing winget/Scoop manifests.
+- **Package source diagnostics** - `deeppurgecli doctor` now reports winget, Scoop, and Chocolatey source health with versions, roots, package counts, parser status, and remediation hints. GUI enrichment surfaces degraded sources as a warning instead of silently falling back.
 
 ### Added (P2 privacy)
 - **Retention and scrub controls** - Settings / Privacy now configures log, activity, and deletion-manifest retention windows plus optional local-path redaction for reports. The GUI can prune expired data, and CLI `settings prune [--dry-run]` reports files, bytes, and activity entries affected.
 
 ### Fixed (P2 docs)
 - **Local-only release documentation** - CONTRIBUTING, ARCHITECTURE, README, and packaging guidance now match xUnit v3, the 301-test suite, current release assets, SHA256 validation, and the absence of GitHub Actions workflows.
+
+### Fixed (P2 reliability)
+- **Deletion manifest concurrent access** - manifest writes now use shared file access so GUI/CLI readers and tests cannot briefly lock the daily JSONL file and drop a deletion record.
 
 ### Added (P1 safety)
 - **GUI deletion recovery panel** - the WPF Safety section now lists deletion manifests, previews valid JSONL entries, runs dry-run restore checks, shows registry/recoverable/unrecoverable counts, and opens the manifest/backup folders.

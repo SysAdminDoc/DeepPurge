@@ -1,5 +1,6 @@
 using System.Security.Principal;
 using DeepPurge.Core.App;
+using DeepPurge.Core.Packages;
 
 namespace DeepPurge.Core.Diagnostics;
 
@@ -30,7 +31,7 @@ public static class SelfTest
         results.Add(CheckWdiStartupInfo());
         results.Add(CheckRegistryAccess());
         results.Add(CheckShortcutsRoots());
-        results.Add(CheckWinget());
+        results.AddRange(CheckPackageManagers());
         results.Add(CheckSchtasks());
         results.Add(CheckDriverStoreRepo());
         results.Add(CheckWinapp2Cached());
@@ -191,6 +192,15 @@ public static class SelfTest
                 Hint: "Check profile shell-folder permissions and rerun under the affected user account.");
         }
     }
+
+    private static IEnumerable<SelfTestResult> CheckPackageManagers()
+        => PackageManagerScanner.GetSourceHealth().Select(h => new SelfTestResult(
+            $"Package source: {h.Source}",
+            h.Status,
+            string.IsNullOrWhiteSpace(h.Version)
+                ? $"{h.Detail}; {h.LastScannerStatus}"
+                : $"{h.Detail}; version {h.Version}; {h.LastScannerStatus}",
+            h.Hint));
 
     private static SelfTestResult CheckWinget()
     {
