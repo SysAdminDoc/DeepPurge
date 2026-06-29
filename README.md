@@ -9,7 +9,7 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 ### Uninstall
 - **Installed Programs** - Full registry scan (HKLM + HKCU, 32/64-bit) with extracted program icons
 - **Bulk Uninstall** - Multi-select + one-click sequential uninstall with silent flags auto-applied *(inspired by BCUninstaller)*
-- **winget integration** - Programs tracked by winget are tagged with their package ID; upgrade-available badge + right-click → "Upgrade via winget"; uninstall uses `winget uninstall --id ... --exact` before registry fallbacks *(inspired by BCU source-adapter pattern)*
+- **winget integration** - Programs tracked by winget are tagged with their package ID; upgrade-available badge + right-click → "Upgrade via winget"; uninstall uses `winget uninstall --id ... --exact` before registry fallbacks, and `doctor` reports source health when package-manager enrichment degrades *(inspired by BCU source-adapter pattern)*
 - **Scoop integration** - Scoop apps that skip the Windows installer DB are auto-discovered, merged into the list, and removed through `scoop uninstall`
 - **Chocolatey integration** - `choco list --local-only --limit-output` entries are merged into the installed programs list and removed through non-interactive `choco uninstall`
 - **Silent-switch database** - Curated per-installer-family silent flags (`/S`, `/qn`, `/VERYSILENT`, `/quiet`, Squirrel `--uninstall --silent`) with vendor fingerprint overrides *(inspired by PatchMyPC)*
@@ -136,7 +136,7 @@ DeepPurgeCli schedule list
 DeepPurgeCli schedule remove --name Nightly
 DeepPurgeCli settings prune --dry-run       # Preview expired logs/activity/manifests to remove
 DeepPurgeCli check-update
-DeepPurgeCli doctor                         # Environment self-test (14 checks)
+DeepPurgeCli doctor                         # Environment self-test (16 checks, including package sources)
 ```
 
 ## Testing
@@ -145,7 +145,7 @@ DeepPurgeCli doctor                         # Environment self-test (14 checks)
 dotnet test tests/DeepPurge.Tests/DeepPurge.Tests.csproj
 ```
 
-The current suite has 301 tests covering parser routing, package-manager command builders, release validation, privacy retention, SafetyGuard block/allow lists, schedule sanitisation, recovery manifests, and settings import/export contracts.
+The current suite has 304 tests covering parser routing, package-manager command builders and source diagnostics, release validation, privacy retention, SafetyGuard block/allow lists, schedule sanitisation, recovery manifests, and settings import/export contracts.
 
 ## Packaging
 
@@ -159,9 +159,9 @@ The current suite has 301 tests covering parser routing, package-manager command
 - Windows 10/11
 - Run as Administrator (enforced by the manifest)
 - .NET 10 SDK (build only)
-- Optional: winget (auto-detected; enrichment silently no-ops when unavailable)
-- Optional: Scoop in `%USERPROFILE%\scoop\apps` (filesystem-scanned; no shelling required)
-- Optional: Chocolatey (`choco.exe` on PATH; enrichment silently no-ops when unavailable)
+- Optional: winget (auto-detected; `doctor` reports version/list parser health when unavailable or degraded)
+- Optional: Scoop in `%USERPROFILE%\scoop\apps` (filesystem-scanned; `doctor` reports root availability and app count)
+- Optional: Chocolatey (`choco.exe` on PATH; `doctor` reports version/list parser health when unavailable or degraded)
 
 ## License
 MIT License

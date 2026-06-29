@@ -38,7 +38,13 @@ public static class DeletionManifest
             lock (_lock)
             {
                 Directory.CreateDirectory(System.IO.Path.GetDirectoryName(CurrentManifestPath)!);
-                File.AppendAllText(CurrentManifestPath, json + Environment.NewLine, System.Text.Encoding.UTF8);
+                using var stream = new FileStream(
+                    CurrentManifestPath,
+                    FileMode.Append,
+                    FileAccess.Write,
+                    FileShare.ReadWrite);
+                using var writer = new StreamWriter(stream, System.Text.Encoding.UTF8);
+                writer.WriteLine(json);
             }
         }
         catch (Exception ex) { Log.Warn($"Failed to write deletion manifest: {ex.Message}"); }
@@ -180,7 +186,15 @@ public static class DeletionManifest
         var entries = new List<DeletionEntry>();
         try
         {
-            var lines = File.ReadAllLines(filePath);
+            using var stream = new FileStream(
+                filePath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite);
+            using var reader = new StreamReader(stream, System.Text.Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+            var lines = reader.ReadToEnd().Split(
+                new[] { "\r\n", "\n" },
+                StringSplitOptions.None);
             foreach (var line in lines)
             {
                 if (string.IsNullOrWhiteSpace(line)) continue;

@@ -28,6 +28,57 @@ public class PackageManagerScannerTests
     }
 
     [Fact]
+    public void Package_source_parsers_tolerate_bad_output()
+    {
+        var parseJson = typeof(PackageManagerScanner).GetMethod(
+            "ParseWingetJson",
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        var parseTable = typeof(PackageManagerScanner).GetMethod(
+            "ParseWingetTable",
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        var jsonEntries = (List<WingetEntry>)parseJson.Invoke(null, new object[] { "{not-json" })!;
+        var tableEntries = (List<WingetEntry>)parseTable.Invoke(null, new object[] { "not a winget table" })!;
+
+        Assert.Empty(jsonEntries);
+        Assert.Empty(tableEntries);
+    }
+
+    [Fact]
+    public void Scoop_health_reports_missing_root_as_warning()
+    {
+        var missingRoot = Path.Combine(Path.GetTempPath(), "DeepPurgeMissingScoop", Guid.NewGuid().ToString("N"));
+
+        var health = PackageManagerScanner.InspectScoopRoot(missingRoot);
+
+        Assert.Equal("scoop", health.Source);
+        Assert.Equal(DeepPurge.Core.Diagnostics.SelfTestStatus.Warn, health.Status);
+        Assert.Contains("root", health.LastScannerStatus);
+    }
+
+    [Fact]
+    public void Scoop_health_counts_app_directories_without_scoop_cli()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "DeepPurgeScoopHealth", Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "git"));
+            Directory.CreateDirectory(Path.Combine(root, "scoop"));
+
+            var health = PackageManagerScanner.InspectScoopRoot(root, version: "v0.5.0");
+
+            Assert.Equal(DeepPurge.Core.Diagnostics.SelfTestStatus.Ok, health.Status);
+            Assert.Equal(1, health.PackageCount);
+            Assert.Equal(root, health.Root);
+            Assert.Equal("v0.5.0", health.Version);
+        }
+        finally
+        {
+            try { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void OemBloatScoring_flags_support_utilities_but_not_drivers()
     {
         var score = typeof(InstalledProgramScanner).GetMethod(

@@ -8,6 +8,15 @@ namespace DeepPurge.Core.Packages;
 public sealed record WingetEntry(string Id, string Name, string Version, string? Available, string Source);
 public sealed record ScoopEntry(string Name, string Version, string Bucket);
 public sealed record ChocolateyEntry(string Name, string Version);
+public sealed record PackageSourceHealth(
+    string Source,
+    SelfTestStatus Status,
+    string Detail,
+    string Version,
+    string Root,
+    int PackageCount,
+    string LastScannerStatus,
+    string? Hint = null);
 
 /// <summary>
 /// Secondary source adapter — borrowed conceptually from BCUninstaller.
@@ -21,6 +30,9 @@ public sealed record ChocolateyEntry(string Name, string Version);
 public static class PackageManagerScanner
 {
     private const int ProcessTimeoutMs = 20_000;
+    private static IReadOnlyList<PackageSourceHealth> _lastSourceHealth = Array.Empty<PackageSourceHealth>();
+
+    public static IReadOnlyList<PackageSourceHealth> LastSourceHealth => _lastSourceHealth;
 
     public static async Task EnrichAsync(
         IList<InstalledProgram> programs,
@@ -107,6 +119,18 @@ public static class PackageManagerScanner
 
         PortableAppScanner.InjectIntoPrograms(programs, portables);
         GamePlatformScanner.InjectIntoPrograms(programs, games);
+    }
+
+    public static IReadOnlyList<PackageSourceHealth> GetSourceHealth(CancellationToken ct = default)
+    {
+        var results = new List<PackageSourceHealth>
+        {
+            CheckWingetHealth(ct),
+            CheckScoopHealth(ct),
+            CheckChocolateyHealth(ct),
+        };
+        _lastSourceHealth = results;
+        return results;
     }
 
     // ═══════════════════════════════════════════════════════
@@ -329,6 +353,91 @@ public static class PackageManagerScanner
     //  helpers
     // ═══════════════════════════════════════════════════════
 
+    // ═══════════════════════════════════════════════════════
+    //  source health
+    // ═══════════════════════════════════════════════════════
+
+    private static PackageSourceHealth CheckWingetHealth(CancellationToken ct)
+    {
+        var version = RunProcessDetailed("winget.exe", "--version", ct, timeoutMs: 5_000);
+        if (!version.Started)
+            return new("winget", SelfTestStatus.Warn, "Not on PATH", "", "", 0, version.Error,
+                "Install Microsoft App Installer or run winget from an account where it is on PATH.");
+
+        var versionText = FirstLine(version.OutputAndError);
+        var json = RunProcessDetailed("winget.exe",
+            "list --disable-interactivity --accept-source-agreements --output json", ct, timeoutMs: 10_000);
+        if (!string.IsNullOrWhiteSpace(json.Output) && json.Output.TrimStart().StartsWith('['))
+        {
+            var entries = ParseWingetJson(json.Output);
+            return new("winget", SelfTestStatus.Ok, $"{entries.Count} package(s) via JSON list", versionText, "", entries.Count, "JSON list parsed");
+        }
+
+        var table = RunProcessDetailed("winget.exe",
+            "list --disable-interactivity --accept-source-agreements", ct, timeoutMs: 10_000);
+        if (!string.IsNullOrWhiteSpace(table.Output))
+        {
+            var entries = ParseWingetTable(table.Output);
+            if (entries.Count > 0 || table.Output.Contains("Name", StringComparison.OrdinalIgnoreCase))
+                return new("winget", SelfTestStatus.Ok, $"{entries.Count} package(s) via table list", versionText, "", entries.Count, "table list parsed");
+        }
+
+        var detail = Shorten(json.OutputAndError.Length > 0 ? json.OutputAndError : table.OutputAndError);
+        return new("winget", SelfTestStatus.Warn, "Installed, but list output could not be parsed", versionText, "", 0, detail,
+            "Run `winget source update`, then retry `winget list --disable-interactivity --accept-source-agreements`.");
+    }
+
+    private static PackageSourceHealth CheckScoopHealth(CancellationToken ct)
+    {
+        var root = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            "scoop", "apps");
+        var version = RunProcessDetailed("cmd.exe", "/d /c scoop --version", ct, timeoutMs: 5_000);
+        var versionText = version.Started ? FirstLine(version.OutputAndError) : "";
+        return InspectScoopRoot(root, versionText);
+    }
+
+    public static PackageSourceHealth InspectScoopRoot(string scoopAppsRoot, string version = "")
+    {
+        if (!Directory.Exists(scoopAppsRoot))
+            return new("scoop", SelfTestStatus.Warn, "Scoop apps root not found", version, scoopAppsRoot, 0, "root missing",
+                "Install Scoop or verify %USERPROFILE%\\scoop\\apps exists.");
+
+        try
+        {
+            var count = Directory.EnumerateDirectories(scoopAppsRoot)
+                .Select(Path.GetFileName)
+                .Count(name => !string.IsNullOrWhiteSpace(name) &&
+                               !name.Equals("scoop", StringComparison.OrdinalIgnoreCase));
+
+            return new("scoop", SelfTestStatus.Ok, $"{count} app folder(s) in Scoop root", version, scoopAppsRoot, count, "root enumerated");
+        }
+        catch (Exception ex)
+        {
+            return new("scoop", SelfTestStatus.Warn, $"Scoop root unavailable: {ex.Message}", version, scoopAppsRoot, 0, ex.Message,
+                "Check Scoop directory permissions and rerun under the affected Windows user.");
+        }
+    }
+
+    private static PackageSourceHealth CheckChocolateyHealth(CancellationToken ct)
+    {
+        var version = RunProcessDetailed("choco.exe", "--version", ct, timeoutMs: 5_000);
+        if (!version.Started)
+            return new("chocolatey", SelfTestStatus.Warn, "Not on PATH", "", "", 0, version.Error,
+                "Install Chocolatey or verify choco.exe is on PATH.");
+
+        var output = RunProcessDetailed("choco.exe",
+            "list --local-only --limit-output --no-color", ct, timeoutMs: 10_000);
+        if (output.ExitCode == 0 && !string.IsNullOrWhiteSpace(output.Output))
+        {
+            var entries = ParseChocolateyLimitOutput(output.Output);
+            return new("chocolatey", SelfTestStatus.Ok, $"{entries.Count} package(s) via choco list", FirstLine(version.OutputAndError), "", entries.Count, "limit-output parsed");
+        }
+
+        return new("chocolatey", SelfTestStatus.Warn, "Installed, but local package list failed", FirstLine(version.OutputAndError), "", 0, Shorten(output.OutputAndError),
+            "Run `choco list --local-only --limit-output --no-color` in an elevated shell and inspect the error.");
+    }
+
     private static Dictionary<string, InstalledProgram> BuildNameLookup(IList<InstalledProgram> programs)
     {
         var dict = new Dictionary<string, InstalledProgram>(StringComparer.OrdinalIgnoreCase);
@@ -357,6 +466,67 @@ public static class PackageManagerScanner
         if (end > s.Length) end = s.Length;
         if (end <= start) return "";
         return s[start..end];
+    }
+
+    private sealed record ProcessProbeResult(
+        bool Started,
+        int ExitCode,
+        string Output,
+        string Error,
+        bool TimedOut)
+    {
+        public string OutputAndError => string.Join(
+            Environment.NewLine,
+            new[] { Output, Error }.Where(s => !string.IsNullOrWhiteSpace(s))).Trim();
+    }
+
+    private static string FirstLine(string value)
+        => value.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .FirstOrDefault() ?? "";
+
+    private static string Shorten(string value, int max = 180)
+    {
+        value = (value ?? "").ReplaceLineEndings(" ").Trim();
+        return value.Length <= max ? value : value[..max] + "...";
+    }
+
+    private static ProcessProbeResult RunProcessDetailed(string exe, string args, CancellationToken ct, int timeoutMs)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = exe,
+                Arguments = args,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8,
+            };
+
+            using var proc = Process.Start(psi);
+            if (proc == null) return new(false, -1, "", "process did not start", false);
+
+            var stdoutTask = proc.StandardOutput.ReadToEndAsync(ct);
+            var stderrTask = proc.StandardError.ReadToEndAsync(ct);
+            if (!proc.WaitForExit(timeoutMs))
+            {
+                try { proc.Kill(entireProcessTree: true); } catch (Exception ex) { Log.Warn($"Process kill failed: {ex.Message}"); }
+                return new(true, -1, stdoutTask.IsCompletedSuccessfully ? stdoutTask.Result : "", "timed out", true);
+            }
+
+            var output = stdoutTask.GetAwaiter().GetResult();
+            var error = stderrTask.GetAwaiter().GetResult();
+            ct.ThrowIfCancellationRequested();
+            return new(true, proc.ExitCode, output, error, false);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            return new(false, -1, "", ex.Message, false);
+        }
     }
 
     private static string RunProcess(string exe, string args, CancellationToken ct)
