@@ -9,9 +9,9 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 ### Uninstall
 - **Installed Programs** - Full registry scan (HKLM + HKCU, 32/64-bit) with extracted program icons
 - **Bulk Uninstall** - Multi-select + one-click sequential uninstall with silent flags auto-applied *(inspired by BCUninstaller)*
-- **winget integration** - Programs tracked by winget are tagged with their package ID; upgrade-available badge + right-click → "Upgrade via winget" *(inspired by BCU source-adapter pattern)*
-- **Scoop integration** - Scoop apps that skip the Windows installer DB are auto-discovered and merged into the list
-- **Chocolatey integration** - `choco list --local-only --limit-output` entries are merged into the installed programs list and CLI output
+- **winget integration** - Programs tracked by winget are tagged with their package ID; upgrade-available badge + right-click → "Upgrade via winget"; uninstall uses `winget uninstall --id ... --exact` before registry fallbacks *(inspired by BCU source-adapter pattern)*
+- **Scoop integration** - Scoop apps that skip the Windows installer DB are auto-discovered, merged into the list, and removed through `scoop uninstall`
+- **Chocolatey integration** - `choco list --local-only --limit-output` entries are merged into the installed programs list and removed through non-interactive `choco uninstall`
 - **Silent-switch database** - Curated per-installer-family silent flags (`/S`, `/qn`, `/VERYSILENT`, `/quiet`, Squirrel `--uninstall --silent`) with vendor fingerprint overrides *(inspired by PatchMyPC)*
 - **Forced Uninstall** - Scan for remnants of already-removed or partially uninstalled programs
 - **Windows Apps** - Remove UWP/MSIX apps including system bloatware
@@ -121,6 +121,7 @@ Both are self-contained single-file portable executables. ARM64 builds can be pr
 ```bash
 DeepPurgeCli list                           # TSV-formatted installed programs
 DeepPurgeCli uninstall "Some App" --silent  # Silent uninstall with auto-flag detection
+DeepPurgeCli uninstall "Git.Git" --dry-run  # Preview source-native uninstall command
 DeepPurgeCli clean junk evidence --dry-run  # Preview what would be freed
 DeepPurgeCli repair sfc                     # sfc /scannow
 DeepPurgeCli drivers --old                  # Old driver packages ready to remove
