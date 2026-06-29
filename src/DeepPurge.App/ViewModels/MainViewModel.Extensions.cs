@@ -474,6 +474,29 @@ public partial class MainViewModel
         catch (Exception ex) { Log.Error("CreateScheduledJob", ex); StatusText = $"Schedule create failed: {ex.Message}"; return false; }
     }
 
+    public bool DeleteScheduledJob(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            StatusText = "Select a scheduled job first.";
+            return false;
+        }
+
+        try
+        {
+            var ok = new ScheduleManager().DeleteJob(name);
+            RefreshScheduledJobs();
+            StatusText = ok ? $"Removed scheduled job '{name}'." : $"Failed to remove scheduled job '{name}'.";
+            return ok;
+        }
+        catch (Exception ex)
+        {
+            Log.Error("DeleteScheduledJob", ex);
+            StatusText = $"Schedule remove failed: {ex.Message}";
+            return false;
+        }
+    }
+
     private static string? ResolveCliPath()
     {
         var baseDir = AppContext.BaseDirectory;
