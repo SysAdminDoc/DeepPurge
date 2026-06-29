@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sysadmindoc.github.io/deeppurge/schemas/cleaner-definition.v1.json",
+  "title": "DeepPurge cleaner definition",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["SchemaVersion", "Rules"],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "Schema": {
+      "type": "string"
+    },
+    "SchemaVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "Provenance": {
+      "type": "string",
+      "maxLength": 240
+    },
+    "Rules": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/rule"
+      }
+    }
+  },
+  "$defs": {
+    "stringList": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "fileRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["Path"],
+      "properties": {
+        "Path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "Pattern": {
+          "type": "string",
+          "default": "*"
+        },
+        "Recurse": {
+          "type": "boolean",
+          "default": false
+        },
+        "RemoveSelf": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["Name"],
+      "properties": {
+        "Name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "Description": {
+          "type": "string"
+        },
+        "Detect": {
+          "$ref": "#/$defs/stringList"
+        },
+        "DetectFile": {
+          "$ref": "#/$defs/stringList"
+        },
+        "Files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/fileRule"
+          }
+        },
+        "Registry": {
+          "$ref": "#/$defs/stringList"
+        }
+      }
+    }
+  }
+}
