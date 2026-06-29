@@ -248,6 +248,8 @@
                             <!-- Theme Toggle (Sun/Moon) -->
                             <Button x:Name="btnThemeToggle" DockPanel.Dock="Right" Click="ThemeToggle_Click"
                                     VerticalAlignment="Center" Cursor="Hand" ToolTip="Toggle Light/Dark"
+                                    AutomationProperties.Name="Toggle light or dark theme"
+                                    AutomationProperties.HelpText="Switch between the light Arctic theme and the default dark theme."
                                     Width="34" Height="34">
                                 <Button.Template>
                                     <ControlTemplate TargetType="Button">
