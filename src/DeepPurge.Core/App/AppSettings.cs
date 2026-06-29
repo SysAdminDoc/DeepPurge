@@ -9,6 +9,10 @@ public class AppSettings
     public List<string> ExcludedPaths { get; set; } = new();
     public int MinAgeDaysJunk { get; set; }
     public int MinAgeDaysEvidence { get; set; }
+    public int RetentionDaysLogs { get; set; } = 30;
+    public int RetentionDaysActivity { get; set; } = 90;
+    public int RetentionDaysDeletionManifests { get; set; } = 90;
+    public bool ScrubSensitivePathsInReports { get; set; }
     public List<string> CookieWhitelist { get; set; } = new();
     public Dictionary<string, string> ProgramNotes { get; set; } = new();
 

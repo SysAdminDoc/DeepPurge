@@ -7,6 +7,7 @@ using DeepPurge.Core.App;
 using DeepPurge.Core.Browsers;
 using DeepPurge.Core.Export;
 using DeepPurge.Core.FileSystem;
+using DeepPurge.Core.Diagnostics;
 using DeepPurge.App.Icons;
 using DeepPurge.Core.Models;
 using DeepPurge.Core.Packages;
@@ -77,6 +78,10 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] public partial string SettingsCookieWhitelistText { get; set; } = "";
     [ObservableProperty] public partial string SettingsMinAgeJunkText { get; set; } = "0";
     [ObservableProperty] public partial string SettingsMinAgeEvidenceText { get; set; } = "0";
+    [ObservableProperty] public partial string SettingsRetentionLogsText { get; set; } = "30";
+    [ObservableProperty] public partial string SettingsRetentionActivityText { get; set; } = "90";
+    [ObservableProperty] public partial string SettingsRetentionDeletionManifestsText { get; set; } = "90";
+    [ObservableProperty] public partial bool SettingsScrubSensitivePaths { get; set; }
     [ObservableProperty] public partial string SettingsSummary { get; set; } = "";
 
     // Live progress bar for the current long-running delete.
@@ -151,6 +156,10 @@ public partial class MainViewModel : ObservableObject
         SettingsCookieWhitelistText = string.Join(Environment.NewLine, s.CookieWhitelist);
         SettingsMinAgeJunkText = s.MinAgeDaysJunk.ToString();
         SettingsMinAgeEvidenceText = s.MinAgeDaysEvidence.ToString();
+        SettingsRetentionLogsText = s.RetentionDaysLogs.ToString();
+        SettingsRetentionActivityText = s.RetentionDaysActivity.ToString();
+        SettingsRetentionDeletionManifestsText = s.RetentionDaysDeletionManifests.ToString();
+        SettingsScrubSensitivePaths = s.ScrubSensitivePathsInReports;
         UpdateSettingsSummary();
         if (showStatus) StatusText = "Settings loaded.";
     }
@@ -158,7 +167,10 @@ public partial class MainViewModel : ObservableObject
     public bool SaveSettingsEditor()
     {
         if (!TryParseNonNegativeDays(SettingsMinAgeJunkText, "Junk minimum age", out var junkDays) ||
-            !TryParseNonNegativeDays(SettingsMinAgeEvidenceText, "Evidence minimum age", out var evidenceDays))
+            !TryParseNonNegativeDays(SettingsMinAgeEvidenceText, "Evidence minimum age", out var evidenceDays) ||
+            !TryParseNonNegativeDays(SettingsRetentionLogsText, "Log retention", out var logRetentionDays) ||
+            !TryParseNonNegativeDays(SettingsRetentionActivityText, "Activity retention", out var activityRetentionDays) ||
+            !TryParseNonNegativeDays(SettingsRetentionDeletionManifestsText, "Deletion manifest retention", out var manifestRetentionDays))
         {
             return false;
         }
@@ -167,6 +179,10 @@ public partial class MainViewModel : ObservableObject
         s.ExpertMode = ExpertMode;
         s.MinAgeDaysJunk = junkDays;
         s.MinAgeDaysEvidence = evidenceDays;
+        s.RetentionDaysLogs = logRetentionDays;
+        s.RetentionDaysActivity = activityRetentionDays;
+        s.RetentionDaysDeletionManifests = manifestRetentionDays;
+        s.ScrubSensitivePathsInReports = SettingsScrubSensitivePaths;
         s.ExcludedPaths = ParseSettingList(SettingsExcludedPathsText, splitOnComma: false);
         s.CookieWhitelist = ParseSettingList(SettingsCookieWhitelistText, splitOnComma: true);
         s.Save();
@@ -175,6 +191,10 @@ public partial class MainViewModel : ObservableObject
         SettingsCookieWhitelistText = string.Join(Environment.NewLine, s.CookieWhitelist);
         SettingsMinAgeJunkText = s.MinAgeDaysJunk.ToString();
         SettingsMinAgeEvidenceText = s.MinAgeDaysEvidence.ToString();
+        SettingsRetentionLogsText = s.RetentionDaysLogs.ToString();
+        SettingsRetentionActivityText = s.RetentionDaysActivity.ToString();
+        SettingsRetentionDeletionManifestsText = s.RetentionDaysDeletionManifests.ToString();
+        SettingsScrubSensitivePaths = s.ScrubSensitivePathsInReports;
         UpdateSettingsSummary();
         StatusText = "Settings saved.";
         return true;
@@ -205,6 +225,10 @@ public partial class MainViewModel : ObservableObject
             current.ExpertMode = imported.ExpertMode;
             current.MinAgeDaysJunk = imported.MinAgeDaysJunk;
             current.MinAgeDaysEvidence = imported.MinAgeDaysEvidence;
+            current.RetentionDaysLogs = imported.RetentionDaysLogs;
+            current.RetentionDaysActivity = imported.RetentionDaysActivity;
+            current.RetentionDaysDeletionManifests = imported.RetentionDaysDeletionManifests;
+            current.ScrubSensitivePathsInReports = imported.ScrubSensitivePathsInReports;
             current.ExcludedPaths = imported.ExcludedPaths ?? new();
             current.CookieWhitelist = imported.CookieWhitelist ?? new();
             current.ProgramNotes = imported.ProgramNotes ?? new();
@@ -226,8 +250,37 @@ public partial class MainViewModel : ObservableObject
         SettingsSummary =
             $"{s.ExcludedPaths.Count} excluded path(s) | " +
             $"{s.CookieWhitelist.Count} cookie domain(s) preserved | " +
-            $"junk age {s.MinAgeDaysJunk}d | evidence age {s.MinAgeDaysEvidence}d";
+            $"junk age {s.MinAgeDaysJunk}d | evidence age {s.MinAgeDaysEvidence}d | " +
+            $"retention logs/activity/manifests {FormatRetention(s.RetentionDaysLogs)}/{FormatRetention(s.RetentionDaysActivity)}/{FormatRetention(s.RetentionDaysDeletionManifests)} | " +
+            $"path scrub {(s.ScrubSensitivePathsInReports ? "on" : "off")}";
     }
+
+    public bool PrunePrivacyData(bool dryRun = false)
+    {
+        if (!SaveSettingsEditor()) return false;
+
+        try
+        {
+            var result = PrivacyMaintenance.Apply(AppSettings.Current, dryRun);
+            var action = dryRun ? "would remove" : "removed";
+            var summary = $"{(dryRun ? "Privacy retention preview" : "Privacy retention complete")}: " +
+                          $"{action} {result.FilesDeleted} file(s), {FormatBytes(result.BytesDeleted)}, " +
+                          $"{result.ActivityEntriesDeleted} activity entr{(result.ActivityEntriesDeleted == 1 ? "y" : "ies")}; " +
+                          $"{result.FilesScrubbed} file(s) scrubbed.";
+            StatusText = summary;
+            LoadHistoryCommand.Execute(null);
+            LoadDeletionManifestsCommand.Execute(null);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Error("PrunePrivacyData", ex);
+            StatusText = $"Privacy retention failed: {ex.Message}";
+            return false;
+        }
+    }
+
+    private static string FormatRetention(int days) => days <= 0 ? "forever" : $"{days}d";
 
     private bool TryParseNonNegativeDays(string text, string label, out int value)
     {

@@ -342,6 +342,7 @@ public partial class MainWindow : Window
                 AppendToolbarButton("Reload", ReloadSettings_Click);
                 AppendToolbarButton("Import", ImportSettings_Click);
                 AppendToolbarButton("Export", ExportSettings_Click);
+                AppendToolbarButton("Prune Old Data", PrunePrivacyData_Click, "DangerButton");
                 break;
             case "About":
                 panelAbout.Visibility = Visibility.Visible; txtPanelTitle.Text = "About / Updates";
@@ -525,6 +526,12 @@ public partial class MainWindow : Window
 
         var ok = _vm.ImportSettingsFrom(dlg.FileName);
         ShowToast(ok ? "Settings imported" : _vm.StatusText, isError: !ok);
+    }
+
+    private void PrunePrivacyData_Click(object s, RoutedEventArgs e)
+    {
+        var ok = _vm.PrunePrivacyData();
+        ShowToast(ok ? "Old logs and manifests pruned" : _vm.StatusText, isError: !ok);
     }
 
     private void RefreshAboutTrust_Click(object s, RoutedEventArgs e)
