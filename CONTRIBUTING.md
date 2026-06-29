@@ -25,7 +25,7 @@ dotnet test tests/DeepPurge.Tests/DeepPurge.Tests.csproj
 ```
 
 All PRs must keep the full suite green. If you touch a parser, detector, or sanitiser,
-add a test that locks in the expected behaviour. We use xUnit 2.9.
+add a test that locks in the expected behaviour. We use xUnit v3.
 
 ## Project layout
 
@@ -35,9 +35,9 @@ src/
   DeepPurge.App/        # WPF views, ViewModel, themes
   DeepPurge.Cli/        # Headless entry point (asInvoker manifest)
 tests/
-  DeepPurge.Tests/      # xUnit — no WPF runtime required to run
+  DeepPurge.Tests/      # xUnit v3 — no WPF runtime required to run
 packaging/              # winget + scoop manifests
-.github/workflows/      # CI (build.yml) + release (release.yml)
+.github/                # issue and pull-request templates only; builds run locally
 ```
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the cross-cutting flow and the v0.9 feature map.
@@ -70,11 +70,11 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the cross-cutting flow and the v0.9 f
 
 Before a PR lands:
 
-- [ ] `dotnet build DeepPurge.sln -c Release` — 0 errors, 0 warnings
-- [ ] `dotnet test` — all tests pass
+- [ ] `dotnet build DeepPurge.sln -c Release` — 0 errors and no new warnings
+- [ ] `dotnet test tests/DeepPurge.Tests/DeepPurge.Tests.csproj` — all 301 tests pass
 - [ ] If a feature: `deeppurgecli doctor` still reports 0 FAIL on a clean install
 - [ ] README / CHANGELOG updated if the PR changes observable behaviour
-- [ ] Version bumped in the four places (see "Version bump" below)
+- [ ] Version bumped everywhere listed below
 
 ## Version bump
 
@@ -92,8 +92,9 @@ All version strings must match. The canonical version number lives in:
 
 ## Releasing
 
-See [packaging/README.md](packaging/README.md) for the release-day checklist (tag →
-GitHub Actions → SHA256 capture → winget PR → Scoop bucket commit).
+See [packaging/README.md](packaging/README.md) for the release-day checklist (`Build.ps1`
+publish/test/sign, SHA256SUMS generation, manifest validation, tag, GitHub Release upload,
+winget PR, and Scoop bucket commit). No GitHub Actions workflows are used.
 
 ## Code of conduct
 

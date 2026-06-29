@@ -11,6 +11,9 @@ All notable changes to DeepPurge will be documented in this file.
 ### Added (P2 privacy)
 - **Retention and scrub controls** - Settings / Privacy now configures log, activity, and deletion-manifest retention windows plus optional local-path redaction for reports. The GUI can prune expired data, and CLI `settings prune [--dry-run]` reports files, bytes, and activity entries affected.
 
+### Fixed (P2 docs)
+- **Local-only release documentation** - CONTRIBUTING, ARCHITECTURE, README, and packaging guidance now match xUnit v3, the 301-test suite, current release assets, SHA256 validation, and the absence of GitHub Actions workflows.
+
 ### Added (P1 safety)
 - **GUI deletion recovery panel** - the WPF Safety section now lists deletion manifests, previews valid JSONL entries, runs dry-run restore checks, shows registry/recoverable/unrecoverable counts, and opens the manifest/backup folders.
 - **winapp2 update provenance** - `update-winapp2` and the GUI Community Cleaners panel now show local and remote commit/date/hash facts; successful updates save SHA256/byte metadata and back up the previous `winapp2.ini` before replacement.

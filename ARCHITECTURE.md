@@ -9,7 +9,7 @@ DeepPurge.sln
 ├── src/DeepPurge.Core/       Pure logic: scanners, safety, diagnostics
 ├── src/DeepPurge.App/        WPF GUI (admin manifest, MVVM via CommunityToolkit.Mvvm)
 ├── src/DeepPurge.Cli/        Headless entry point (asInvoker manifest)
-└── tests/DeepPurge.Tests/    xUnit, 134+ cases
+└── tests/DeepPurge.Tests/    xUnit v3, 301+ cases
 ```
 
 `DeepPurge.Core` has exactly one hard WPF dependency — `IconExtractor` returns
@@ -39,7 +39,8 @@ The single argument record threaded through every destructive pipeline:
 public readonly record struct DeleteOptions(
     bool DryRun = false,
     bool SecureDelete = false,
-    bool UseRecycleBin = true);
+    bool UseRecycleBin = true,
+    int MinAgeDays = 0);
 ```
 
 Convention: when you add a new destructive pipeline, take `DeleteOptions` — don't add
@@ -58,6 +59,13 @@ that needs a log/backup/snapshot path MUST go through `DataPaths` — direct
 Append-only, thread-safe, 5 MB rotating. Used for swallowed exceptions so field issues
 can be debugged without the user having to attach a debugger. Never throws — logging
 failures must not crash callers.
+
+### PrivacyMaintenance (`Core/Diagnostics/PrivacyMaintenance.cs`)
+
+Applies the Settings / Privacy retention policy for `deeppurge.log*`, `activity.jsonl`,
+and `deletions-*.jsonl`. `settings prune [--dry-run]` and the GUI "Prune Old Data"
+action share this helper. Path scrubbing is display/report redaction only; deletion
+manifests are not rewritten because rollback depends on their original paths.
 
 ### SelfTest (`Core/Diagnostics/SelfTest.cs`)
 
@@ -147,11 +155,11 @@ to enable "forced uninstall by exact manifest."
 
 ## Build + release flow
 
-1. `dotnet build DeepPurge.sln -c Release` — compiles all 4 projects (+ tests)
-2. `dotnet test` — locks in parser / sanitiser behaviour
-3. `dotnet publish` per project → `build/DeepPurge.exe` + `build/DeepPurgeCli.exe`
-4. (Optional) `./Build.ps1 -Sign -CertPath ...` → Authenticode + RFC 3161 timestamp
-5. Git tag `vX.Y.Z` → GitHub Actions `release.yml` → release assets + SHA256SUMS.txt
+1. `dotnet build DeepPurge.sln -c Release` — compiles App, CLI, Core, and tests
+2. `dotnet test tests/DeepPurge.Tests/DeepPurge.Tests.csproj` — locks in parser / sanitiser behaviour
+3. `Build.ps1 -Test -Sign` publishes `build/DeepPurge.exe`, `build/DeepPurgeCli.exe`, and `build/SHA256SUMS.txt`
+4. Copy hashes into winget/Scoop manifests and run `Build.ps1 -ValidateReleaseOnly -ReleaseChecksumsPath build\SHA256SUMS.txt`
+5. Git tag `vX.Y.Z`, push the tag, then create/upload GitHub Release assets locally with `gh release`
 6. `wingetcreate update ...` → winget PR
 7. Commit `packaging/scoop/deeppurge.json` to a Scoop bucket
 
