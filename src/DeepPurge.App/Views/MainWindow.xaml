@@ -17,6 +17,8 @@
         <conv:PathListJoinConverter x:Key="PathListJoinConverter"/>
         <conv:FirstOrEmptyConverter x:Key="FirstOrEmptyConverter"/>
         <conv:CountConverter x:Key="CountConverter"/>
+        <conv:CollectionEmptyToVisibilityConverter x:Key="EmptyCollectionVisConverter"/>
+        <conv:PanelEmptyStateVisibilityConverter x:Key="PanelEmptyStateVisConverter"/>
 
         <!-- ══ NAV BUTTON ══ -->
         <Style x:Key="NavRadioButton" TargetType="RadioButton">
@@ -668,7 +670,8 @@
                 <DockPanel>
                     <TextBlock x:Name="txtPanelTitle" FontSize="20" FontWeight="SemiBold"
                                VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>
-                    <StackPanel x:Name="genericButtons" DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right"/>
+                    <StackPanel x:Name="genericButtons" DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right"
+                                AutomationProperties.Name="Panel actions"/>
                 </DockPanel>
             </Border>
 
@@ -736,6 +739,21 @@
                             <DataGridTextColumn Binding="{Binding SignatureDisplay}" Header="SIGNATURE" Width="130"/>
                         </DataGrid.Columns>
                     </DataGrid>
+                    <Border Style="{StaticResource EmptyStateCard}" Panel.ZIndex="5"
+                            AutomationProperties.Name="No installed programs shown">
+                        <Border.Visibility>
+                            <MultiBinding Converter="{StaticResource PanelEmptyStateVisConverter}" ConverterParameter="Programs">
+                                <Binding Path="CurrentPanel"/>
+                                <Binding Path="FilteredPrograms"/>
+                            </MultiBinding>
+                        </Border.Visibility>
+                        <StackPanel>
+                            <TextBlock Text="&#xE721;" Style="{StaticResource EmptyStateIcon}"/>
+                            <TextBlock Text="No programs match this view" Style="{StaticResource EmptyStateTitle}"/>
+                            <TextBlock Text="Clear the search box or refresh the inventory to show installed programs again."
+                                       Style="{StaticResource EmptyStateBody}"/>
+                        </StackPanel>
+                    </Border>
 
                     <!-- FORCED UNINSTALL -->
                     <Border x:Name="panelForced" Visibility="Collapsed">
@@ -1185,6 +1203,16 @@
                                 <DataGridTextColumn Binding="{Binding FilePath}" Header="MANIFEST" Width="*"/>
                             </DataGrid.Columns>
                         </DataGrid>
+                        <Border Grid.Row="1" Style="{StaticResource EmptyStateCard}"
+                                Visibility="{Binding DeletionManifests, Converter={StaticResource EmptyCollectionVisConverter}}"
+                                AutomationProperties.Name="No deletion manifests available">
+                            <StackPanel>
+                                <TextBlock Text="&#xE8BB;" Style="{StaticResource EmptyStateIcon}"/>
+                                <TextBlock Text="No deletion manifests yet" Style="{StaticResource EmptyStateTitle}"/>
+                                <TextBlock Text="Cleanup and restore-safe delete operations will appear here once they record rollback data."
+                                           Style="{StaticResource EmptyStateBody}"/>
+                            </StackPanel>
+                        </Border>
 
                         <UniformGrid Grid.Row="2" Columns="3" Margin="24,0,24,8">
                             <Border Padding="12,10" Margin="0,0,8,0" Background="{DynamicResource MantleBrush}" CornerRadius="8">
@@ -1224,6 +1252,14 @@
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
+                        <Border Grid.Row="4" Style="{StaticResource EmptyStateCard}" Padding="18" MaxWidth="460"
+                                Visibility="{Binding DeletionRestoreDetails, Converter={StaticResource EmptyCollectionVisConverter}}"
+                                AutomationProperties.Name="No restore dry-run details">
+                            <StackPanel>
+                                <TextBlock Text="Dry-run restore details will appear here before any restore is applied."
+                                           Style="{StaticResource EmptyStateBody}"/>
+                            </StackPanel>
+                        </Border>
                     </Grid>
 
                     <Border x:Name="panelBackups" Visibility="Collapsed" Padding="48,32">
@@ -1262,6 +1298,21 @@
                             <DataGridTextColumn Binding="{Binding IsOldVersion, Converter={StaticResource BoolToOldBadgeConverter}}" Header="STATUS" Width="80"/>
                         </DataGrid.Columns>
                     </DataGrid>
+                    <Border Style="{StaticResource EmptyStateCard}" Panel.ZIndex="5"
+                            AutomationProperties.Name="No driver packages found">
+                        <Border.Visibility>
+                            <MultiBinding Converter="{StaticResource PanelEmptyStateVisConverter}" ConverterParameter="Drivers">
+                                <Binding Path="CurrentPanel"/>
+                                <Binding Path="DriverPackages"/>
+                            </MultiBinding>
+                        </Border.Visibility>
+                        <StackPanel>
+                            <TextBlock Text="&#xE95B;" Style="{StaticResource EmptyStateIcon}"/>
+                            <TextBlock Text="No removable driver packages found" Style="{StaticResource EmptyStateTitle}"/>
+                            <TextBlock Text="Run a rescan after driver updates. DeepPurge only lists third-party packages it can inspect safely."
+                                       Style="{StaticResource EmptyStateBody}"/>
+                        </StackPanel>
+                    </Border>
 
                     <!-- ═══════════════════════════════════════════════════════ -->
                     <!-- STARTUP IMPACT (parsed from WDI boot traces)            -->
@@ -1283,6 +1334,21 @@
                             <DataGridTextColumn Binding="{Binding CommandLine}" Header="COMMAND" Width="*"/>
                         </DataGrid.Columns>
                     </DataGrid>
+                    <Border Style="{StaticResource EmptyStateCard}" Panel.ZIndex="5"
+                            AutomationProperties.Name="No startup impact data found">
+                        <Border.Visibility>
+                            <MultiBinding Converter="{StaticResource PanelEmptyStateVisConverter}" ConverterParameter="StartupImpact">
+                                <Binding Path="CurrentPanel"/>
+                                <Binding Path="StartupImpacts"/>
+                            </MultiBinding>
+                        </Border.Visibility>
+                        <StackPanel>
+                            <TextBlock Text="&#xE7F4;" Style="{StaticResource EmptyStateIcon}"/>
+                            <TextBlock Text="No startup impact data is available" Style="{StaticResource EmptyStateTitle}"/>
+                            <TextBlock Text="Windows only records this data after boot traces are present. Refresh after the next restart."
+                                       Style="{StaticResource EmptyStateBody}"/>
+                        </StackPanel>
+                    </Border>
 
                     <!-- ═══════════════════════════════════════════════════════ -->
                     <!-- BROKEN SHORTCUTS (.lnk on Desktop + Start Menu)         -->
@@ -1297,6 +1363,21 @@
                             <DataGridTextColumn Binding="{Binding Description}" Header="DESCRIPTION" Width="*"/>
                         </DataGrid.Columns>
                     </DataGrid>
+                    <Border Style="{StaticResource EmptyStateCard}" Panel.ZIndex="5"
+                            AutomationProperties.Name="No broken shortcuts found">
+                        <Border.Visibility>
+                            <MultiBinding Converter="{StaticResource PanelEmptyStateVisConverter}" ConverterParameter="Shortcuts">
+                                <Binding Path="CurrentPanel"/>
+                                <Binding Path="BrokenShortcuts"/>
+                            </MultiBinding>
+                        </Border.Visibility>
+                        <StackPanel>
+                            <TextBlock Text="&#xE73E;" Style="{StaticResource EmptyStateIcon}"/>
+                            <TextBlock Text="No broken shortcuts found" Style="{StaticResource EmptyStateTitle}"/>
+                            <TextBlock Text="Desktop and Start Menu shortcuts currently point to existing targets."
+                                       Style="{StaticResource EmptyStateBody}"/>
+                        </StackPanel>
+                    </Border>
 
                     <!-- ═══════════════════════════════════════════════════════ -->
                     <!-- DUPLICATE FILES (size → XXH3 head → XXH3 full)          -->
@@ -1321,6 +1402,21 @@
                             </DataGridTextColumn>
                         </DataGrid.Columns>
                     </DataGrid>
+                    <Border Style="{StaticResource EmptyStateCard}" Panel.ZIndex="5"
+                            AutomationProperties.Name="Duplicate scan has no results">
+                        <Border.Visibility>
+                            <MultiBinding Converter="{StaticResource PanelEmptyStateVisConverter}" ConverterParameter="Duplicates">
+                                <Binding Path="CurrentPanel"/>
+                                <Binding Path="DuplicateGroups"/>
+                            </MultiBinding>
+                        </Border.Visibility>
+                        <StackPanel>
+                            <TextBlock Text="&#xE8C8;" Style="{StaticResource EmptyStateIcon}"/>
+                            <TextBlock Text="Scan your profile to find duplicates" Style="{StaticResource EmptyStateTitle}"/>
+                            <TextBlock Text="DeepPurge compares file size, fast hash, and full hash before grouping safe duplicate candidates."
+                                       Style="{StaticResource EmptyStateBody}"/>
+                        </StackPanel>
+                    </Border>
 
                     <!-- ═══════════════════════════════════════════════════════ -->
                     <!-- COMMUNITY CLEANERS (winapp2.ini)                        -->
@@ -1364,6 +1460,16 @@
                                 <DataGridTextColumn Binding="{Binding Warning, Converter={StaticResource FirstOrEmptyConverter}}" Header="WARNING" Width="*"/>
                             </DataGrid.Columns>
                         </DataGrid>
+                        <Border Grid.Row="2" Style="{StaticResource EmptyStateCard}"
+                                Visibility="{Binding Winapp2Entries, Converter={StaticResource EmptyCollectionVisConverter}}"
+                                AutomationProperties.Name="No applicable community cleaners">
+                            <StackPanel>
+                                <TextBlock Text="&#xE8A5;" Style="{StaticResource EmptyStateIcon}"/>
+                                <TextBlock Text="No applicable community cleaners loaded" Style="{StaticResource EmptyStateTitle}"/>
+                                <TextBlock Text="Load or refresh winapp2.ini. Cleaners are shown only when their detection rules match this PC."
+                                           Style="{StaticResource EmptyStateBody}"/>
+                            </StackPanel>
+                        </Border>
                     </Grid>
 
                     <!-- ═══════════════════════════════════════════════════════ -->
@@ -1395,14 +1501,25 @@
                             <Button Content="Rebuild Icon Cache"        Command="{Binding RebuildIconCacheCommand}"  Margin="0,0,8,6" Padding="14,8"/>
                         </WrapPanel>
                         <Border Grid.Row="2" Margin="24,0,24,16" Padding="14" Background="{DynamicResource MantleBrush}" CornerRadius="8">
-                            <TextBox x:Name="txtRepairOutput"
-                                     Text="{Binding RepairOutput, Mode=OneWay}"
-                                     IsReadOnly="True" BorderThickness="0"
-                                     Background="Transparent" Foreground="{DynamicResource TextBrush}"
-                                     FontFamily="Consolas,Cascadia Code" FontSize="12"
-                                     TextWrapping="NoWrap" AcceptsReturn="True"
-                                     VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
-                                     TextChanged="RepairOutput_TextChanged"/>
+                            <Grid>
+                                <TextBox x:Name="txtRepairOutput"
+                                         Text="{Binding RepairOutput, Mode=OneWay}"
+                                         IsReadOnly="True" BorderThickness="0"
+                                         Background="Transparent" Foreground="{DynamicResource TextBrush}"
+                                         FontFamily="Consolas,Cascadia Code" FontSize="12"
+                                         TextWrapping="NoWrap" AcceptsReturn="True"
+                                         VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                                         TextChanged="RepairOutput_TextChanged"/>
+                                <Border Style="{StaticResource EmptyStateCard}" Padding="18" MaxWidth="480"
+                                        Visibility="{Binding RepairOutput, Converter={StaticResource EmptyCollectionVisConverter}}"
+                                        AutomationProperties.Name="No repair command output yet">
+                                    <StackPanel>
+                                        <TextBlock Text="Choose a repair command to stream output here" Style="{StaticResource EmptyStateTitle}"/>
+                                        <TextBlock Text="The output panel stays inside DeepPurge so long-running system tools do not open separate consoles."
+                                                   Style="{StaticResource EmptyStateBody}"/>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
                         </Border>
                     </Grid>
 
@@ -1424,8 +1541,20 @@
                                 this panel lists the ones currently active.
                             </TextBlock>
                         </Border>
-                        <ListBox Grid.Row="1" ItemsSource="{Binding ScheduledJobs}" BorderThickness="0" Margin="24,0,24,16"
-                                 Background="{DynamicResource MantleBrush}"/>
+                        <Grid Grid.Row="1" Margin="24,0,24,16">
+                            <ListBox ItemsSource="{Binding ScheduledJobs}" BorderThickness="0"
+                                     Background="{DynamicResource MantleBrush}"/>
+                            <Border Style="{StaticResource EmptyStateCard}"
+                                    Visibility="{Binding ScheduledJobs, Converter={StaticResource EmptyCollectionVisConverter}}"
+                                    AutomationProperties.Name="No scheduled cleaning jobs">
+                                <StackPanel>
+                                    <TextBlock Text="&#xE823;" Style="{StaticResource EmptyStateIcon}"/>
+                                    <TextBlock Text="No scheduled cleaning jobs are active" Style="{StaticResource EmptyStateTitle}"/>
+                                    <TextBlock Text="Create a constrained job from the CLI, then refresh this panel to confirm Task Scheduler registration."
+                                               Style="{StaticResource EmptyStateBody}"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
                     </Grid>
 
                     <!-- ═══════════════════════════════════════════════════════ -->
@@ -1506,6 +1635,21 @@
                             <DataGridTextColumn Binding="{Binding DryRun}" Header="DRY RUN" Width="75"/>
                         </DataGrid.Columns>
                     </DataGrid>
+                    <Border Style="{StaticResource EmptyStateCard}" Panel.ZIndex="5"
+                            AutomationProperties.Name="No activity history found">
+                        <Border.Visibility>
+                            <MultiBinding Converter="{StaticResource PanelEmptyStateVisConverter}" ConverterParameter="History">
+                                <Binding Path="CurrentPanel"/>
+                                <Binding Path="HistoryEntries"/>
+                            </MultiBinding>
+                        </Border.Visibility>
+                        <StackPanel>
+                            <TextBlock Text="&#xE81C;" Style="{StaticResource EmptyStateIcon}"/>
+                            <TextBlock Text="No activity recorded yet" Style="{StaticResource EmptyStateTitle}"/>
+                            <TextBlock Text="Uninstall, cleanup, restore, and repair actions will appear here with timestamps and dry-run status."
+                                       Style="{StaticResource EmptyStateBody}"/>
+                        </StackPanel>
+                    </Border>
 
                     <!-- ═══════════════════════════════════════════════════════ -->
                     <!-- ABOUT / UPDATES                                         -->
