@@ -14,6 +14,7 @@ All notable changes to DeepPurge will be documented in this file.
 - **Settings / Privacy panel** - the GUI now exposes saved AppSettings controls for expert mode, cleanup age guardrails, cookie-domain preservation, excluded cleanup paths, and JSON import/export instead of leaving these controls CLI-only.
 - **Scheduled-cleaning creation in the GUI** - the Scheduled Cleaning panel now creates and removes Task Scheduler jobs using constrained cleanup presets, validates HH:MM input inline, and no longer sends users to the CLI for the common workflow.
 - **About trust cues** - the About / Updates panel now shows the running executable path, local signing status, SHA256 checksum, and release-verification guidance with refresh and copy actions.
+- **Consistent validation feedback** - legacy WPF panel actions now pair selection and input failures with warning toasts instead of relying on status-bar-only messages.
 
 ### Fixed (P1 accessibility)
 - **Keyboard focus visibility** - shared WPF styles now use a visible accent focus treatment for buttons, inputs, splitters, selectors, tabs, DataGrid cells, and sidebar navigation instead of nulling focus visuals.
