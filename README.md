@@ -85,7 +85,7 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 
 ### Automation
 - **DeepPurgeCli.exe** - Full headless surface. Every workflow (uninstall, clean, repair, driver/shortcut/duplicate scans, install-trace, winapp2 run, update check) is scriptable. Exit codes follow BCU convention (0/1/2/13/1223).
-- **Scheduled cleaning** - Registers tasks in `\DeepPurge\` via `schtasks.exe` running as SYSTEM. "Clean every Monday 03:00" is two clicks.
+- **Scheduled cleaning** - Registers tasks in `\DeepPurge\` via `schtasks.exe` with highest privileges for the current Windows user. The GUI offers constrained cleanup presets; the CLI supports custom safe arguments.
 - **Tray icon** - DeepPurge can minimize to the Windows tray, show scheduled-cleaning status, refresh schedule notifications, and launch a background dry-run clean preview.
 - **Portable mode** - Drop a file named `DeepPurge.portable` next to the exe; every setting / backup / log redirects to `./Data/` beside the binary. USB-stick / field deployment ready. *(BCU pattern)*
 - **Update checker** - Hits GitHub Releases API to flag available upgrades; never blocks startup.

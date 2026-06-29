@@ -1535,21 +1535,93 @@
                     <!-- ═══════════════════════════════════════════════════════ -->
                     <Grid x:Name="panelSchedule" Visibility="Collapsed"
                           AutomationProperties.Name="Scheduled Cleaning panel"
-                          AutomationProperties.HelpText="Scheduled cleaning jobs running via Task Scheduler. Create jobs from the command line.">
+                          AutomationProperties.HelpText="Scheduled cleaning jobs running via Task Scheduler with constrained DeepPurge presets.">
                         <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
                         <Border Grid.Row="0" Padding="24,16">
                             <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource SubtextBrush}" FontSize="12.5" LineHeight="20">
-                                Scheduled jobs run DeepPurgeCli as SYSTEM at their next trigger. Jobs are created in the
-                                Task Scheduler folder <Run FontWeight="SemiBold">\DeepPurge\</Run>. Use the CLI
-                                (<Run FontFamily="Consolas" FontWeight="SemiBold">deeppurgecli schedule add</Run>) to create new jobs —
-                                this panel lists the ones currently active.
+                                Scheduled jobs run DeepPurgeCli through Task Scheduler with highest privileges for this Windows user.
+                                Jobs are created in the <Run FontWeight="SemiBold">\DeepPurge\</Run> folder and use constrained presets,
+                                so the GUI never writes free-form shell commands.
                             </TextBlock>
                         </Border>
-                        <Grid Grid.Row="1" Margin="24,0,24,16">
-                            <ListBox ItemsSource="{Binding ScheduledJobs}" BorderThickness="0"
+                        <GroupBox Grid.Row="1" Header="Create constrained job" Margin="24,0,24,16">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="1.25*"/>
+                                    <ColumnDefinition Width="16"/>
+                                    <ColumnDefinition Width="1.15*"/>
+                                    <ColumnDefinition Width="16"/>
+                                    <ColumnDefinition Width="0.8*"/>
+                                    <ColumnDefinition Width="16"/>
+                                    <ColumnDefinition Width="0.75*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Job name" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
+                                    <TextBox x:Name="txtScheduleName" Text="Weekly DeepPurge Cleanup"
+                                             AutomationProperties.Name="Scheduled job name"/>
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="Preset" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
+                                    <ComboBox x:Name="cmbSchedulePreset" SelectedIndex="0"
+                                              AutomationProperties.Name="Scheduled cleaning preset">
+                                        <ComboBoxItem Content="Safe cleanup: junk + evidence" Tag="clean junk evidence"/>
+                                        <ComboBoxItem Content="Dry-run preview: junk + evidence" Tag="clean junk evidence --dry-run"/>
+                                        <ComboBoxItem Content="Junk only" Tag="clean junk"/>
+                                        <ComboBoxItem Content="Evidence only" Tag="clean evidence"/>
+                                    </ComboBox>
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="4">
+                                    <TextBlock Text="Frequency" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
+                                    <ComboBox x:Name="cmbScheduleFrequency" SelectedIndex="1"
+                                              AutomationProperties.Name="Scheduled job frequency">
+                                        <ComboBoxItem Content="Daily" Tag="Daily"/>
+                                        <ComboBoxItem Content="Weekly" Tag="Weekly"/>
+                                        <ComboBoxItem Content="Monthly" Tag="Monthly"/>
+                                    </ComboBox>
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="6">
+                                    <TextBlock Text="Time" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
+                                    <TextBox x:Name="txtScheduleTime" Text="03:00"
+                                             AutomationProperties.Name="Scheduled job start time"/>
+                                </StackPanel>
+
+                                <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="7" Margin="0,14,0,0">
+                                    <TextBlock Text="Weekly day" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
+                                    <ComboBox x:Name="cmbScheduleDay" SelectedIndex="0" MaxWidth="260" HorizontalAlignment="Left"
+                                              AutomationProperties.Name="Scheduled weekly day">
+                                        <ComboBoxItem Content="Monday" Tag="Monday"/>
+                                        <ComboBoxItem Content="Tuesday" Tag="Tuesday"/>
+                                        <ComboBoxItem Content="Wednesday" Tag="Wednesday"/>
+                                        <ComboBoxItem Content="Thursday" Tag="Thursday"/>
+                                        <ComboBoxItem Content="Friday" Tag="Friday"/>
+                                        <ComboBoxItem Content="Saturday" Tag="Saturday"/>
+                                        <ComboBoxItem Content="Sunday" Tag="Sunday"/>
+                                    </ComboBox>
+                                    <TextBlock Text="Monthly jobs use the selected time on the default Task Scheduler monthly cadence; daily jobs ignore the weekly day."
+                                               Style="{StaticResource EmptyStateBody}" TextAlignment="Left" HorizontalAlignment="Left"
+                                               Margin="0,8,0,0"/>
+                                </StackPanel>
+                            </Grid>
+                        </GroupBox>
+                        <Grid Grid.Row="2" Margin="24,0,24,16">
+                            <ListBox x:Name="lstScheduledJobs" ItemsSource="{Binding ScheduledJobs}" BorderThickness="0"
                                      Background="{DynamicResource MantleBrush}"/>
                             <Border Style="{StaticResource EmptyStateCard}"
                                     Visibility="{Binding ScheduledJobs, Converter={StaticResource EmptyCollectionVisConverter}}"
@@ -1557,7 +1629,7 @@
                                 <StackPanel>
                                     <TextBlock Text="&#xE823;" Style="{StaticResource EmptyStateIcon}"/>
                                     <TextBlock Text="No scheduled cleaning jobs are active" Style="{StaticResource EmptyStateTitle}"/>
-                                    <TextBlock Text="Create a constrained job from the CLI, then refresh this panel to confirm Task Scheduler registration."
+                                    <TextBlock Text="Create a constrained job here, then refresh to confirm Task Scheduler registration."
                                                Style="{StaticResource EmptyStateBody}"/>
                                 </StackPanel>
                             </Border>

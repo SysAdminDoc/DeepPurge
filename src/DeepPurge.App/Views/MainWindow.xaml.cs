@@ -14,6 +14,7 @@ using DeepPurge.Core.FileSystem;
 using DeepPurge.Core.Models;
 using DeepPurge.Core.Packages;
 using DeepPurge.Core.Safety;
+using DeepPurge.Core.Schedule;
 using DeepPurge.Core.Services;
 using DeepPurge.Core.Shell;
 using DeepPurge.Core.Startup;
@@ -316,6 +317,8 @@ public partial class MainWindow : Window
                 break;
             case "Schedule":
                 panelSchedule.Visibility = Visibility.Visible; txtPanelTitle.Text = "Scheduled Cleaning";
+                AppendToolbarButton("Create Job", CreateScheduledJob_Click, "AccentButton");
+                AppendToolbarButton("Remove Job", RemoveScheduledJob_Click, "DangerButton");
                 AppendToolbarButton("Refresh", RefreshSchedule_Click, "AccentButton");
                 // Refresh every time — schedule list is cheap and can change externally.
                 _vm.RefreshScheduledJobsCommand.Execute(null);
@@ -410,8 +413,73 @@ public partial class MainWindow : Window
         _vm.RunWinapp2Command.Execute(null);
     }
 
+    private void CreateScheduledJob_Click(object s, RoutedEventArgs e)
+    {
+        var name = txtScheduleName.Text.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            _vm.StatusText = "Enter a scheduled job name.";
+            ShowToast(_vm.StatusText, isWarning: true);
+            return;
+        }
+
+        if (!TryParseScheduleTime(txtScheduleTime.Text, out var hour, out var minute))
+        {
+            _vm.StatusText = "Enter schedule time as HH:MM.";
+            ShowToast(_vm.StatusText, isWarning: true);
+            return;
+        }
+
+        var frequency = ParseScheduleFrequency(GetComboTag(cmbScheduleFrequency, "Weekly"));
+        var day = ParseDayOfWeek(GetComboTag(cmbScheduleDay, "Monday"));
+        var args = GetComboTag(cmbSchedulePreset, "clean junk evidence");
+
+        var ok = _vm.CreateScheduledJob(name, frequency, day, hour, minute, args);
+        ShowToast(ok ? $"Scheduled {name}" : _vm.StatusText, isError: !ok);
+    }
+
+    private void RemoveScheduledJob_Click(object s, RoutedEventArgs e)
+    {
+        if (lstScheduledJobs.SelectedItem is not string name || string.IsNullOrWhiteSpace(name))
+        {
+            _vm.StatusText = "Select a scheduled job first.";
+            ShowToast(_vm.StatusText, isWarning: true);
+            return;
+        }
+
+        var ok = _vm.DeleteScheduledJob(name);
+        ShowToast(ok ? $"Removed {name}" : _vm.StatusText, isError: !ok);
+    }
+
     private void RefreshSchedule_Click(object s, RoutedEventArgs e)
         => _vm.RefreshScheduledJobsCommand.Execute(null);
+
+    private static bool TryParseScheduleTime(string value, out int hour, out int minute)
+    {
+        hour = 0;
+        minute = 0;
+        var parts = (value ?? "").Trim().Split(':', StringSplitOptions.TrimEntries);
+        return parts.Length is 1 or 2 &&
+               int.TryParse(parts[0], out hour) &&
+               int.TryParse(parts.Length == 2 ? parts[1] : "0", out minute) &&
+               hour is >= 0 and <= 23 &&
+               minute is >= 0 and <= 59;
+    }
+
+    private static string GetComboTag(ComboBox combo, string fallback)
+        => combo.SelectedItem is ComboBoxItem item && item.Tag is not null
+            ? item.Tag.ToString() ?? fallback
+            : fallback;
+
+    private static ScheduleFrequency ParseScheduleFrequency(string value)
+        => Enum.TryParse<ScheduleFrequency>(value, ignoreCase: true, out var frequency)
+            ? frequency
+            : ScheduleFrequency.Weekly;
+
+    private static DayOfWeek ParseDayOfWeek(string value)
+        => Enum.TryParse<DayOfWeek>(value, ignoreCase: true, out var day)
+            ? day
+            : DayOfWeek.Monday;
 
     private void SaveSettings_Click(object s, RoutedEventArgs e)
     {
@@ -495,6 +563,8 @@ public partial class MainWindow : Window
             "Delete Duplicates" => "Delete duplicate copies after the duplicate scan groups matching file hashes.",
             "Delete Selected Files" => "Delete the selected large files using the active dry-run and secure-delete settings.",
             "Recycle All" => "Move all detected broken shortcuts to the Recycle Bin.",
+            "Create Job" => "Create a scheduled DeepPurge cleanup job from the selected preset.",
+            "Remove Job" => "Remove the selected scheduled DeepPurge cleanup job.",
             "Open Logs" => "Open the folder containing deletion manifest logs.",
             "Open Backups" => "Open the folder containing registry backup exports.",
             "Save Settings" => "Save Settings and Privacy changes to settings.json.",

@@ -39,6 +39,24 @@ public class WpfPolishContractTests
     }
 
     [Fact]
+    public void Scheduled_cleaning_has_gui_creation_controls()
+    {
+        var root = FindRepoRoot();
+        var xaml = File.ReadAllText(Path.Combine(root, "src", "DeepPurge.App", "Views", "MainWindow.xaml"));
+        var codeBehind = File.ReadAllText(Path.Combine(root, "src", "DeepPurge.App", "Views", "MainWindow.xaml.cs"));
+        var viewModelExtensions = File.ReadAllText(Path.Combine(root, "src", "DeepPurge.App", "ViewModels", "MainViewModel.Extensions.cs"));
+
+        Assert.Contains("x:Name=\"txtScheduleName\"", xaml);
+        Assert.Contains("x:Name=\"cmbSchedulePreset\"", xaml);
+        Assert.Contains("Create constrained job", xaml);
+        Assert.Contains("AppendToolbarButton(\"Create Job\"", codeBehind);
+        Assert.Contains("AppendToolbarButton(\"Remove Job\"", codeBehind);
+        Assert.Contains("TryParseScheduleTime", codeBehind);
+        Assert.Contains("DeleteScheduledJob", viewModelExtensions);
+        Assert.DoesNotContain("Use the CLI", xaml);
+    }
+
+    [Fact]
     public void Checkbox_template_preserves_label_content()
     {
         var root = FindRepoRoot();
