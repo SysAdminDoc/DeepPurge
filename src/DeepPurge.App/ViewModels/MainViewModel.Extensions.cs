@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.Security.Cryptography;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DeepPurge.Core.App;
@@ -11,6 +13,7 @@ using DeepPurge.Core.Repair;
 using DeepPurge.Core.Safety;
 using DeepPurge.Core.Schedule;
 using DeepPurge.Core.Firewall;
+using DeepPurge.Core.Security;
 using DeepPurge.Core.Shell;
 using DeepPurge.Core.Shortcuts;
 using DeepPurge.Core.Startup;
@@ -812,6 +815,90 @@ public partial class MainViewModel
         : "OFF — settings live in %LocalAppData%\\DeepPurge\\. Drop a file named 'DeepPurge.portable' next to the exe and restart to switch.";
 
     // ═══════════════════════════════════════════════════════
+    [ObservableProperty] public partial string ExecutablePathDisplay { get; set; } = "Open About to inspect the running executable.";
+    [ObservableProperty] public partial string LocalSignatureDisplay { get; set; } = "Not inspected yet.";
+    [ObservableProperty] public partial string LocalSha256Display { get; set; } = "Not calculated yet.";
+
+    public string ReleaseVerificationText =>
+        "Before trusting a downloaded build, compare this SHA256 with the matching release checksum and confirm the signing status is expected.";
+
+    public void RefreshAboutTrustFacts()
+    {
+        var exePath = ResolveCurrentExecutablePath();
+        ExecutablePathDisplay = string.IsNullOrWhiteSpace(exePath)
+            ? "Unavailable - executable path could not be resolved."
+            : exePath;
+
+        if (string.IsNullOrWhiteSpace(exePath) || !File.Exists(exePath))
+        {
+            LocalSignatureDisplay = "Unavailable - executable file was not found.";
+            LocalSha256Display = "Unavailable - executable file was not found.";
+            StatusText = "Executable trust facts are unavailable.";
+            return;
+        }
+
+        try
+        {
+            var signature = DigitalSignatureInspector.Inspect(exePath);
+            LocalSignatureDisplay = FormatSignatureStatus(signature);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Signature inspection failed for {exePath}: {ex.Message}");
+            LocalSignatureDisplay = "Unavailable - signature inspection failed.";
+        }
+
+        try
+        {
+            LocalSha256Display = ComputeSha256(exePath);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"SHA256 calculation failed for {exePath}: {ex.Message}");
+            LocalSha256Display = "Unavailable - SHA256 calculation failed.";
+        }
+
+        StatusText = "Executable trust facts refreshed.";
+    }
+
+    private static string ResolveCurrentExecutablePath()
+    {
+        if (!string.IsNullOrWhiteSpace(Environment.ProcessPath) && File.Exists(Environment.ProcessPath))
+            return Environment.ProcessPath;
+
+        try
+        {
+            var modulePath = Process.GetCurrentProcess().MainModule?.FileName;
+            if (!string.IsNullOrWhiteSpace(modulePath) && File.Exists(modulePath))
+                return modulePath;
+        }
+        catch
+        {
+            // Best-effort only; About still renders an actionable unavailable state.
+        }
+
+        return "";
+    }
+
+    private static string ComputeSha256(string path)
+    {
+        using var stream = File.OpenRead(path);
+        return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+    }
+
+    private static string FormatSignatureStatus(SignatureInfo signature) => signature.Status switch
+    {
+        SignatureStatus.Signed => string.IsNullOrWhiteSpace(signature.Subject)
+            ? "Signed."
+            : $"Signed by {signature.Subject}.",
+        SignatureStatus.Unsigned => "Unsigned. Expected for local development builds; verify release hashes before installing.",
+        SignatureStatus.Invalid => "Invalid signature. Do not trust this executable until the source is verified.",
+        SignatureStatus.ChainInvalid => "Signed, but the certificate chain is not trusted.",
+        SignatureStatus.Revoked => "Revoked signature. Do not trust this executable.",
+        SignatureStatus.Missing => "Missing executable. Signature could not be inspected.",
+        _ => "Unknown signature status.",
+    };
+
     //  ORPHANED ARTIFACTS (unified panel)
     // ═══════════════════════════════════════════════════════
     public ObservableCollection<FirewallRuleEntry> OrphanedFirewallRules { get; } = new();
@@ -897,7 +984,7 @@ public partial class MainViewModel
     // ═══════════════════════════════════════════════════════
     //  UPDATE CHECK
     // ═══════════════════════════════════════════════════════
-    [ObservableProperty] public partial string UpdateText { get; set; } = "";
+    [ObservableProperty] public partial string UpdateText { get; set; } = "Not checked yet.";
 
     [RelayCommand]
     private async Task CheckForUpdatesAsync()

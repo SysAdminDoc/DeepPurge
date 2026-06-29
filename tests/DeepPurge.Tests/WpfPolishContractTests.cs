@@ -80,6 +80,25 @@ public class WpfPolishContractTests
         Assert.Contains("AutomationProperties.Name=\"Panel actions\"", xaml);
     }
 
+    [Fact]
+    public void About_panel_exposes_local_trust_facts()
+    {
+        var root = FindRepoRoot();
+        var xaml = File.ReadAllText(Path.Combine(root, "src", "DeepPurge.App", "Views", "MainWindow.xaml"));
+        var codeBehind = File.ReadAllText(Path.Combine(root, "src", "DeepPurge.App", "Views", "MainWindow.xaml.cs"));
+        var viewModelExtensions = File.ReadAllText(Path.Combine(root, "src", "DeepPurge.App", "ViewModels", "MainViewModel.Extensions.cs"));
+
+        Assert.Contains("ExecutablePathDisplay", xaml);
+        Assert.Contains("LocalSignatureDisplay", xaml);
+        Assert.Contains("LocalSha256Display", xaml);
+        Assert.Contains("ReleaseVerificationText", xaml);
+        Assert.Contains("AppendToolbarButton(\"Refresh Trust\"", codeBehind);
+        Assert.Contains("AppendToolbarButton(\"Copy SHA256\"", codeBehind);
+        Assert.Contains("_vm.RefreshAboutTrustFacts();", codeBehind);
+        Assert.Contains("SHA256.HashData", viewModelExtensions);
+        Assert.Contains("DigitalSignatureInspector.Inspect", viewModelExtensions);
+    }
+
     private static string FindRepoRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);

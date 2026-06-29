@@ -1821,28 +1821,69 @@
                     <!-- ═══════════════════════════════════════════════════════ -->
                     <Border x:Name="panelAbout" Visibility="Collapsed" Padding="48,32"
                             AutomationProperties.Name="About and Updates panel"
-                            AutomationProperties.HelpText="Application version, data location, portable mode status, and update check.">
-                        <StackPanel MaxWidth="640" HorizontalAlignment="Left" VerticalAlignment="Top">
-                            <TextBlock Text="DeepPurge" FontSize="32" FontWeight="Bold"
-                                       Foreground="{DynamicResource TextBrush}" Margin="0,0,0,2"/>
-                            <TextBlock Text="{Binding AppVersionDisplay, StringFormat=Version {0}}" FontSize="13"
-                                       Foreground="{DynamicResource SubtextBrush}" Margin="0,0,0,24"/>
+                            AutomationProperties.HelpText="Application version, data location, portable mode status, local trust facts, and update check.">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel MaxWidth="760" HorizontalAlignment="Left" VerticalAlignment="Top">
+                                <TextBlock Text="DeepPurge" FontSize="32" FontWeight="Bold"
+                                           Foreground="{DynamicResource TextBrush}" Margin="0,0,0,2"/>
+                                <TextBlock Text="{Binding AppVersionDisplay, StringFormat=Version {0}}" FontSize="13"
+                                           Foreground="{DynamicResource SubtextBrush}" Margin="0,0,0,24"/>
 
-                            <TextBlock Text="Data location" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
-                            <TextBlock Text="{Binding DataRootDisplay}" FontFamily="Consolas,Cascadia Code"
-                                       FontSize="12" Foreground="{DynamicResource SubtextBrush}" Margin="0,0,0,20"
-                                       TextWrapping="Wrap"/>
+                                <Border Background="{DynamicResource Surface0Brush}" BorderBrush="{DynamicResource Surface1Brush}"
+                                        BorderThickness="1" CornerRadius="12" Padding="18" Margin="0,0,0,20">
+                                    <StackPanel>
+                                        <TextBlock Text="Local data and runtime" FontSize="15" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource TextBrush}" Margin="0,0,0,14"/>
 
-                            <TextBlock Text="Portable mode" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
-                            <TextBlock Text="{Binding PortableStatusDisplay}" FontSize="12"
-                                       Foreground="{DynamicResource SubtextBrush}" Margin="0,0,0,20" TextWrapping="Wrap"/>
+                                        <TextBlock Text="Data location" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                                        <TextBlock Text="{Binding DataRootDisplay}" FontFamily="Consolas,Cascadia Code"
+                                                   FontSize="12" Foreground="{DynamicResource SubtextBrush}" Margin="0,0,0,16"
+                                                   TextWrapping="Wrap"/>
 
-                            <TextBlock Text="Updates" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
-                            <TextBlock Text="{Binding UpdateText}" FontSize="12"
-                                       Foreground="{DynamicResource SubtextBrush}" Margin="0,0,0,12" TextWrapping="Wrap"/>
-                            <Button Content="Check for updates" Command="{Binding CheckForUpdatesCommand}"
-                                    Style="{DynamicResource AccentButton}" HorizontalAlignment="Left" Padding="24,10"/>
-                        </StackPanel>
+                                        <TextBlock Text="Portable mode" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                                        <TextBlock Text="{Binding PortableStatusDisplay}" FontSize="12"
+                                                   Foreground="{DynamicResource SubtextBrush}" Margin="0,0,0,0" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Background="{DynamicResource Surface0Brush}" BorderBrush="{DynamicResource Surface1Brush}"
+                                        BorderThickness="1" CornerRadius="12" Padding="18" Margin="0,0,0,20">
+                                    <StackPanel>
+                                        <TextBlock Text="Executable trust" FontSize="15" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource TextBrush}" Margin="0,0,0,14"/>
+
+                                        <TextBlock Text="Running executable" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                                        <TextBlock Text="{Binding ExecutablePathDisplay}" FontFamily="Consolas,Cascadia Code"
+                                                   FontSize="12" Foreground="{DynamicResource SubtextBrush}" Margin="0,0,0,16"
+                                                   TextWrapping="Wrap"/>
+
+                                        <TextBlock Text="Signing status" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                                        <TextBlock Text="{Binding LocalSignatureDisplay}" FontSize="12"
+                                                   Foreground="{DynamicResource SubtextBrush}" Margin="0,0,0,16" TextWrapping="Wrap"/>
+
+                                        <TextBlock Text="SHA256" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                                        <TextBlock Text="{Binding LocalSha256Display}" FontFamily="Consolas,Cascadia Code"
+                                                   FontSize="12" Foreground="{DynamicResource SubtextBrush}" Margin="0,0,0,16"
+                                                   TextWrapping="Wrap"/>
+
+                                        <TextBlock Text="{Binding ReleaseVerificationText}" FontSize="12"
+                                                   Foreground="{DynamicResource Subtext0Brush}" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Background="{DynamicResource Surface0Brush}" BorderBrush="{DynamicResource Surface1Brush}"
+                                        BorderThickness="1" CornerRadius="12" Padding="18">
+                                    <StackPanel>
+                                        <TextBlock Text="Updates" FontSize="15" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
+                                        <TextBlock Text="{Binding UpdateText}" FontSize="12"
+                                                   Foreground="{DynamicResource SubtextBrush}" Margin="0,0,0,12" TextWrapping="Wrap"/>
+                                        <Button Content="Check for updates" Command="{Binding CheckForUpdatesCommand}"
+                                                Style="{DynamicResource AccentButton}" HorizontalAlignment="Left" Padding="24,10"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
                     </Border>
 
                     <!-- LEFTOVER RESULTS OVERLAY -->
