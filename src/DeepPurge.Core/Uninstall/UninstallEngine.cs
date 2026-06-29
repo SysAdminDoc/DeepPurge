@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using DeepPurge.Core.FileSystem;
 using DeepPurge.Core.Models;
+using DeepPurge.Core.Packages;
 using DeepPurge.Core.Registry;
 using DeepPurge.Core.Safety;
 
@@ -26,13 +27,22 @@ public class UninstallEngine
 
     public async Task<UninstallResult> UninstallAsync(InstalledProgram program, ScanMode scanMode,
         bool createRestorePoint = true, bool runBuiltInUninstaller = true, bool silent = false,
-        CancellationToken ct = default)
+        bool dryRun = false, CancellationToken ct = default)
     {
         var result = new UninstallResult();
         var sw = Stopwatch.StartNew();
 
         try
         {
+            if (dryRun)
+            {
+                result.Success = true;
+                result.UninstallerSkipped = true;
+                result.Output = DescribeUninstallPreview(program, silent);
+                StatusChanged?.Invoke(result.Output);
+                return result;
+            }
+
             StatusChanged?.Invoke("Creating safety backups...");
             ProgressChanged?.Invoke(5);
 
@@ -45,7 +55,28 @@ public class UninstallEngine
             _backupManager.BackupRegistryKey(program.RegistryPath);
             ProgressChanged?.Invoke(15);
 
-            if (runBuiltInUninstaller && program.HasUninstaller)
+            var nativePackageUninstaller = TryBuildNativePackageUninstaller(
+                program,
+                silent,
+                out var nativeCommand,
+                out var nativeError);
+
+            if (runBuiltInUninstaller && nativePackageUninstaller != null)
+            {
+                StatusChanged?.Invoke($"Running {program.PackageManager} uninstall for {program.DisplayName}...");
+                ProgressChanged?.Invoke(20);
+
+                var (exitCode, output, error) = await RunProcessAsync(nativePackageUninstaller, ct, forceRedirect: true)
+                    .ConfigureAwait(false);
+                result.ExitCode = exitCode;
+                result.Output = output;
+                result.ErrorOutput = error;
+                result.Success = UninstallerSuccessCodes.Contains(exitCode);
+
+                DeepPurge.Core.Diagnostics.Log.Info(
+                    $"Package uninstall {program.PackageManager}/{program.PackageId} exit={exitCode} command={nativeCommand}");
+            }
+            else if (runBuiltInUninstaller && program.HasUninstaller)
             {
                 StatusChanged?.Invoke($"Running {program.DisplayName} uninstaller...");
                 ProgressChanged?.Invoke(20);
@@ -72,6 +103,9 @@ public class UninstallEngine
                 }
                 else
                 {
+                    if (!string.IsNullOrWhiteSpace(nativeError))
+                        StatusChanged?.Invoke($"Package-manager uninstall skipped: {nativeError}");
+
                     var (exitCode, output, error) = await RunUninstallerAsync(uninstallCmd, silent, ct);
                     result.ExitCode = exitCode;
                     result.Output = output;
@@ -82,7 +116,17 @@ public class UninstallEngine
             else
             {
                 result.UninstallerSkipped = true;
-                result.Success = true;
+                if (string.IsNullOrWhiteSpace(nativeError))
+                {
+                    result.Success = true;
+                }
+                else
+                {
+                    result.ExitCode = -1;
+                    result.ErrorOutput = nativeError;
+                    result.Success = false;
+                    StatusChanged?.Invoke(nativeError);
+                }
             }
             ProgressChanged?.Invoke(50);
 
@@ -349,6 +393,19 @@ public class UninstallEngine
         string uninstallCommand, bool silent, CancellationToken ct)
     {
         var psi = BuildUninstallerStartInfo(uninstallCommand, silent);
+        return await RunProcessAsync(psi, ct, forceRedirect: false).ConfigureAwait(false);
+    }
+
+    private async Task<(int exitCode, string output, string error)> RunProcessAsync(
+        ProcessStartInfo psi, CancellationToken ct, bool forceRedirect)
+    {
+        if (forceRedirect)
+        {
+            psi.UseShellExecute = false;
+            psi.CreateNoWindow = true;
+            psi.RedirectStandardOutput = true;
+            psi.RedirectStandardError = true;
+        }
 
         using var process = new Process { StartInfo = psi };
         var output = new StringBuilder();
@@ -389,6 +446,63 @@ public class UninstallEngine
         }
 
         return (process.ExitCode, output.ToString(), error.ToString());
+    }
+
+    private static ProcessStartInfo? TryBuildNativePackageUninstaller(
+        InstalledProgram program,
+        bool silent,
+        out string command,
+        out string? error)
+    {
+        command = "";
+        error = null;
+
+        if (string.IsNullOrWhiteSpace(program.PackageManager) ||
+            string.IsNullOrWhiteSpace(program.PackageId))
+            return null;
+
+        if (!PackageManagerCommandBuilder.IsSupportedNativeUninstallManager(program.PackageManager))
+            return null;
+
+        try
+        {
+            command = PackageManagerCommandBuilder.DescribeNativeUninstallCommand(
+                program.PackageManager,
+                program.PackageId,
+                silent);
+            return PackageManagerCommandBuilder.CreateNativeUninstallStartInfo(
+                program.PackageManager,
+                program.PackageId,
+                silent);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException)
+        {
+            error = $"Package-manager uninstall blocked for {program.DisplayName}: {ex.Message}";
+            return null;
+        }
+    }
+
+    private static string DescribeUninstallPreview(InstalledProgram program, bool silent)
+    {
+        var native = TryBuildNativePackageUninstaller(program, silent, out var command, out var nativeError);
+        if (native != null) return $"Dry-run: would run {command}";
+        if (!string.IsNullOrWhiteSpace(nativeError)) return $"Dry-run: {nativeError}";
+
+        if (program.HasUninstaller)
+        {
+            var uninstallCmd = silent
+                ? SilentSwitchDatabase.ResolveSilentCommand(program)
+                : program.UninstallString;
+
+            if (string.IsNullOrWhiteSpace(uninstallCmd))
+                uninstallCmd = program.UninstallString;
+
+            return string.IsNullOrWhiteSpace(uninstallCmd)
+                ? "Dry-run: no uninstall command registered."
+                : $"Dry-run: would run registered uninstaller: {uninstallCmd}";
+        }
+
+        return "Dry-run: no uninstall command registered.";
     }
 
     /// <summary>

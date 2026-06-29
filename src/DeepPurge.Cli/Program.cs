@@ -230,8 +230,9 @@ public static class Program
 
     private static async Task<int> CmdUninstallAsync(ParsedArgs a, CancellationToken ct)
     {
-        if (a.Positional.Count == 0) return Fail("usage: deeppurgecli uninstall <name-or-id> [--silent] [--timeout <minutes>]");
+        if (a.Positional.Count == 0) return Fail("usage: deeppurgecli uninstall <name-or-id> [--silent] [--dry-run] [--timeout <minutes>]");
         bool silent = a.HasFlag("silent");
+        bool dryRun = a.HasFlag("dry-run");
         var nameArg = a.Positional[0];
         var timeoutStr = a.GetOption("timeout");
         if (timeoutStr != null && int.TryParse(timeoutStr, out var mins))
@@ -247,8 +248,13 @@ public static class Program
 
         var engine = new UninstallEngine();
         engine.StatusChanged += s => Console.Error.WriteLine($"[status] {s}");
-        Console.WriteLine($"Uninstalling {match.DisplayName}...");
-        var result = await engine.UninstallAsync(match, DeepPurge.Core.Models.ScanMode.Moderate, silent: silent, ct: ct);
+        Console.WriteLine(dryRun ? $"Previewing uninstall for {match.DisplayName}..." : $"Uninstalling {match.DisplayName}...");
+        var result = await engine.UninstallAsync(
+            match,
+            DeepPurge.Core.Models.ScanMode.Moderate,
+            silent: silent,
+            dryRun: dryRun,
+            ct: ct);
         Console.WriteLine($"[exit={result.ExitCode}] success={result.Success}");
         if (!string.IsNullOrWhiteSpace(result.Output)) Console.WriteLine(result.Output);
         return result.Success ? 0 : 1;
@@ -1042,7 +1048,7 @@ if ($app) {{
         Console.WriteLine("  version                                  Show build + data paths");
         Console.WriteLine("  portable [--enable]                      Query or toggle portable mode");
         Console.WriteLine("  list [--registry-only]                    List installed programs (TSV)");
-        Console.WriteLine("  uninstall <name> [--silent]              Uninstall a program");
+        Console.WriteLine("  uninstall <name> [--silent] [--dry-run]  Uninstall a program or preview the native command");
         Console.WriteLine("  clean [junk|evidence ...] [--dry-run] [--secure] [--keep-cookies domain1,domain2]");
         Console.WriteLine("  repair <sfc|dism-scan|dism-restore|dism-cleanup|dism-resetbase|chkdsk|fontcache|iconcache>");
         Console.WriteLine("  drivers [--old] [--export file --format csv|json]");

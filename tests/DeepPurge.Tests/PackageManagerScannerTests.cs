@@ -2,6 +2,7 @@ using System.Reflection;
 using DeepPurge.Core.Models;
 using DeepPurge.Core.Packages;
 using DeepPurge.Core.Registry;
+using DeepPurge.Core.Uninstall;
 using Xunit;
 
 namespace DeepPurge.Tests;
@@ -72,6 +73,79 @@ public class PackageManagerScannerTests
         Assert.Equal("", psi.Arguments);
     }
 
+    [Fact]
+    public void Native_uninstall_builder_uses_winget_id_exact()
+    {
+        var psi = PackageManagerCommandBuilder.CreateNativeUninstallStartInfo(
+            "winget",
+            "Microsoft.PowerToys",
+            silent: true);
+
+        Assert.Equal("winget.exe", psi.FileName);
+        Assert.False(psi.UseShellExecute);
+        Assert.DoesNotContain("cmd", psi.FileName, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(new[]
+        {
+            "uninstall",
+            "--id",
+            "Microsoft.PowerToys",
+            "--exact",
+            "--disable-interactivity",
+            "--accept-source-agreements",
+            "--silent",
+        }, psi.ArgumentList);
+        Assert.Equal("", psi.Arguments);
+    }
+
+    [Fact]
+    public void Native_uninstall_builder_uses_scoop_command_wrapper()
+    {
+        var psi = PackageManagerCommandBuilder.CreateNativeUninstallStartInfo(
+            "scoop",
+            "git",
+            silent: false);
+
+        Assert.Equal("cmd.exe", psi.FileName);
+        Assert.False(psi.UseShellExecute);
+        Assert.Equal(new[] { "/d", "/c", "scoop", "uninstall", "git" }, psi.ArgumentList);
+        Assert.Equal("", psi.Arguments);
+    }
+
+    [Fact]
+    public void Native_uninstall_builder_uses_chocolatey_noninteractive_flags()
+    {
+        var psi = PackageManagerCommandBuilder.CreateNativeUninstallStartInfo(
+            "chocolatey",
+            "7zip",
+            silent: false);
+
+        Assert.Equal("choco.exe", psi.FileName);
+        Assert.False(psi.UseShellExecute);
+        Assert.Equal(new[]
+        {
+            "uninstall",
+            "7zip",
+            "--yes",
+            "--no-progress",
+            "--no-color",
+            "--limit-output",
+        }, psi.ArgumentList);
+        Assert.Equal("", psi.Arguments);
+    }
+
+    [Fact]
+    public void Native_uninstall_command_description_quotes_only_when_needed()
+    {
+        var command = PackageManagerCommandBuilder.DescribeNativeUninstallCommand(
+            "winget",
+            "Microsoft.PowerToys",
+            silent: false);
+
+        Assert.Equal(
+            "winget.exe uninstall --id Microsoft.PowerToys --exact --disable-interactivity --accept-source-agreements",
+            command);
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData(" Microsoft.PowerToys")]
@@ -88,5 +162,42 @@ public class PackageManagerScannerTests
         Assert.False(PackageManagerCommandBuilder.IsSafeWingetPackageId(packageId));
         Assert.Throws<ArgumentException>(() =>
             PackageManagerCommandBuilder.CreateWingetUpgradeStartInfo(packageId));
+        Assert.Throws<ArgumentException>(() =>
+            PackageManagerCommandBuilder.CreateNativeUninstallStartInfo("winget", packageId));
+        Assert.Throws<ArgumentException>(() =>
+            PackageManagerCommandBuilder.CreateNativeUninstallStartInfo("scoop", packageId));
+        Assert.Throws<ArgumentException>(() =>
+            PackageManagerCommandBuilder.CreateNativeUninstallStartInfo("chocolatey", packageId));
+    }
+
+    [Fact]
+    public void Native_uninstall_builder_rejects_unknown_source()
+    {
+        Assert.False(PackageManagerCommandBuilder.IsSupportedNativeUninstallManager("steam"));
+        Assert.Throws<NotSupportedException>(() =>
+            PackageManagerCommandBuilder.CreateNativeUninstallStartInfo("steam", "12345"));
+    }
+
+    [Fact]
+    public async Task UninstallEngine_dry_run_previews_package_only_native_uninstall()
+    {
+        var program = new InstalledProgram
+        {
+            DisplayName = "git",
+            PackageManager = "scoop",
+            PackageId = "git",
+            UninstallString = "",
+        };
+
+        var result = await new UninstallEngine().UninstallAsync(
+            program,
+            ScanMode.Moderate,
+            createRestorePoint: false,
+            dryRun: true,
+            ct: TestContext.Current.CancellationToken);
+
+        Assert.True(result.Success);
+        Assert.True(result.UninstallerSkipped);
+        Assert.Contains("cmd.exe /d /c scoop uninstall git", result.Output);
     }
 }
