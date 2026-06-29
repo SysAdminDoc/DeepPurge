@@ -1,4 +1,6 @@
 using DeepPurge.Core.Diagnostics;
+using DeepPurge.Core.App;
+using System.Text.Json;
 using Xunit;
 
 namespace DeepPurge.Tests;
@@ -24,7 +26,7 @@ public class DeletionManifestTests
             @"HKLM\SOFTWARE\TestApp", "registry", 0, DateTime.UtcNow, "uninstall-leftover");
 
         Assert.Equal("registry", entry.Type);
-        Assert.True(entry.Path.StartsWith("HKLM", StringComparison.OrdinalIgnoreCase));
+        Assert.StartsWith("HKLM", entry.Path, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -70,5 +72,47 @@ public class DeletionManifestTests
     {
         var entries = DeletionManifest.LoadManifest(new DateTime(1999, 1, 1));
         Assert.Empty(entries);
+    }
+
+    [Fact]
+    public void Malformed_manifest_lines_are_ignored_without_hiding_valid_entries()
+    {
+        var date = new DateTime(2099, 12, 30);
+        var path = Path.Combine(DataPaths.Logs, $"deletions-{date:yyyy-MM-dd}.jsonl");
+        var previous = File.Exists(path) ? File.ReadAllText(path) : null;
+
+        try
+        {
+            var entry = new DeletionEntry(
+                @"C:\Temp\recoverable.tmp",
+                "file",
+                256,
+                date,
+                "delete");
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllLines(path, new[]
+            {
+                "{not valid json",
+                JsonSerializer.Serialize(entry),
+            });
+
+            var entries = DeletionManifest.LoadManifest(date);
+            var manifests = DeletionManifest.ListManifests();
+
+            Assert.Single(entries);
+            Assert.Equal(entry.Path, entries[0].Path);
+            Assert.Contains(manifests, m => m.Date.Date == date.Date && m.EntryCount == 1);
+        }
+        finally
+        {
+            if (previous == null)
+            {
+                try { File.Delete(path); } catch { }
+            }
+            else
+            {
+                File.WriteAllText(path, previous);
+            }
+        }
     }
 }

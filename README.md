@@ -77,6 +77,7 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 ### Safety
 - **System Restore Points** - View, create, and manage restore points
 - Automatic restore point creation before uninstall operations (one per batch in bulk mode — Windows throttles SRSetRestorePoint)
+- **Deletion Recovery panel** - list deletion manifests, preview recorded file/registry deletions, run dry-run restores, and open manifest or backup folders
 - **Registry Backups panel** - Browse, inspect, and restore the `.reg` exports created before every destructive registry op
 - Recycle Bin for file deletions (with permanent-delete and secure-delete fallbacks)
 - Confidence-based leftover classification (Safe / Moderate / Risky)

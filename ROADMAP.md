@@ -35,13 +35,6 @@ Explicit "no" list, so anyone proposing these doesn't waste effort:
   Acceptance: GUI can create/delete daily, weekly, and monthly scheduled jobs from safe presets such as dry-run preview, junk clean, evidence clean, and junk+evidence clean; no arbitrary CLI string is accepted from the GUI; created jobs appear in the existing schedule list and tray status.
   Complexity: M
 
-- [ ] P1 — Add GUI deletion-manifest recovery panel
-  Why: Core and CLI can list, preview, dry-run, and restore deletion manifests, but GUI users cannot discover the rollback path.
-  Evidence: `src/DeepPurge.Core/Diagnostics/DeletionManifest.cs:65-159`; `src/DeepPurge.Cli/Program.cs:835-870`; Revo/HiBit backup-and-restore trust patterns.
-  Touches: `src/DeepPurge.App/Views/MainWindow.xaml`, `src/DeepPurge.App/Views/MainWindow.xaml.cs`, `src/DeepPurge.App/ViewModels/MainViewModel*.cs`, `tests/DeepPurge.Tests/DeletionManifestTests.cs`.
-  Acceptance: GUI lists available `deletions-*.jsonl` manifests, previews entries, runs dry-run restore, shows registry/restorable/unrecoverable counts, and opens backup/log locations without crashing on malformed manifests.
-  Complexity: M
-
 - [ ] P1 — Add GUI Settings and Privacy panel for existing AppSettings controls
   Why: Cookie whitelist, excluded paths, min-age defaults, expert mode, settings import/export, and program notes exist but are mostly CLI-only or hidden behind row actions.
   Evidence: `src/DeepPurge.Core/App/AppSettings.cs:6-13`; `src/DeepPurge.Cli/Program.cs:680-712`; BleachBit 6.0 Cookie Manager; FluentCleaner settings hotfix 26.06.04.

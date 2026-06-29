@@ -491,6 +491,171 @@ public partial class MainViewModel
     }
 
     // ═══════════════════════════════════════════════════════
+    //  DELETION MANIFEST RECOVERY
+    // ═══════════════════════════════════════════════════════
+    public sealed record DeletionRestoreDetail(string Message);
+
+    public ObservableCollection<ManifestSummary> DeletionManifests { get; } = new();
+    public ObservableCollection<DeletionEntry> DeletionManifestEntries { get; } = new();
+    public ObservableCollection<DeletionRestoreDetail> DeletionRestoreDetails { get; } = new();
+
+    [ObservableProperty] public partial ManifestSummary? SelectedDeletionManifest { get; set; }
+    [ObservableProperty] public partial string DeletionManifestSummary { get; set; } = "Load deletion manifests to inspect rollback options.";
+    [ObservableProperty] public partial string DeletionRestoreSummary { get; set; } = "";
+    [ObservableProperty] public partial int DeletionRegistryRestored { get; set; }
+    [ObservableProperty] public partial int DeletionFilesRecoverable { get; set; }
+    [ObservableProperty] public partial int DeletionUnrecoverable { get; set; }
+
+    partial void OnSelectedDeletionManifestChanged(ManifestSummary? value)
+    {
+        if (value != null) PreviewSelectedDeletionManifest();
+    }
+
+    [RelayCommand]
+    private void LoadDeletionManifests()
+    {
+        try
+        {
+            var summaries = DeletionManifest.ListManifests();
+            _dispatcher.Invoke(() =>
+            {
+                DeletionManifests.Clear();
+                foreach (var manifest in summaries) DeletionManifests.Add(manifest);
+
+                if (summaries.Count == 0)
+                {
+                    SelectedDeletionManifest = null;
+                    DeletionManifestEntries.Clear();
+                    DeletionRestoreDetails.Clear();
+                    SetDeletionRestoreCounts(new RestoreResult(0, 0, 0, new()));
+                    DeletionManifestSummary = "No deletion manifests found. Cleanup runs will appear here once they record rollback data.";
+                    DeletionRestoreSummary = "";
+                    StatusText = "No deletion manifests found.";
+                    return;
+                }
+
+                SelectedDeletionManifest = summaries[0];
+                StatusText = $"Loaded {summaries.Count} deletion manifest(s).";
+            });
+        }
+        catch (Exception ex)
+        {
+            Log.Error("LoadDeletionManifests", ex);
+            StatusText = $"Deletion manifest load failed: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private void PreviewSelectedDeletionManifest()
+    {
+        var selected = SelectedDeletionManifest;
+        if (selected == null)
+        {
+            DeletionManifestSummary = "Select a deletion manifest to preview rollback data.";
+            DeletionManifestEntries.Clear();
+            return;
+        }
+
+        try
+        {
+            var entries = DeletionManifest.LoadManifest(selected.Date);
+            _dispatcher.Invoke(() =>
+            {
+                DeletionManifestEntries.Clear();
+                foreach (var entry in entries.OrderByDescending(e => e.TimestampUtc))
+                    DeletionManifestEntries.Add(entry);
+
+                DeletionRestoreDetails.Clear();
+                SetDeletionRestoreCounts(new RestoreResult(0, 0, 0, new()));
+                DeletionRestoreSummary = "";
+                DeletionManifestSummary = $"{entries.Count} valid deletion record(s) from {Path.GetFileName(selected.FilePath)}.";
+                StatusText = DeletionManifestSummary;
+            });
+        }
+        catch (Exception ex)
+        {
+            Log.Error("PreviewSelectedDeletionManifest", ex);
+            StatusText = $"Deletion manifest preview failed: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private Task DryRunRestoreDeletionManifestAsync()
+        => RestoreDeletionManifestAsync(dryRun: true);
+
+    [RelayCommand]
+    private Task RestoreSelectedDeletionManifestAsync()
+        => RestoreDeletionManifestAsync(dryRun: false);
+
+    private async Task RestoreDeletionManifestAsync(bool dryRun)
+    {
+        var selected = SelectedDeletionManifest;
+        if (selected == null)
+        {
+            StatusText = "Select a deletion manifest first.";
+            return;
+        }
+
+        try
+        {
+            IsBusy = true;
+            var result = await Task.Run(() => DeletionManifest.RestoreFromManifest(selected.Date, dryRun));
+            _dispatcher.Invoke(() =>
+            {
+                SetDeletionRestoreCounts(result);
+                DeletionRestoreDetails.Clear();
+                foreach (var detail in result.Details)
+                    DeletionRestoreDetails.Add(new DeletionRestoreDetail(detail));
+
+                DeletionRestoreSummary = $"{(dryRun ? "Dry-run" : "Restore")} result: " +
+                                         $"{result.RegistryRestored} registry, " +
+                                         $"{result.FilesRecoverable} recoverable file path(s), " +
+                                         $"{result.Unrecoverable} unrecoverable.";
+                StatusText = DeletionRestoreSummary;
+            });
+        }
+        catch (Exception ex)
+        {
+            Log.Error("RestoreDeletionManifest", ex);
+            StatusText = $"Deletion manifest restore failed: {ex.Message}";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private void OpenDeletionManifestFolder()
+        => OpenFolder(DataPaths.Logs);
+
+    [RelayCommand]
+    private void OpenDeletionBackupFolder()
+        => OpenBackupFolder();
+
+    private void SetDeletionRestoreCounts(RestoreResult result)
+    {
+        DeletionRegistryRestored = result.RegistryRestored;
+        DeletionFilesRecoverable = result.FilesRecoverable;
+        DeletionUnrecoverable = result.Unrecoverable;
+    }
+
+    private void OpenFolder(string path)
+    {
+        try { Directory.CreateDirectory(path); } catch { }
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = path,
+                UseShellExecute = true,
+            });
+        }
+        catch { /* best-effort */ }
+    }
+
+    // ═══════════════════════════════════════════════════════
     //  ACTIVITY HISTORY
     // ═══════════════════════════════════════════════════════
     public ObservableCollection<ActivityEntry> HistoryEntries { get; } = new();

@@ -497,6 +497,12 @@
                                     <TextBlock Text="Restore Points" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </RadioButton>
+                            <RadioButton GroupName="nav" Tag="DeletionRecovery" Checked="NavButton_Checked" Style="{StaticResource NavRadioButton}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE8BB;" Style="{StaticResource NavIcon}"/>
+                                    <TextBlock Text="Deletion Recovery" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </RadioButton>
                             <RadioButton GroupName="nav" Tag="Backups" Checked="NavButton_Checked" Style="{StaticResource NavRadioButton}">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="&#xE7B8;" Style="{StaticResource NavIcon}"/>
@@ -1145,6 +1151,81 @@
                     </Grid>
 
                     <!-- BACKUPS -->
+                    <Grid x:Name="panelDeletionRecovery" Visibility="Collapsed"
+                          AutomationProperties.Name="Deletion Recovery panel"
+                          AutomationProperties.HelpText="Lists deletion manifests, previews rollback entries, and runs dry-run restore checks.">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="220"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="150"/>
+                        </Grid.RowDefinitions>
+
+                        <Border Grid.Row="0" Padding="24,16,24,8">
+                            <StackPanel>
+                                <TextBlock Text="Deletion Manifest Recovery" FontSize="18" FontWeight="Bold"
+                                           Foreground="{DynamicResource TextBrush}"/>
+                                <TextBlock Text="{Binding DeletionManifestSummary}" TextWrapping="Wrap"
+                                           FontSize="12" Foreground="{DynamicResource SubtextBrush}" Margin="0,4,0,0"/>
+                                <TextBlock Text="{Binding DeletionRestoreSummary}" TextWrapping="Wrap"
+                                           FontSize="12" Foreground="{DynamicResource TextBrush}" Margin="0,6,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <DataGrid Grid.Row="1" Margin="24,8,24,8" AutoGenerateColumns="False"
+                                  ItemsSource="{Binding DeletionManifests}"
+                                  SelectedItem="{Binding SelectedDeletionManifest, Mode=TwoWay}"
+                                  IsReadOnly="True" HeadersVisibility="Column"
+                                  AutomationProperties.Name="Deletion manifests">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Binding="{Binding Date, StringFormat={}{0:yyyy-MM-dd}}" Header="DATE" Width="110"/>
+                                <DataGridTextColumn Binding="{Binding EntryCount}" Header="ENTRIES" Width="80"/>
+                                <DataGridTextColumn Binding="{Binding TotalBytes, Converter={StaticResource BytesToSizeConverter}}" Header="BYTES" Width="100"/>
+                                <DataGridTextColumn Binding="{Binding FilePath}" Header="MANIFEST" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+
+                        <UniformGrid Grid.Row="2" Columns="3" Margin="24,0,24,8">
+                            <Border Padding="12,10" Margin="0,0,8,0" Background="{DynamicResource MantleBrush}" CornerRadius="8">
+                                <TextBlock Text="{Binding DeletionRegistryRestored, StringFormat=Registry restores: {0}}"
+                                           Foreground="{DynamicResource TextBrush}" FontWeight="SemiBold"/>
+                            </Border>
+                            <Border Padding="12,10" Margin="4,0,4,0" Background="{DynamicResource MantleBrush}" CornerRadius="8">
+                                <TextBlock Text="{Binding DeletionFilesRecoverable, StringFormat=Recycle Bin candidates: {0}}"
+                                           Foreground="{DynamicResource TextBrush}" FontWeight="SemiBold"/>
+                            </Border>
+                            <Border Padding="12,10" Margin="8,0,0,0" Background="{DynamicResource MantleBrush}" CornerRadius="8">
+                                <TextBlock Text="{Binding DeletionUnrecoverable, StringFormat=Unrecoverable: {0}}"
+                                           Foreground="{DynamicResource TextBrush}" FontWeight="SemiBold"/>
+                            </Border>
+                        </UniformGrid>
+
+                        <DataGrid Grid.Row="3" Margin="24,0,24,8" AutoGenerateColumns="False"
+                                  ItemsSource="{Binding DeletionManifestEntries}"
+                                  IsReadOnly="True" HeadersVisibility="Column"
+                                  AutomationProperties.Name="Deletion manifest entries">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Binding="{Binding TimestampUtc, StringFormat={}{0:yyyy-MM-dd HH:mm}}" Header="TIME (UTC)" Width="140"/>
+                                <DataGridTextColumn Binding="{Binding Type}" Header="TYPE" Width="90"/>
+                                <DataGridTextColumn Binding="{Binding Operation}" Header="OPERATION" Width="150"/>
+                                <DataGridTextColumn Binding="{Binding SizeBytes, Converter={StaticResource BytesToSizeConverter}}" Header="SIZE" Width="90"/>
+                                <DataGridTextColumn Binding="{Binding Path}" Header="PATH" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+
+                        <ListBox Grid.Row="4" Margin="24,0,24,16" ItemsSource="{Binding DeletionRestoreDetails}"
+                                 Background="{DynamicResource MantleBrush}" BorderThickness="0"
+                                 AutomationProperties.Name="Deletion restore dry-run details">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Message}" TextWrapping="Wrap"
+                                               FontSize="12" Foreground="{DynamicResource SubtextBrush}"/>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+
                     <Border x:Name="panelBackups" Visibility="Collapsed" Padding="48,32">
                         <StackPanel MaxWidth="560" HorizontalAlignment="Left" VerticalAlignment="Top">
                             <TextBlock Text="Registry Backups" FontSize="24" FontWeight="Bold"
