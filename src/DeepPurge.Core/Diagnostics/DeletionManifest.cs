@@ -1,5 +1,6 @@
 using System.Text.Json;
 using DeepPurge.Core.App;
+using DeepPurge.Core.Execution;
 
 namespace DeepPurge.Core.Diagnostics;
 
@@ -114,18 +115,15 @@ public static class DeletionManifest
                     {
                         try
                         {
-                            var psi = new System.Diagnostics.ProcessStartInfo
+                            var process = ExternalProcessRunner.Run(new ExternalProcessCommand("reg.exe")
                             {
-                                FileName = "reg.exe",
-                                Arguments = $"import \"{backupFile}\"",
-                                UseShellExecute = false,
-                                CreateNoWindow = true,
-                                RedirectStandardError = true,
-                            };
-                            using var p = System.Diagnostics.Process.Start(psi);
-                            p?.WaitForExit(15000);
-                            if (p?.ExitCode == 0) regRestored++;
-                            else details.Add($"reg import failed for {backupFile}: exit {p?.ExitCode}");
+                                Arguments = new[] { "import", backupFile },
+                                Timeout = TimeSpan.FromSeconds(15),
+                                RedactedArgumentIndexes = new HashSet<int> { 1 },
+                                RedactAbsolutePaths = true,
+                            });
+                            if (process.Success) regRestored++;
+                            else details.Add($"reg import failed for backup: {process.Status}");
                         }
                         catch (Exception ex) { details.Add($"reg import failed: {ex.Message}"); }
                     }

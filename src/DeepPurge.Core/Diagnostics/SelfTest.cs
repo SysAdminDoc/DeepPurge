@@ -1,6 +1,7 @@
 using System.Security.Principal;
 using DeepPurge.Core.App;
 using DeepPurge.Core.Packages;
+using DeepPurge.Core.Execution;
 
 namespace DeepPurge.Core.Diagnostics;
 
@@ -274,17 +275,12 @@ public static class SelfTest
     {
         try
         {
-            var psi = new ProcessStartInfo(file, args)
+            var result = ExternalProcessRunner.Run(new ExternalProcessCommand(file)
             {
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError  = true,
-                CreateNoWindow = true,
-            };
-            using var p = Process.Start(psi);
-            if (p == null) return false;
-            p.WaitForExit(3000);
-            return true;
+                Arguments = args.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+                Timeout = TimeSpan.FromSeconds(3),
+            });
+            return result.Started && !result.TimedOut;
         }
         catch { return false; }
     }

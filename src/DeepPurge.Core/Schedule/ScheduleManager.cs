@@ -1,5 +1,6 @@
 using DeepPurge.Core.App;
 using DeepPurge.Core.Diagnostics;
+using DeepPurge.Core.Execution;
 
 namespace DeepPurge.Core.Schedule;
 
@@ -54,19 +55,29 @@ public class ScheduleManager
         var taskName = TaskFolder + safeName;
         var wrapper  = WriteWrapperScript(safeName, cliPath, job.CliArguments);
 
-        var schedule = job.Frequency switch
-        {
-            ScheduleFrequency.Daily   => "/SC DAILY",
-            ScheduleFrequency.Weekly  => $"/SC WEEKLY /D {ShortDay(job.DayOfWeek)}",
-            ScheduleFrequency.Monthly => "/SC MONTHLY",
-            _ => "/SC WEEKLY",
-        };
         var time = $"{job.HourOfDay:D2}:{job.MinuteOfHour:D2}";
 
         // /TR value is a single token — the wrapper path, nothing else. Quoted
         // with literal quotes that schtasks parses cleanly.
-        var tr = $"\"{wrapper}\"";
-        var args = $"/Create /F /RU \"{Environment.UserName}\" /RL HIGHEST /TN \"{taskName}\" {schedule} /ST {time} /TR \"{tr}\"";
+        var args = new List<string>
+        {
+            "/Create",
+            "/F",
+            "/RU",
+            Environment.UserName,
+            "/RL",
+            "HIGHEST",
+            "/TN",
+            taskName,
+        };
+        args.AddRange(job.Frequency switch
+        {
+            ScheduleFrequency.Daily => new[] { "/SC", "DAILY" },
+            ScheduleFrequency.Weekly => new[] { "/SC", "WEEKLY", "/D", ShortDay(job.DayOfWeek) },
+            ScheduleFrequency.Monthly => new[] { "/SC", "MONTHLY" },
+            _ => new[] { "/SC", "WEEKLY" },
+        });
+        args.AddRange(new[] { "/ST", time, "/TR", wrapper });
         var (code, output) = Run("schtasks.exe", args);
         if (code != 0) Log.Warn($"schtasks /Create failed ({code}): {output.Trim()}");
         return code == 0;
@@ -76,7 +87,7 @@ public class ScheduleManager
     {
         var safeName = SanitizeName(name);
         var taskName = TaskFolder + safeName;
-        var (code, _) = Run("schtasks.exe", $"/Delete /F /TN \"{taskName}\"");
+        var (code, _) = Run("schtasks.exe", new[] { "/Delete", "/F", "/TN", taskName });
 
         // Best-effort cleanup of the wrapper script.
         try
@@ -91,7 +102,7 @@ public class ScheduleManager
 
     public List<string> ListJobs()
     {
-        var (code, output) = Run("schtasks.exe", $"/Query /FO CSV /NH /TN \"{TaskFolder.TrimEnd('\\')}\"");
+        var (code, output) = Run("schtasks.exe", new[] { "/Query", "/FO", "CSV", "/NH", "/TN", TaskFolder.TrimEnd('\\') });
         if (code != 0) return new List<string>();
 
         var list = new List<string>();
@@ -159,25 +170,17 @@ public class ScheduleManager
     private static bool IsForbiddenCliArgumentChar(char c)
         => c is '&' or '|' or '<' or '>' or '^' or '%' or '!' or '"' or '(' or ')' or '\r' or '\n';
 
-    private static (int ExitCode, string Output) Run(string file, string args)
+    private static (int ExitCode, string Output) Run(string file, IReadOnlyList<string> args)
     {
-        var psi = new ProcessStartInfo
-        {
-            FileName = file,
-            Arguments = args,
-            RedirectStandardOutput = true,
-            RedirectStandardError  = true,
-            UseShellExecute = false,
-            CreateNoWindow  = true,
-        };
         try
         {
-            using var p = Process.Start(psi)!;
-            var sb = new System.Text.StringBuilder();
-            sb.AppendLine(p.StandardOutput.ReadToEnd());
-            sb.AppendLine(p.StandardError.ReadToEnd());
-            p.WaitForExit();
-            return (p.ExitCode, sb.ToString());
+            var result = ExternalProcessRunner.Run(new ExternalProcessCommand(file)
+            {
+                Arguments = args,
+                Timeout = TimeSpan.FromSeconds(30),
+                RedactAbsolutePaths = true,
+            });
+            return (result.ExitCode, result.CombinedOutput);
         }
         catch (Exception ex)
         {

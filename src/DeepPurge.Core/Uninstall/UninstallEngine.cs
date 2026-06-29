@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using DeepPurge.Core.Execution;
 using DeepPurge.Core.FileSystem;
 using DeepPurge.Core.Models;
 using DeepPurge.Core.Packages;
@@ -66,7 +67,7 @@ public class UninstallEngine
                 StatusChanged?.Invoke($"Running {program.PackageManager} uninstall for {program.DisplayName}...");
                 ProgressChanged?.Invoke(20);
 
-                var (exitCode, output, error) = await RunProcessAsync(nativePackageUninstaller, ct, forceRedirect: true)
+                var (exitCode, output, error) = await RunProcessAsync(nativePackageUninstaller, ct)
                     .ConfigureAwait(false);
                 result.ExitCode = exitCode;
                 result.Output = output;
@@ -397,6 +398,22 @@ public class UninstallEngine
     }
 
     private async Task<(int exitCode, string output, string error)> RunProcessAsync(
+        ExternalProcessCommand command, CancellationToken ct)
+    {
+        var result = await ExternalProcessRunner.RunAsync(command with
+        {
+            Timeout = UninstallerTimeout,
+            OutputLimitChars = 256 * 1024,
+            ErrorLimitChars = 128 * 1024,
+        }, ct: ct).ConfigureAwait(false);
+
+        if (result.TimedOut) return (-1, result.Output, "Uninstaller timed out");
+        if (result.Canceled) return (-1, result.Output, "Uninstaller was cancelled");
+        if (!result.Started) return (-1, result.Output, $"Failed to launch uninstaller: {result.StartError}");
+        return (result.ExitCode, result.Output, result.Error);
+    }
+
+    private async Task<(int exitCode, string output, string error)> RunProcessAsync(
         ProcessStartInfo psi, CancellationToken ct, bool forceRedirect)
     {
         if (forceRedirect)
@@ -448,7 +465,7 @@ public class UninstallEngine
         return (process.ExitCode, output.ToString(), error.ToString());
     }
 
-    private static ProcessStartInfo? TryBuildNativePackageUninstaller(
+    private static ExternalProcessCommand? TryBuildNativePackageUninstaller(
         InstalledProgram program,
         bool silent,
         out string command,
@@ -470,7 +487,7 @@ public class UninstallEngine
                 program.PackageManager,
                 program.PackageId,
                 silent);
-            return PackageManagerCommandBuilder.CreateNativeUninstallStartInfo(
+            return PackageManagerCommandBuilder.CreateNativeUninstallCommand(
                 program.PackageManager,
                 program.PackageId,
                 silent);

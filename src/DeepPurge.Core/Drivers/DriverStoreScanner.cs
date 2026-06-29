@@ -1,5 +1,6 @@
 using System.Xml;
 using DeepPurge.Core.Diagnostics;
+using DeepPurge.Core.Execution;
 
 namespace DeepPurge.Core.Drivers;
 
@@ -73,8 +74,8 @@ public class DriverStoreScanner
         }
 
         var args = force
-            ? $"/delete-driver {publishedName} /uninstall /force"
-            : $"/delete-driver {publishedName}";
+            ? new[] { "/delete-driver", publishedName, "/uninstall", "/force" }
+            : new[] { "/delete-driver", publishedName };
         var output = await RunPnpUtilAsync(args, ct);
         var ok = output.IndexOf("deleted successfully", StringComparison.OrdinalIgnoreCase) >= 0 ||
                  output.IndexOf("Driver package deleted", StringComparison.OrdinalIgnoreCase) >= 0;
@@ -83,27 +84,24 @@ public class DriverStoreScanner
 
     // ═══════════════════════════════════════════════════════
 
-    private static async Task<string> RunPnpUtilAsync(string args, CancellationToken ct)
+    private static Task<string> RunPnpUtilAsync(string args, CancellationToken ct)
+        => RunPnpUtilAsync(args.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), ct);
+
+    private static async Task<string> RunPnpUtilAsync(IReadOnlyList<string> args, CancellationToken ct)
     {
-        var psi = new ProcessStartInfo
-        {
-            FileName = "pnputil.exe",
-            Arguments = args,
-            RedirectStandardOutput = true,
-            RedirectStandardError  = true,
-            UseShellExecute = false,
-            CreateNoWindow  = true,
-            // pnputil writes using the OEM console code page; UTF-8 garbles box-drawing.
-            StandardOutputEncoding = System.Text.Encoding.GetEncoding(System.Text.Encoding.Default.CodePage),
-            StandardErrorEncoding  = System.Text.Encoding.GetEncoding(System.Text.Encoding.Default.CodePage),
-        };
         try
         {
-            using var p = Process.Start(psi)!;
-            var stdoutTask = p.StandardOutput.ReadToEndAsync(ct);
-            var stderrTask = p.StandardError.ReadToEndAsync(ct);
-            await p.WaitForExitAsync(ct);
-            return (await stdoutTask) + (await stderrTask);
+            var encoding = System.Text.Encoding.GetEncoding(System.Text.Encoding.Default.CodePage);
+            var result = await ExternalProcessRunner.RunAsync(new ExternalProcessCommand("pnputil.exe")
+            {
+                Arguments = args,
+                Timeout = TimeSpan.FromSeconds(60),
+                StandardOutputEncoding = encoding,
+                StandardErrorEncoding = encoding,
+                OutputLimitChars = 512 * 1024,
+                ErrorLimitChars = 128 * 1024,
+            }, ct: ct).ConfigureAwait(false);
+            return result.CombinedOutput;
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)

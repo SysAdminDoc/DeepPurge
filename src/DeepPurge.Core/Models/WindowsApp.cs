@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using DeepPurge.Core.Execution;
 
 namespace DeepPurge.Core.Models;
 
@@ -65,24 +66,13 @@ public static class WindowsAppManager
 
         try
         {
-            var psi = new ProcessStartInfo
-            {
-                FileName = "powershell.exe",
-                Arguments = "-NoProfile -Command \"Get-AppxPackage | " +
-                    "Select-Object Name, PackageFullName, PackageFamilyName, Publisher, Version, " +
-                    "InstallLocation, Architecture, IsFramework, IsResourcePackage, NonRemovable | " +
-                    "ConvertTo-Json -Compress\"",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-            };
-
-            using var proc = Process.Start(psi);
-            if (proc == null) return apps;
-
-            var json = await proc.StandardOutput.ReadToEndAsync();
-            await proc.WaitForExitAsync();
+            var result = await ExternalProcessRunner.RunAsync(PowerShellCommand(
+                "Get-AppxPackage | " +
+                "Select-Object Name, PackageFullName, PackageFamilyName, Publisher, Version, " +
+                "InstallLocation, Architecture, IsFramework, IsResourcePackage, NonRemovable | " +
+                "ConvertTo-Json -Compress",
+                TimeSpan.FromSeconds(60))).ConfigureAwait(false);
+            var json = result.Output;
 
             if (string.IsNullOrWhiteSpace(json)) return apps;
 
@@ -142,24 +132,22 @@ public static class WindowsAppManager
         var allUsersFlag = allUsers ? " -AllUsers" : "";
         try
         {
-            var psi = new ProcessStartInfo
-            {
-                FileName = "powershell.exe",
-                Arguments = "-NoProfile -Command \"" +
-                    $"Remove-AppxPackage -Package '{app.PackageFullName}'{allUsersFlag} -ErrorAction Stop\"",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-            };
-
-            using var proc = Process.Start(psi);
-            if (proc == null) return false;
-            await proc.WaitForExitAsync();
-            return proc.ExitCode == 0;
+            var result = await ExternalProcessRunner.RunAsync(PowerShellCommand(
+                $"Remove-AppxPackage -Package '{app.PackageFullName}'{allUsersFlag} -ErrorAction Stop",
+                TimeSpan.FromSeconds(60))).ConfigureAwait(false);
+            return result.Success;
         }
         catch { return false; }
     }
+
+    private static ExternalProcessCommand PowerShellCommand(string script, TimeSpan timeout)
+        => new("powershell.exe")
+        {
+            Arguments = new[] { "-NoProfile", "-Command", script },
+            Timeout = timeout,
+            OutputLimitChars = 512 * 1024,
+            ErrorLimitChars = 64 * 1024,
+        };
 
     private static long ComputeInstallSize(string installLoc)
     {

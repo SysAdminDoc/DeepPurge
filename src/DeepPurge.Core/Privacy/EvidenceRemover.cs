@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using DeepPurge.Core.App;
 using DeepPurge.Core.Diagnostics;
+using DeepPurge.Core.Execution;
 using DeepPurge.Core.Safety;
 
 namespace DeepPurge.Core.Privacy;
@@ -597,19 +598,47 @@ public static class EvidenceRemover
     {
         try
         {
-            var psi = new ProcessStartInfo
+            var result = ExternalProcessRunner.Run(new ExternalProcessCommand(exe)
             {
-                FileName = exe,
-                Arguments = args,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            };
-            using var p = Process.Start(psi);
-            p?.WaitForExit(15000);
+                Arguments = SplitCommandLine(args),
+                Timeout = TimeSpan.FromSeconds(15),
+                RedactAbsolutePaths = true,
+            });
+            if (!result.Success)
+                Log.Warn($"Command execution failed ({result.RedactedCommandLine}): {result.Status}");
         }
-        catch (Exception ex) { Log.Warn($"Command execution failed ({exe} {args}): {ex.Message}"); }
+        catch (Exception ex) { Log.Warn($"Command execution failed ({exe}): {ex.Message}"); }
+    }
+
+    private static IReadOnlyList<string> SplitCommandLine(string args)
+    {
+        var tokens = new List<string>();
+        var current = new StringBuilder();
+        var quoted = false;
+
+        foreach (var c in args)
+        {
+            if (c == '"')
+            {
+                quoted = !quoted;
+                continue;
+            }
+
+            if (char.IsWhiteSpace(c) && !quoted)
+            {
+                if (current.Length > 0)
+                {
+                    tokens.Add(current.ToString());
+                    current.Clear();
+                }
+                continue;
+            }
+
+            current.Append(c);
+        }
+
+        if (current.Length > 0) tokens.Add(current.ToString());
+        return tokens;
     }
 
     private static long GetDirSize(string path)

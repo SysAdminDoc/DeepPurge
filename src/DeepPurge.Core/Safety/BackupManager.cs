@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using DeepPurge.Core.App;
+using DeepPurge.Core.Execution;
 
 namespace DeepPurge.Core.Safety;
 
@@ -36,18 +37,15 @@ public class BackupManager
 
         try
         {
-            var psi = new ProcessStartInfo
+            var result = ExternalProcessRunner.Run(new ExternalProcessCommand("reg.exe")
             {
-                FileName = "reg.exe",
-                Arguments = $"export \"{fullRegPath}\" \"{backupFile}\" /y",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-            };
-
-            using var process = Process.Start(psi);
-            process?.WaitForExit(30000);
+                Arguments = new[] { "export", fullRegPath, backupFile, "/y" },
+                Timeout = TimeSpan.FromSeconds(30),
+                RedactedArgumentIndexes = new HashSet<int> { 0, 1, 2 },
+                RedactAbsolutePaths = true,
+            });
+            if (!result.Success)
+                Diagnostics.Log.Warn($"Registry backup command failed ({result.Status}): {result.RedactedCommandLine}");
             if (!ValidateBackupFile(backupFile))
             {
                 Diagnostics.Log.Warn($"Registry backup failed validation: {backupFile}");
@@ -63,20 +61,14 @@ public class BackupManager
         if (string.IsNullOrEmpty(backupFile) || !File.Exists(backupFile)) return false;
         try
         {
-            var psi = new ProcessStartInfo
+            var result = ExternalProcessRunner.Run(new ExternalProcessCommand("reg.exe")
             {
-                FileName = "reg.exe",
-                Arguments = $"import \"{backupFile}\"",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-            };
-
-            using var process = Process.Start(psi);
-            if (process == null) return false;
-            process.WaitForExit(30000);
-            return process.ExitCode == 0;
+                Arguments = new[] { "import", backupFile },
+                Timeout = TimeSpan.FromSeconds(30),
+                RedactedArgumentIndexes = new HashSet<int> { 1 },
+                RedactAbsolutePaths = true,
+            });
+            return result.Success;
         }
         catch { return false; }
     }
@@ -186,21 +178,13 @@ public static class RestorePointManager
         {
             // Escape single quotes for PowerShell single-quoted literal.
             var escaped = description.Replace("'", "''");
-            var psi = new ProcessStartInfo
+            var script = $"Checkpoint-Computer -Description '{escaped}' -RestorePointType 'APPLICATION_UNINSTALL'";
+            var result = ExternalProcessRunner.Run(new ExternalProcessCommand("powershell.exe")
             {
-                FileName = "powershell.exe",
-                Arguments = "-NoProfile -Command \"" +
-                    $"Checkpoint-Computer -Description '{escaped}' " +
-                    "-RestorePointType 'APPLICATION_UNINSTALL'\"",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardError = true,
-                RedirectStandardOutput = true,
-            };
-            using var p = Process.Start(psi);
-            if (p == null) return false;
-            p.WaitForExit(60000);
-            return p.ExitCode == 0;
+                Arguments = new[] { "-NoProfile", "-Command", script },
+                Timeout = TimeSpan.FromSeconds(60),
+            });
+            return result.Success;
         }
         catch { return false; }
     }
