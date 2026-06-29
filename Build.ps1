@@ -31,7 +31,10 @@ param(
     [string]$CertPath,
     [securestring]$CertPassword,
     [string]$CertThumbprint,
-    [string]$TimestampUrl = "http://timestamp.digicert.com"
+    [string]$TimestampUrl = "http://timestamp.digicert.com",
+    [switch]$ValidateRelease,
+    [switch]$ValidateReleaseOnly,
+    [string]$ReleaseChecksumsPath
 )
 
 $ErrorActionPreference = "Continue"
@@ -42,6 +45,7 @@ $BuildDir = Join-Path $ProjectRoot "build"
 $SolutionFile = Join-Path $ProjectRoot "DeepPurge.sln"
 $AppProject = Join-Path $ProjectRoot "src\DeepPurge.App\DeepPurge.App.csproj"
 $CliProject = Join-Path $ProjectRoot "src\DeepPurge.Cli\DeepPurge.Cli.csproj"
+$CoreProject = Join-Path $ProjectRoot "src\DeepPurge.Core\DeepPurge.Core.csproj"
 
 Write-Host ""
 Write-Host "  ============================================" -ForegroundColor Cyan
@@ -122,6 +126,309 @@ function Invoke-Signing {
 }
 
 # ── Locate or Install .NET 10 SDK ──────────────────────────────
+function Add-ReleaseValidationFailure {
+    param(
+        [Parameter(Mandatory=$true)][string]$Key,
+        [Parameter(Mandatory=$true)][string]$Message
+    )
+
+    if ($null -eq $script:ReleaseValidationFailures) {
+        $script:ReleaseValidationFailures = [System.Collections.Generic.List[string]]::new()
+    }
+    $script:ReleaseValidationFailures.Add("${Key}: $Message") | Out-Null
+}
+
+function Get-CsprojVersion {
+    param(
+        [Parameter(Mandatory=$true)][string]$Path,
+        [Parameter(Mandatory=$true)][string]$Key
+    )
+
+    if (-not (Test-Path $Path)) {
+        Add-ReleaseValidationFailure $Key "file is missing"
+        return $null
+    }
+
+    try {
+        [xml]$projectXml = Get-Content $Path -Raw
+        $version = $projectXml.Project.PropertyGroup |
+            ForEach-Object { $_.Version } |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+            Select-Object -First 1
+        if ([string]::IsNullOrWhiteSpace($version)) {
+            Add-ReleaseValidationFailure $Key "Version is missing"
+            return $null
+        }
+        return $version.Trim()
+    } catch {
+        Add-ReleaseValidationFailure $Key "could not parse project XML: $_"
+        return $null
+    }
+}
+
+function Assert-ReleaseValue {
+    param(
+        [Parameter(Mandatory=$true)][string]$Key,
+        [AllowNull()][string]$Actual,
+        [Parameter(Mandatory=$true)][string]$Expected
+    )
+
+    if ($Actual -ne $Expected) {
+        Add-ReleaseValidationFailure $Key "expected '$Expected', found '$Actual'"
+    }
+}
+
+function Assert-NoReleasePlaceholders {
+    param(
+        [Parameter(Mandatory=$true)][string]$Path,
+        [Parameter(Mandatory=$true)][string]$Content
+    )
+
+    $lines = $Content -split "\r?\n"
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -match "PLACEHOLDER|REPLACE_WITH|<<") {
+            Add-ReleaseValidationFailure "${Path}:$($i + 1)" "release placeholder remains"
+        }
+    }
+}
+
+function Get-ReleaseChecksumPath {
+    if (-not [string]::IsNullOrWhiteSpace($ReleaseChecksumsPath)) {
+        $resolved = Resolve-Path $ReleaseChecksumsPath -ErrorAction SilentlyContinue
+        if ($resolved) { return $resolved.Path }
+        return $ReleaseChecksumsPath
+    }
+    return (Join-Path $BuildDir "SHA256SUMS.txt")
+}
+
+function Read-ReleaseChecksums {
+    param([Parameter(Mandatory=$true)][string]$Path)
+
+    $checksums = @{}
+    if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path $Path)) {
+        Add-ReleaseValidationFailure "SHA256SUMS.txt" "checksum file is missing at '$Path'"
+        return $checksums
+    }
+
+    $lineNumber = 0
+    foreach ($line in Get-Content $Path) {
+        $lineNumber++
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        if ($line -notmatch "^(?<hash>[A-Fa-f0-9]{64})\s+\*?(?<name>[^\\/:*?`"<>|\r\n]+)$") {
+            Add-ReleaseValidationFailure "${Path}:$lineNumber" "expected '<64-char sha256>  <asset name>'"
+            continue
+        }
+        $checksums[$matches.name.Trim()] = $matches.hash.ToUpperInvariant()
+    }
+
+    if ($checksums.Count -eq 0) {
+        Add-ReleaseValidationFailure "SHA256SUMS.txt" "checksum file contains no assets"
+    }
+
+    return $checksums
+}
+
+function Get-FileSha256Hex {
+    param([Parameter(Mandatory=$true)][string]$Path)
+
+    $stream = [IO.File]::OpenRead($Path)
+    try {
+        $sha256 = [Security.Cryptography.SHA256]::Create()
+        try {
+            return ([BitConverter]::ToString($sha256.ComputeHash($stream))).Replace("-", "").ToUpperInvariant()
+        } finally {
+            $sha256.Dispose()
+        }
+    } finally {
+        $stream.Dispose()
+    }
+}
+
+function Write-Sha256Sums {
+    param([Parameter(Mandatory=$true)][string[]]$ArtifactPaths)
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    foreach ($artifact in $ArtifactPaths) {
+        if (-not (Test-Path $artifact)) {
+            Add-ReleaseValidationFailure $artifact "release artifact is missing"
+            continue
+        }
+        $hash = Get-FileSha256Hex $artifact
+        $name = Split-Path $artifact -Leaf
+        $lines.Add("$hash  $name") | Out-Null
+    }
+
+    $checksumPath = Join-Path $BuildDir "SHA256SUMS.txt"
+    Set-Content -Path $checksumPath -Value $lines -Encoding ASCII
+    Write-Host "  [OK] SHA256SUMS.txt generated" -ForegroundColor Green
+    return $checksumPath
+}
+
+function Get-ReleaseAssetName {
+    param([Parameter(Mandatory=$true)][string]$Url)
+
+    $cleanUrl = ($Url -split "#", 2)[0]
+    try {
+        return [Uri]::UnescapeDataString(([Uri]$cleanUrl).Segments[-1])
+    } catch {
+        return [IO.Path]::GetFileName($cleanUrl)
+    }
+}
+
+function Assert-ReleaseAsset {
+    param(
+        [Parameter(Mandatory=$true)][string]$Key,
+        [Parameter(Mandatory=$true)][string]$Url,
+        [Parameter(Mandatory=$true)][string]$ManifestHash,
+        [Parameter(Mandatory=$true)][hashtable]$Checksums,
+        [Parameter(Mandatory=$true)][string]$Version
+    )
+
+    $expectedPrefix = "https://github.com/SysAdminDoc/DeepPurge/releases/download/v$Version/"
+    if (-not $Url.StartsWith($expectedPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        Add-ReleaseValidationFailure $Key "release URL must start with '$expectedPrefix'"
+    }
+
+    $assetName = Get-ReleaseAssetName $Url
+    if ([string]::IsNullOrWhiteSpace($assetName)) {
+        Add-ReleaseValidationFailure $Key "could not resolve asset name from URL"
+        return
+    }
+
+    if (-not $Checksums.ContainsKey($assetName)) {
+        Add-ReleaseValidationFailure $Key "asset '$assetName' is missing from SHA256SUMS.txt"
+        return
+    }
+
+    $expectedHash = $Checksums[$assetName]
+    if ($ManifestHash.ToUpperInvariant() -ne $expectedHash) {
+        Add-ReleaseValidationFailure $Key "hash for '$assetName' must be '$expectedHash'"
+    }
+}
+
+function Assert-LocalArtifactsMatchChecksums {
+    param([Parameter(Mandatory=$true)][hashtable]$Checksums)
+
+    foreach ($entry in $Checksums.GetEnumerator()) {
+        $artifactPath = Join-Path $BuildDir $entry.Key
+        if (-not (Test-Path $artifactPath)) {
+            Add-ReleaseValidationFailure "build\$($entry.Key)" "checksum entry has no matching local artifact"
+            continue
+        }
+
+        $actual = Get-FileSha256Hex $artifactPath
+        if ($actual -ne $entry.Value) {
+            Add-ReleaseValidationFailure "build\$($entry.Key)" "SHA256SUMS.txt has '$($entry.Value)', local file is '$actual'"
+        }
+    }
+}
+
+function Invoke-ReleaseReadinessValidation {
+    $script:ReleaseValidationFailures = [System.Collections.Generic.List[string]]::new()
+
+    Write-Host ""
+    Write-Host "  [*] Validating release and package manifests..." -ForegroundColor Yellow
+
+    $appVersion = Get-CsprojVersion $AppProject "src/DeepPurge.App/DeepPurge.App.csproj:Version"
+    $coreVersion = Get-CsprojVersion $CoreProject "src/DeepPurge.Core/DeepPurge.Core.csproj:Version"
+    $cliVersion = Get-CsprojVersion $CliProject "src/DeepPurge.Cli/DeepPurge.Cli.csproj:Version"
+    if (-not [string]::IsNullOrWhiteSpace($appVersion)) {
+        Assert-ReleaseValue "src/DeepPurge.Core/DeepPurge.Core.csproj:Version" $coreVersion $appVersion
+        Assert-ReleaseValue "src/DeepPurge.Cli/DeepPurge.Cli.csproj:Version" $cliVersion $appVersion
+    }
+
+    $readmePath = Join-Path $ProjectRoot "README.md"
+    $readme = if (Test-Path $readmePath) { Get-Content $readmePath -Raw } else { "" }
+    if ($readme -match "version-v(?<version>\d+\.\d+\.\d+)") {
+        Assert-ReleaseValue "README.md:version badge" $matches.version $appVersion
+    } else {
+        Add-ReleaseValidationFailure "README.md:version badge" "version badge is missing"
+    }
+
+    $buildScript = Get-Content (Join-Path $ProjectRoot "Build.ps1") -Raw
+    if ($buildScript -match "Build Script v(?<version>\d+\.\d+\.\d+)") {
+        Assert-ReleaseValue "Build.ps1:Build Script version" $matches.version $appVersion
+    } else {
+        Add-ReleaseValidationFailure "Build.ps1:Build Script version" "script version banner is missing"
+    }
+
+    $buildBatPath = Join-Path $ProjectRoot "BUILD.bat"
+    $buildBat = if (Test-Path $buildBatPath) { Get-Content $buildBatPath -Raw } else { "" }
+    if ($buildBat -match "Builder v(?<version>\d+\.\d+\.\d+)") {
+        Assert-ReleaseValue "BUILD.bat:title version" $matches.version $appVersion
+    } else {
+        Add-ReleaseValidationFailure "BUILD.bat:title version" "title version is missing"
+    }
+
+    $checksumPath = Get-ReleaseChecksumPath
+    $checksums = Read-ReleaseChecksums $checksumPath
+    if ([string]::IsNullOrWhiteSpace($ReleaseChecksumsPath)) {
+        Assert-LocalArtifactsMatchChecksums $checksums
+    }
+
+    $wingetPath = Join-Path $ProjectRoot "packaging\winget\SysAdminDoc.DeepPurge.yaml"
+    if (Test-Path $wingetPath) {
+        $winget = Get-Content $wingetPath -Raw
+        Assert-NoReleasePlaceholders "packaging/winget/SysAdminDoc.DeepPurge.yaml" $winget
+
+        if ($winget -match "(?m)^PackageVersion:\s*(?<version>\S+)") {
+            Assert-ReleaseValue "packaging/winget/SysAdminDoc.DeepPurge.yaml:PackageVersion" $matches.version $appVersion
+        } else {
+            Add-ReleaseValidationFailure "packaging/winget/SysAdminDoc.DeepPurge.yaml:PackageVersion" "value is missing"
+        }
+
+        $urls = @([regex]::Matches($winget, "(?m)^\s*InstallerUrl:\s*(?<url>\S+)") | ForEach-Object { $_.Groups["url"].Value })
+        $hashes = @([regex]::Matches($winget, "(?m)^\s*InstallerSha256:\s*(?<hash>\S+)") | ForEach-Object { $_.Groups["hash"].Value })
+        if ($urls.Count -ne $hashes.Count) {
+            Add-ReleaseValidationFailure "packaging/winget/SysAdminDoc.DeepPurge.yaml:Installers" "InstallerUrl count ($($urls.Count)) does not match InstallerSha256 count ($($hashes.Count))"
+        }
+        for ($i = 0; $i -lt [Math]::Min($urls.Count, $hashes.Count); $i++) {
+            Assert-ReleaseAsset "packaging/winget/SysAdminDoc.DeepPurge.yaml:Installers[$i].InstallerSha256" $urls[$i] $hashes[$i] $checksums $appVersion
+        }
+    } else {
+        Add-ReleaseValidationFailure "packaging/winget/SysAdminDoc.DeepPurge.yaml" "file is missing"
+    }
+
+    $scoopPath = Join-Path $ProjectRoot "packaging\scoop\deeppurge.json"
+    if (Test-Path $scoopPath) {
+        $scoopContent = Get-Content $scoopPath -Raw
+        Assert-NoReleasePlaceholders "packaging/scoop/deeppurge.json" $scoopContent
+        try {
+            $scoop = $scoopContent | ConvertFrom-Json
+            Assert-ReleaseValue "packaging/scoop/deeppurge.json:version" $scoop.version $appVersion
+            $expectedHashUrl = 'https://github.com/SysAdminDoc/DeepPurge/releases/download/v$version/SHA256SUMS.txt'
+            Assert-ReleaseValue "packaging/scoop/deeppurge.json:autoupdate.hash.url" $scoop.autoupdate.hash.url $expectedHashUrl
+
+            foreach ($arch in $scoop.architecture.PSObject.Properties) {
+                $urls = @($arch.Value.url)
+                $hashes = @($arch.Value.hash)
+                if ($urls.Count -ne $hashes.Count) {
+                    Add-ReleaseValidationFailure "packaging/scoop/deeppurge.json:architecture.$($arch.Name)" "url count ($($urls.Count)) does not match hash count ($($hashes.Count))"
+                    continue
+                }
+                for ($i = 0; $i -lt $urls.Count; $i++) {
+                    Assert-ReleaseAsset "packaging/scoop/deeppurge.json:architecture.$($arch.Name).hash[$i]" $urls[$i] $hashes[$i] $checksums $appVersion
+                }
+            }
+        } catch {
+            Add-ReleaseValidationFailure "packaging/scoop/deeppurge.json" "could not parse JSON: $_"
+        }
+    } else {
+        Add-ReleaseValidationFailure "packaging/scoop/deeppurge.json" "file is missing"
+    }
+
+    if ($script:ReleaseValidationFailures.Count -gt 0) {
+        Write-Host "  [ERROR] Release readiness validation failed:" -ForegroundColor Red
+        foreach ($failure in $script:ReleaseValidationFailures) {
+            Write-Host "       - $failure" -ForegroundColor Red
+        }
+        return $false
+    }
+
+    Write-Host "  [OK] Release readiness validation passed" -ForegroundColor Green
+    return $true
+}
+
 function Find-DotNet {
     # Check common locations
     $candidates = @(
@@ -217,6 +524,17 @@ if (-not (Test-Path $CliProject)) {
     Write-Host "  [ERROR] CLI project not found: $CliProject" -ForegroundColor Red
     Read-Host "  Press Enter to exit"
     exit 1
+}
+
+if (-not (Test-Path $CoreProject)) {
+    Write-Host "  [ERROR] Core project not found: $CoreProject" -ForegroundColor Red
+    Read-Host "  Press Enter to exit"
+    exit 1
+}
+
+if ($ValidateReleaseOnly) {
+    if (-not (Invoke-ReleaseReadinessValidation)) { exit 1 }
+    exit 0
 }
 
 # ── Clean ──────────────────────────────────────────────────────
@@ -432,6 +750,11 @@ if (Test-Path $exePath) {
         Write-Host "  [i] Skipped signing (-Sign not passed). Release builds should sign." -ForegroundColor DarkGray
     }
 
+    $checksumPath = Write-Sha256Sums -ArtifactPaths @($exePath, $cliPath)
+    if ($ValidateRelease) {
+        if (-not (Invoke-ReleaseReadinessValidation)) { exit 1 }
+    }
+
     Write-Host ""
     Write-Host "  ============================================" -ForegroundColor Green
     Write-Host "    BUILD SUCCESSFUL" -ForegroundColor Green
@@ -439,6 +762,7 @@ if (Test-Path $exePath) {
     Write-Host ""
     Write-Host "    GUI:      $exePath ($guiSizeMB MB)" -ForegroundColor White
     Write-Host "    CLI:      $cliPath ($cliSizeMB MB)" -ForegroundColor White
+    Write-Host "    SHA256:   $checksumPath" -ForegroundColor White
     Write-Host ""
     Write-Host "    This is a portable executable." -ForegroundColor Gray
     Write-Host "    No installation required - just run it." -ForegroundColor Gray
