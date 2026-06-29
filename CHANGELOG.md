@@ -6,6 +6,7 @@ All notable changes to DeepPurge will be documented in this file.
 
 ### Added (P2 package managers)
 - **Source-native package-manager uninstall** - winget, Scoop, and Chocolatey managed rows now uninstall through strict source-specific command builders before falling back to registry uninstall strings. CLI `uninstall --dry-run` previews the exact native command, package-only synthetic rows can be removed without a registry uninstaller, and injection tests cover unsafe package IDs.
+- **Release readiness validator** - `Build.ps1` now emits `SHA256SUMS.txt` and can validate version alignment, package release URLs, asset names, manifest hashes, and placeholder removal before publishing winget/Scoop manifests.
 
 ### Added (P1 safety)
 - **GUI deletion recovery panel** - the WPF Safety section now lists deletion manifests, previews valid JSONL entries, runs dry-run restore checks, shows registry/recoverable/unrecoverable counts, and opens the manifest/backup folders.

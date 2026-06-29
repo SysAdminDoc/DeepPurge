@@ -11,18 +11,8 @@
         "https://github.com/SysAdminDoc/DeepPurge/releases/download/v0.9.0/DeepPurgeCli.exe#/DeepPurgeCli.exe"
       ],
       "hash": [
-        "PLACEHOLDER_UPDATE_ON_RELEASE",
-        "PLACEHOLDER_UPDATE_ON_RELEASE"
-      ]
-    },
-    "arm64": {
-      "url": [
-        "https://github.com/SysAdminDoc/DeepPurge/releases/download/v0.9.0/DeepPurge-arm64.exe#/DeepPurge.exe",
-        "https://github.com/SysAdminDoc/DeepPurge/releases/download/v0.9.0/DeepPurgeCli-arm64.exe#/DeepPurgeCli.exe"
-      ],
-      "hash": [
-        "PLACEHOLDER_UPDATE_ON_RELEASE",
-        "PLACEHOLDER_UPDATE_ON_RELEASE"
+        "0E3D0ABAD7916D16F08D3FFF0DDA15B5F29594675A00CD45A085E48439BF7A40",
+        "795DF2F9D17AF59BBFE85805830806C2606BFFFAAC8381218F21A147CCBCB9F3"
       ]
     }
   },
@@ -49,12 +39,6 @@
         "url": [
           "https://github.com/SysAdminDoc/DeepPurge/releases/download/v$version/DeepPurge.exe#/DeepPurge.exe",
           "https://github.com/SysAdminDoc/DeepPurge/releases/download/v$version/DeepPurgeCli.exe#/DeepPurgeCli.exe"
-        ]
-      },
-      "arm64": {
-        "url": [
-          "https://github.com/SysAdminDoc/DeepPurge/releases/download/v$version/DeepPurge-arm64.exe#/DeepPurge.exe",
-          "https://github.com/SysAdminDoc/DeepPurge/releases/download/v$version/DeepPurgeCli-arm64.exe#/DeepPurgeCli.exe"
         ]
       }
     },

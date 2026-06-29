@@ -4,11 +4,11 @@ Package-manager manifests and publish checklists for DeepPurge releases.
 
 ## Release workflow
 
-1. Run `BUILD.bat` or `Build.ps1` locally and verify both published executables.
-2. Generate `SHA256SUMS.txt` locally for `DeepPurge.exe` and `DeepPurgeCli.exe`.
-3. Tag the release: `git tag v0.9.0 && git push --tags`.
-4. Create or update the GitHub Release with `gh release create` / `gh release upload` and attach both executables plus `SHA256SUMS.txt`.
-5. Copy the SHA256 values into the manifests below.
+1. Run `Build.ps1 -Test -Sign` locally and verify `build\DeepPurge.exe`, `build\DeepPurgeCli.exe`, and `build\SHA256SUMS.txt`.
+2. Copy the generated SHA256 values into the winget and Scoop manifests for the exact assets being released.
+3. Run `Build.ps1 -ValidateReleaseOnly -ReleaseChecksumsPath build\SHA256SUMS.txt`; fix every reported file/key before publishing.
+4. Tag the release: `git tag v0.9.0 && git push --tags`.
+5. Create or update the GitHub Release with `gh release create` / `gh release upload` and attach both executables plus `SHA256SUMS.txt`.
 
 ## winget
 
@@ -29,7 +29,7 @@ scoop bucket add sysadmindoc https://github.com/SysAdminDoc/scoop-bucket
 scoop install sysadmindoc/deeppurge
 ```
 
-Before committing to the bucket, replace `<<REPLACE_WITH_RELEASE_ARTIFACT_SHA256>>` with the two real SHA256 hashes from `SHA256SUMS.txt` (GUI first, CLI second).
+Before committing to the bucket, run `Build.ps1 -ValidateReleaseOnly -ReleaseChecksumsPath <release SHA256SUMS.txt>` and confirm every Scoop URL/hash pair matches the checksum file (GUI first, CLI second).
 
 The `pre_install` hook drops a `DeepPurge.portable` marker so the app redirects all state to `$dir/Data/` — matches Scoop's user-scope philosophy.
 

@@ -113,8 +113,9 @@ BUILD.bat
 Output:
 - `build\DeepPurge.exe` - GUI, ~66 MB, `requireAdministrator` manifest
 - `build\DeepPurgeCli.exe` - CLI, ~66 MB, `asInvoker` manifest (scriptable, elevate externally if needed)
+- `build\SHA256SUMS.txt` - SHA256 hashes for the published release assets
 
-Both are self-contained single-file portable executables. ARM64 builds can be produced locally with `Build.ps1 -Runtime win-arm64`.
+Both executables are self-contained single-file x64 portable builds. Add ARM64 package entries only after matching ARM64 assets are attached to the release and covered by `SHA256SUMS.txt`.
 
 ## CLI quickstart
 
@@ -149,7 +150,7 @@ Covers UpdateChecker version-compare, Winapp2Parser detect/bucket routing, Start
 
 - **winget** — `packaging/winget/SysAdminDoc.DeepPurge.yaml` (submit via `wingetcreate`)
 - **Scoop**  — `packaging/scoop/deeppurge.json` (drop into a personal bucket)
-- **GitHub Releases** — build locally with `BUILD.bat` / `Build.ps1`, generate SHA256s, and attach the artifacts with `gh release create` / `gh release upload`
+- **GitHub Releases** — build locally with `BUILD.bat` / `Build.ps1`, attach both executables plus `SHA256SUMS.txt`, then run `Build.ps1 -ValidateReleaseOnly -ReleaseChecksumsPath <path-to-SHA256SUMS.txt>` before publishing package manifests
 - **Authenticode signing** — `./Build.ps1 -Sign -CertPath signing.pfx -CertPassword (Read-Host -AsSecureString)`
 
 
