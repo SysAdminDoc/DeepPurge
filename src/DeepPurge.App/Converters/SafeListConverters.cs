@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Globalization;
+using System.Windows;
 using System.Windows.Data;
 
 namespace DeepPurge.App.Converters;
@@ -45,4 +46,85 @@ public class CountConverter : IValueConverter
     }
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
         => throw new NotSupportedException();
+}
+
+/// <summary>
+/// Shows an empty-state element when a collection has no items. Pass
+/// ConverterParameter="Invert" to show content only when the collection has
+/// entries.
+/// </summary>
+[ValueConversion(typeof(IEnumerable), typeof(Visibility))]
+public class CollectionEmptyToVisibilityConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        var hasItems = value switch
+        {
+            null => false,
+            string s => !string.IsNullOrWhiteSpace(s),
+            ICollection c => c.Count > 0,
+            IEnumerable e => HasAny(e),
+            _ => true,
+        };
+
+        var invert = parameter?.ToString()?.Equals("Invert", StringComparison.OrdinalIgnoreCase) == true;
+        var visible = invert ? hasItems : !hasItems;
+        return visible ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => Binding.DoNothing;
+
+    private static bool HasAny(IEnumerable source)
+    {
+        foreach (var _ in source) return true;
+        return false;
+    }
+}
+
+/// <summary>
+/// Shows an empty state only when the requested navigation panel is active and
+/// the bound collection/string has no content.
+/// </summary>
+public class PanelEmptyStateVisibilityConverter : IMultiValueConverter
+{
+    public object Convert(object?[] values, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (values.Length < 2) return Visibility.Collapsed;
+
+        var requestedPanel = parameter?.ToString();
+        var currentPanel = values[0]?.ToString();
+        if (string.IsNullOrWhiteSpace(requestedPanel) ||
+            !string.Equals(currentPanel, requestedPanel, StringComparison.OrdinalIgnoreCase))
+        {
+            return Visibility.Collapsed;
+        }
+
+        return HasContent(values[1]) ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    public object[] ConvertBack(object? value, Type[] targetTypes, object? parameter, CultureInfo culture)
+    {
+        var values = new object[targetTypes.Length];
+        Array.Fill(values, Binding.DoNothing);
+        return values;
+    }
+
+    private static bool HasContent(object? value)
+    {
+        return value switch
+        {
+            null => false,
+            string s => !string.IsNullOrWhiteSpace(s),
+            ICollection c => c.Count > 0,
+            IEnumerable e => HasAny(e),
+            _ => true,
+        };
+    }
+
+    private static bool HasAny(IEnumerable source)
+    {
+        foreach (var _ in source) return true;
+        return false;
+    }
 }

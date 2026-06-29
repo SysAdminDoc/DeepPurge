@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
@@ -226,7 +227,7 @@ public partial class MainWindow : Window
                 break;
             case "Disk":
                 panelDisk.Visibility = Visibility.Visible; txtPanelTitle.Text = "Disk Analyzer";
-                AppendToolbarButton("Scan C:\\", ScanDisk_Click, "AccentButton");
+                AppendToolbarButton("Scan System Drive", ScanDisk_Click, "AccentButton");
                 AppendToolbarButton("Delete Selected Files", DeleteLargeFiles_Click, "DangerButton");
                 break;
             case "Autorun":
@@ -426,10 +427,37 @@ public partial class MainWindow : Window
             Content = text,
             Margin = new Thickness(4, 0, 0, 0),
             Padding = new Thickness(14, 6, 14, 6),
+            MinHeight = 34,
+            ToolTip = BuildToolbarHelpText(text),
         };
+        AutomationProperties.SetName(btn, text);
+        AutomationProperties.SetHelpText(btn, BuildToolbarHelpText(text));
         if (style != null) btn.Style = (Style)FindResource(style);
         btn.Click += handler;
         genericButtons.Children.Add(btn);
+    }
+
+    private static string BuildToolbarHelpText(string text)
+    {
+        return text switch
+        {
+            "Scan System Drive" => $"Scan the Windows system drive ({GetSystemDriveLabel()}) for folder sizes and large files.",
+            "Dry-run Restore" => "Preview which registry and file entries can be restored before applying changes.",
+            "Restore Selected" => "Restore the selected deletion manifest where rollback data is available.",
+            "Run Applicable" => "Run the currently applicable community cleaner rules with the active safety mode.",
+            "Delete Duplicates" => "Delete duplicate copies after the duplicate scan groups matching file hashes.",
+            "Delete Selected Files" => "Delete the selected large files using the active dry-run and secure-delete settings.",
+            "Recycle All" => "Move all detected broken shortcuts to the Recycle Bin.",
+            "Open Logs" => "Open the folder containing deletion manifest logs.",
+            "Open Backups" => "Open the folder containing registry backup exports.",
+            _ => text,
+        };
+    }
+
+    private static string GetSystemDriveLabel()
+    {
+        var root = Path.GetPathRoot(Environment.SystemDirectory);
+        return string.IsNullOrWhiteSpace(root) ? "system drive" : root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
     }
 
     // =============================================================
