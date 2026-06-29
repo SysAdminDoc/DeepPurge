@@ -320,7 +320,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="CheckBox">
-                    <Grid VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
                         <Border x:Name="box" Width="18" Height="18" CornerRadius="5"
                                 Background="{DynamicResource Surface0Brush}"
                                 BorderBrush="{DynamicResource Surface2Brush}" BorderThickness="1.5">
@@ -328,8 +328,12 @@
                                        FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"
                                        Foreground="{DynamicResource CrustBrush}" Visibility="Collapsed" FontWeight="Bold"/>
                         </Border>
-                    </Grid>
+                        <ContentPresenter x:Name="content" Margin="7,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
                     <ControlTemplate.Triggers>
+                        <Trigger Property="HasContent" Value="False">
+                            <Setter TargetName="content" Property="Visibility" Value="Collapsed"/>
+                        </Trigger>
                         <Trigger Property="IsChecked" Value="True">
                             <Setter TargetName="box" Property="Background" Value="{DynamicResource AccentBrush}"/>
                             <Setter TargetName="box" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>

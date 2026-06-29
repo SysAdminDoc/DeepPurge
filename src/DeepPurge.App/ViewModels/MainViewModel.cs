@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Windows;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
+using DeepPurge.Core.App;
 using DeepPurge.Core.Browsers;
 using DeepPurge.Core.Export;
 using DeepPurge.Core.FileSystem;
@@ -69,7 +70,14 @@ public partial class MainViewModel : ObservableObject
     // can flip dry-run or secure-delete before any cleanup call.
     [ObservableProperty] public partial bool DryRunEnabled { get; set; }
     [ObservableProperty] public partial bool SecureDeleteEnabled { get; set; }
-    [ObservableProperty] public partial bool ExpertMode { get; set; } = Core.App.AppSettings.Current.ExpertMode;
+    [ObservableProperty] public partial bool ExpertMode { get; set; } = AppSettings.Current.ExpertMode;
+
+    // Settings / Privacy editor
+    [ObservableProperty] public partial string SettingsExcludedPathsText { get; set; } = "";
+    [ObservableProperty] public partial string SettingsCookieWhitelistText { get; set; } = "";
+    [ObservableProperty] public partial string SettingsMinAgeJunkText { get; set; } = "0";
+    [ObservableProperty] public partial string SettingsMinAgeEvidenceText { get; set; } = "0";
+    [ObservableProperty] public partial string SettingsSummary { get; set; } = "";
 
     // Live progress bar for the current long-running delete.
     [ObservableProperty] public partial double OperationProgress { get; set; }
@@ -114,8 +122,9 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnExpertModeChanged(bool value)
     {
-        Core.App.AppSettings.Current.ExpertMode = value;
-        Core.App.AppSettings.Current.Save();
+        AppSettings.Current.ExpertMode = value;
+        AppSettings.Current.Save();
+        UpdateSettingsSummary();
     }
 
     // ═══════════════════════════════════════════════════════
@@ -131,6 +140,114 @@ public partial class MainViewModel : ObservableObject
 
         _engine.StatusChanged += s => _dispatcher.BeginInvoke(() => StatusText = s);
         _engine.ProgressChanged += p => _dispatcher.BeginInvoke(() => OverlayScanProgress = p);
+        ReloadSettingsEditor(showStatus: false);
+    }
+
+    public void ReloadSettingsEditor(bool showStatus = true)
+    {
+        var s = AppSettings.Current;
+        ExpertMode = s.ExpertMode;
+        SettingsExcludedPathsText = string.Join(Environment.NewLine, s.ExcludedPaths);
+        SettingsCookieWhitelistText = string.Join(Environment.NewLine, s.CookieWhitelist);
+        SettingsMinAgeJunkText = s.MinAgeDaysJunk.ToString();
+        SettingsMinAgeEvidenceText = s.MinAgeDaysEvidence.ToString();
+        UpdateSettingsSummary();
+        if (showStatus) StatusText = "Settings loaded.";
+    }
+
+    public bool SaveSettingsEditor()
+    {
+        if (!TryParseNonNegativeDays(SettingsMinAgeJunkText, "Junk minimum age", out var junkDays) ||
+            !TryParseNonNegativeDays(SettingsMinAgeEvidenceText, "Evidence minimum age", out var evidenceDays))
+        {
+            return false;
+        }
+
+        var s = AppSettings.Current;
+        s.ExpertMode = ExpertMode;
+        s.MinAgeDaysJunk = junkDays;
+        s.MinAgeDaysEvidence = evidenceDays;
+        s.ExcludedPaths = ParseSettingList(SettingsExcludedPathsText, splitOnComma: false);
+        s.CookieWhitelist = ParseSettingList(SettingsCookieWhitelistText, splitOnComma: true);
+        s.Save();
+
+        SettingsExcludedPathsText = string.Join(Environment.NewLine, s.ExcludedPaths);
+        SettingsCookieWhitelistText = string.Join(Environment.NewLine, s.CookieWhitelist);
+        SettingsMinAgeJunkText = s.MinAgeDaysJunk.ToString();
+        SettingsMinAgeEvidenceText = s.MinAgeDaysEvidence.ToString();
+        UpdateSettingsSummary();
+        StatusText = "Settings saved.";
+        return true;
+    }
+
+    public bool ExportSettingsTo(string path)
+    {
+        try
+        {
+            if (!SaveSettingsEditor()) return false;
+            AppSettings.Current.ExportTo(path);
+            StatusText = $"Settings exported to {path}";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Settings export failed: {ex.Message}";
+            return false;
+        }
+    }
+
+    public bool ImportSettingsFrom(string path)
+    {
+        try
+        {
+            var imported = AppSettings.ImportFrom(path);
+            var current = AppSettings.Current;
+            current.ExpertMode = imported.ExpertMode;
+            current.MinAgeDaysJunk = imported.MinAgeDaysJunk;
+            current.MinAgeDaysEvidence = imported.MinAgeDaysEvidence;
+            current.ExcludedPaths = imported.ExcludedPaths ?? new();
+            current.CookieWhitelist = imported.CookieWhitelist ?? new();
+            current.ProgramNotes = imported.ProgramNotes ?? new();
+            current.Save();
+            ReloadSettingsEditor(showStatus: false);
+            StatusText = $"Settings imported from {path}";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Settings import failed: {ex.Message}";
+            return false;
+        }
+    }
+
+    private void UpdateSettingsSummary()
+    {
+        var s = AppSettings.Current;
+        SettingsSummary =
+            $"{s.ExcludedPaths.Count} excluded path(s) | " +
+            $"{s.CookieWhitelist.Count} cookie domain(s) preserved | " +
+            $"junk age {s.MinAgeDaysJunk}d | evidence age {s.MinAgeDaysEvidence}d";
+    }
+
+    private bool TryParseNonNegativeDays(string text, string label, out int value)
+    {
+        if (int.TryParse((text ?? "").Trim(), out value) && value >= 0) return true;
+        StatusText = $"{label} must be a whole number of days, 0 or higher.";
+        value = 0;
+        return false;
+    }
+
+    private static List<string> ParseSettingList(string text, bool splitOnComma)
+    {
+        var separators = splitOnComma
+            ? new[] { '\r', '\n', ';', ',' }
+            : new[] { '\r', '\n', ';' };
+
+        return (text ?? "")
+            .Split(separators, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     // ═══════════════════════════════════════════════════════

@@ -181,7 +181,7 @@ public partial class MainWindow : Window
         panelHunter, panelOrphans, panelDeletionRecovery, panelBackups,
         // v0.9.0 system-tools panels
         dgDrivers, dgStartupImpact, dgShortcuts, dgDuplicates,
-        panelWinapp2, panelRepair, panelSchedule, panelInstallMonitor, dgHistory, panelAbout,
+        panelWinapp2, panelRepair, panelSchedule, panelInstallMonitor, dgHistory, panelSettings, panelAbout,
     };
 
     private void NavButton_Checked(object sender, RoutedEventArgs e)
@@ -327,6 +327,13 @@ public partial class MainWindow : Window
                 dgHistory.Visibility = Visibility.Visible; txtPanelTitle.Text = "Activity History";
                 _vm.LoadHistoryCommand.Execute(null);
                 break;
+            case "Settings":
+                panelSettings.Visibility = Visibility.Visible; txtPanelTitle.Text = "Settings / Privacy";
+                AppendToolbarButton("Save Settings", SaveSettings_Click, "AccentButton");
+                AppendToolbarButton("Reload", ReloadSettings_Click);
+                AppendToolbarButton("Import", ImportSettings_Click);
+                AppendToolbarButton("Export", ExportSettings_Click);
+                break;
             case "About":
                 panelAbout.Visibility = Visibility.Visible; txtPanelTitle.Text = "About / Updates";
                 break;
@@ -406,6 +413,46 @@ public partial class MainWindow : Window
     private void RefreshSchedule_Click(object s, RoutedEventArgs e)
         => _vm.RefreshScheduledJobsCommand.Execute(null);
 
+    private void SaveSettings_Click(object s, RoutedEventArgs e)
+    {
+        var ok = _vm.SaveSettingsEditor();
+        ShowToast(ok ? "Settings saved" : _vm.StatusText, isWarning: !ok);
+    }
+
+    private void ReloadSettings_Click(object s, RoutedEventArgs e)
+    {
+        _vm.ReloadSettingsEditor();
+        ShowToast("Settings reloaded");
+    }
+
+    private void ExportSettings_Click(object s, RoutedEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = "Export DeepPurge Settings",
+            Filter = "JSON Settings (*.json)|*.json",
+            FileName = $"DeepPurge_Settings_{DateTime.Now:yyyyMMdd}.json",
+        };
+        if (dlg.ShowDialog(this) != true) return;
+
+        var ok = _vm.ExportSettingsTo(dlg.FileName);
+        ShowToast(ok ? "Settings exported" : _vm.StatusText, isError: !ok);
+    }
+
+    private void ImportSettings_Click(object s, RoutedEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Import DeepPurge Settings",
+            Filter = "JSON Settings (*.json)|*.json",
+            CheckFileExists = true,
+        };
+        if (dlg.ShowDialog(this) != true) return;
+
+        var ok = _vm.ImportSettingsFrom(dlg.FileName);
+        ShowToast(ok ? "Settings imported" : _vm.StatusText, isError: !ok);
+    }
+
     /// <summary>
     /// Auto-scroll the Repair output box to the tail as new lines stream in.
     /// Wired via TextChanged so it's independent of which repair button
@@ -450,6 +497,10 @@ public partial class MainWindow : Window
             "Recycle All" => "Move all detected broken shortcuts to the Recycle Bin.",
             "Open Logs" => "Open the folder containing deletion manifest logs.",
             "Open Backups" => "Open the folder containing registry backup exports.",
+            "Save Settings" => "Save Settings and Privacy changes to settings.json.",
+            "Reload" => "Reload Settings and Privacy values from the saved settings file.",
+            "Import" => "Import Settings and Privacy values from a JSON settings file.",
+            "Export" => "Export Settings and Privacy values to a JSON settings file.",
             _ => text,
         };
     }
