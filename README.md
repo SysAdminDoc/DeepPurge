@@ -145,7 +145,7 @@ DeepPurgeCli doctor                         # Environment self-test (14 checks)
 dotnet test tests/DeepPurge.Tests/DeepPurge.Tests.csproj
 ```
 
-Covers UpdateChecker version-compare, Winapp2Parser detect/bucket routing, StartupImpact thresholds, SafetyGuard block/allow lists, ScheduleManager name sanitisation, and DataPaths path resolution.
+The current suite has 301 tests covering parser routing, package-manager command builders, release validation, privacy retention, SafetyGuard block/allow lists, schedule sanitisation, recovery manifests, and settings import/export contracts.
 
 ## Packaging
 
