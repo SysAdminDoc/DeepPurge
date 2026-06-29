@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using DeepPurge.Core.Execution;
 
 namespace DeepPurge.Core.Firewall;
 
@@ -53,32 +54,21 @@ public static class FirewallRuleScanner
         {
             // Step 1: Get all firewall rules with their application filters in one call.
             // We join rules with their application filters to get the Program path.
-            var psi = new ProcessStartInfo
-            {
-                FileName = "powershell.exe",
-                Arguments = "-NoProfile -Command \"" +
-                    "$rules = Get-NetFirewallRule | Select-Object Name,DisplayName,Direction,Action,Enabled,Profile; " +
-                    "$appFilters = Get-NetFirewallApplicationFilter | Select-Object InstanceID,Program; " +
-                    "$lookup = @{}; foreach ($f in $appFilters) { $lookup[$f.InstanceID] = $f.Program }; " +
-                    "$result = foreach ($r in $rules) { " +
-                    "  [PSCustomObject]@{ " +
-                    "    Name=$r.Name; DisplayName=$r.DisplayName; " +
-                    "    Direction=$r.Direction.ToString(); Action=$r.Action.ToString(); " +
-                    "    Enabled=$r.Enabled.ToString(); Profile=$r.Profile.ToString(); " +
-                    "    Program=if($lookup.ContainsKey($r.Name)){$lookup[$r.Name]}else{''} " +
-                    "  } " +
-                    "}; " +
-                    "$result | ConvertTo-Json -Depth 2 -Compress\"",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            };
-            using var p = Process.Start(psi);
-            if (p == null) return entries;
-
-            var output = p.StandardOutput.ReadToEnd();
-            p.WaitForExit(60000);
+            var result = ExternalProcessRunner.Run(PowerShellCommand(
+                "$rules = Get-NetFirewallRule | Select-Object Name,DisplayName,Direction,Action,Enabled,Profile; " +
+                "$appFilters = Get-NetFirewallApplicationFilter | Select-Object InstanceID,Program; " +
+                "$lookup = @{}; foreach ($f in $appFilters) { $lookup[$f.InstanceID] = $f.Program }; " +
+                "$result = foreach ($r in $rules) { " +
+                "  [PSCustomObject]@{ " +
+                "    Name=$r.Name; DisplayName=$r.DisplayName; " +
+                "    Direction=$r.Direction.ToString(); Action=$r.Action.ToString(); " +
+                "    Enabled=$r.Enabled.ToString(); Profile=$r.Profile.ToString(); " +
+                "    Program=if($lookup.ContainsKey($r.Name)){$lookup[$r.Name]}else{''} " +
+                "  } " +
+                "}; " +
+                "$result | ConvertTo-Json -Depth 2 -Compress",
+                TimeSpan.FromSeconds(60)));
+            var output = result.Output;
             if (string.IsNullOrWhiteSpace(output)) return entries;
 
             using var doc = JsonDocument.Parse(output);
@@ -116,19 +106,12 @@ public static class FirewallRuleScanner
     {
         try
         {
-            var psi = new ProcessStartInfo
+            var result = ExternalProcessRunner.Run(new ExternalProcessCommand("powershell.exe")
             {
-                FileName = "powershell.exe",
-                Arguments = $"-NoProfile -EncodedCommand {EncodePsCommand($"Remove-NetFirewallRule -Name '{EscapePs(rule.Name)}' -ErrorAction Stop")}",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            };
-            using var p = Process.Start(psi);
-            if (p == null) return false;
-            p.WaitForExit(15000);
-            return p.ExitCode == 0;
+                Arguments = new[] { "-NoProfile", "-EncodedCommand", EncodePsCommand($"Remove-NetFirewallRule -Name '{EscapePs(rule.Name)}' -ErrorAction Stop") },
+                Timeout = TimeSpan.FromSeconds(15),
+            });
+            return result.Success;
         }
         catch { return false; }
     }
@@ -199,6 +182,16 @@ public static class FirewallRuleScanner
 
     public static string EncodePsCommand(string script) =>
         Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(script));
+
+    private static ExternalProcessCommand PowerShellCommand(string script, TimeSpan timeout)
+        => new("powershell.exe")
+        {
+            Arguments = new[] { "-NoProfile", "-Command", script },
+            Timeout = timeout,
+            OutputLimitChars = 512 * 1024,
+            ErrorLimitChars = 64 * 1024,
+            RedactAbsolutePaths = true,
+        };
 
     private static string GetStr(JsonElement el, string prop)
     {

@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.ServiceProcess;
+using DeepPurge.Core.Execution;
 using DeepPurge.Core.Security;
 using Microsoft.Win32;
 
@@ -206,36 +207,29 @@ public static class ServiceScanner
         catch { return false; }
     }
 
-    public static bool DisableService(ServiceEntry entry) => RunSc($"config \"{entry.Name}\" start=disabled");
+    public static bool DisableService(ServiceEntry entry) => RunSc(new[] { "config", entry.Name, "start=", "disabled" });
 
     public static bool DeleteService(ServiceEntry entry)
     {
         // Best-effort stop; deletion succeeds even if the service was already gone.
         StopService(entry);
-        return RunSc($"delete \"{entry.Name}\"");
+        return RunSc(new[] { "delete", entry.Name });
     }
 
     // ═══════════════════════════════════════════════════════
     //  Internals
     // ═══════════════════════════════════════════════════════
 
-    private static bool RunSc(string args)
+    private static bool RunSc(IReadOnlyList<string> args)
     {
         try
         {
-            var psi = new ProcessStartInfo
+            var result = ExternalProcessRunner.Run(new ExternalProcessCommand("sc.exe")
             {
-                FileName = "sc.exe",
                 Arguments = args,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            };
-            using var p = Process.Start(psi);
-            if (p == null) return false;
-            p.WaitForExit(15000);
-            return p.ExitCode == 0;
+                Timeout = TimeSpan.FromSeconds(15),
+            });
+            return result.Success;
         }
         catch { return false; }
     }

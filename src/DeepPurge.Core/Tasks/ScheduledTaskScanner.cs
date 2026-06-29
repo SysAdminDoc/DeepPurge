@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using DeepPurge.Core.Execution;
 
 namespace DeepPurge.Core.Tasks;
 
@@ -38,25 +39,15 @@ public static class ScheduledTaskScanner
         var tasks = new List<ScheduledTaskInfo>();
         try
         {
-            var psi = new ProcessStartInfo
-            {
-                FileName = "powershell.exe",
-                Arguments = "-NoProfile -Command \"Get-ScheduledTask | " +
-                    "Select-Object TaskName,TaskPath,Author,Description,State," +
-                    "@{N='Action';E={($_.Actions | Select-Object -First 1).Execute}}," +
-                    "@{N='LastRun';E={(Get-ScheduledTaskInfo -TaskName $_.TaskName -TaskPath $_.TaskPath -ErrorAction SilentlyContinue).LastRunTime}}," +
-                    "@{N='NextRun';E={(Get-ScheduledTaskInfo -TaskName $_.TaskName -TaskPath $_.TaskPath -ErrorAction SilentlyContinue).NextRunTime}} | " +
-                    "ConvertTo-Json -Depth 2 -Compress\"",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            };
-            using var p = Process.Start(psi);
-            if (p == null) return tasks;
-
-            var output = p.StandardOutput.ReadToEnd();
-            p.WaitForExit(30000);
+            var result = ExternalProcessRunner.Run(PowerShellCommand(
+                "Get-ScheduledTask | " +
+                "Select-Object TaskName,TaskPath,Author,Description,State," +
+                "@{N='Action';E={($_.Actions | Select-Object -First 1).Execute}}," +
+                "@{N='LastRun';E={(Get-ScheduledTaskInfo -TaskName $_.TaskName -TaskPath $_.TaskPath -ErrorAction SilentlyContinue).LastRunTime}}," +
+                "@{N='NextRun';E={(Get-ScheduledTaskInfo -TaskName $_.TaskName -TaskPath $_.TaskPath -ErrorAction SilentlyContinue).NextRunTime}} | " +
+                "ConvertTo-Json -Depth 2 -Compress",
+                TimeSpan.FromSeconds(30)));
+            var output = result.Output;
             if (string.IsNullOrWhiteSpace(output)) return tasks;
 
             using var doc = JsonDocument.Parse(output);
@@ -102,22 +93,21 @@ public static class ScheduledTaskScanner
     {
         try
         {
-            var psi = new ProcessStartInfo
-            {
-                FileName = "powershell.exe",
-                Arguments = $"-NoProfile -Command \"{command}\"",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardError = true,
-                RedirectStandardOutput = true,
-            };
-            using var p = Process.Start(psi);
-            if (p == null) return false;
-            p.WaitForExit(15000);
-            return p.ExitCode == 0;
+            var result = ExternalProcessRunner.Run(PowerShellCommand(command, TimeSpan.FromSeconds(15)));
+            return result.Success;
         }
         catch { return false; }
     }
+
+    private static ExternalProcessCommand PowerShellCommand(string script, TimeSpan timeout)
+        => new("powershell.exe")
+        {
+            Arguments = new[] { "-NoProfile", "-Command", script },
+            Timeout = timeout,
+            OutputLimitChars = 512 * 1024,
+            ErrorLimitChars = 64 * 1024,
+            RedactAbsolutePaths = true,
+        };
 
     private static string EscapePs(string s) => string.IsNullOrEmpty(s) ? "" : s.Replace("'", "''");
 

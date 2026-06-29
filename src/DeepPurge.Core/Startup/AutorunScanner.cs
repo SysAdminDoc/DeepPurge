@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text;
+using DeepPurge.Core.Execution;
 using DeepPurge.Core.Registry;
 using DeepPurge.Core.Safety;
 using DeepPurge.Core.Security;
@@ -331,20 +332,14 @@ public static class AutorunScanner
         _ = procSet;
         try
         {
-            var psi = new ProcessStartInfo
+            var result = ExternalProcessRunner.Run(new ExternalProcessCommand("schtasks.exe")
             {
-                FileName = "schtasks.exe",
-                Arguments = "/query /fo CSV /v /nh",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                CreateNoWindow = true,
-            };
-
-            using var proc = Process.Start(psi);
-            if (proc == null) return;
-
-            var output = proc.StandardOutput.ReadToEnd();
-            proc.WaitForExit(15000);
+                Arguments = new[] { "/query", "/fo", "CSV", "/v", "/nh" },
+                Timeout = TimeSpan.FromSeconds(15),
+                OutputLimitChars = 512 * 1024,
+                ErrorLimitChars = 64 * 1024,
+            });
+            var output = result.Output;
 
             foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
             {
@@ -430,7 +425,7 @@ public static class AutorunScanner
                     return false;
 
                 case AutorunType.Service:
-                    return RunSc($"delete \"{entry.Name}\"");
+                    return RunSc(new[] { "delete", entry.Name });
             }
         }
         catch { /* fall through */ }
@@ -518,25 +513,18 @@ public static class AutorunScanner
     // ═══════════════════════════════════════════════════════
 
     private static bool RunScConfig(string serviceName, string startType)
-        => RunSc($"config \"{serviceName}\" start= {startType}");
+        => RunSc(new[] { "config", serviceName, "start=", startType });
 
-    private static bool RunSc(string args)
+    private static bool RunSc(IReadOnlyList<string> args)
     {
         try
         {
-            var psi = new ProcessStartInfo
+            var result = ExternalProcessRunner.Run(new ExternalProcessCommand("sc.exe")
             {
-                FileName = "sc.exe",
                 Arguments = args,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            };
-            using var p = Process.Start(psi);
-            if (p == null) return false;
-            p.WaitForExit(10000);
-            return p.ExitCode == 0;
+                Timeout = TimeSpan.FromSeconds(10),
+            });
+            return result.Success;
         }
         catch { return false; }
     }

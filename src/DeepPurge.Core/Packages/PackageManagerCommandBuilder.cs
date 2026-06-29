@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using DeepPurge.Core.Execution;
 
 namespace DeepPurge.Core.Packages;
 
@@ -42,15 +43,21 @@ public static class PackageManagerCommandBuilder
         string packageManager,
         string packageId,
         bool silent = false)
+        => CreateNativeUninstallCommand(packageManager, packageId, silent).ToStartInfo();
+
+    public static ExternalProcessCommand CreateNativeUninstallCommand(
+        string packageManager,
+        string packageId,
+        bool silent = false)
     {
         if (!IsSafePackageId(packageId))
             throw new ArgumentException("Invalid package id.", nameof(packageId));
 
         return NormalizeManager(packageManager) switch
         {
-            "winget" => CreateWingetUninstallStartInfo(packageId, silent),
-            "scoop" => CreateScoopUninstallStartInfo(packageId),
-            "chocolatey" => CreateChocolateyUninstallStartInfo(packageId),
+            "winget" => CreateWingetUninstallCommand(packageId, silent),
+            "scoop" => CreateScoopUninstallCommand(packageId),
+            "chocolatey" => CreateChocolateyUninstallCommand(packageId),
             _ => throw new NotSupportedException($"Unsupported package manager: {packageManager}"),
         };
     }
@@ -60,59 +67,49 @@ public static class PackageManagerCommandBuilder
         string packageId,
         bool silent = false)
     {
-        var psi = CreateNativeUninstallStartInfo(packageManager, packageId, silent);
-        return string.Join(" ", new[] { psi.FileName }.Concat(psi.ArgumentList.Select(QuoteForDisplay)));
+        var command = CreateNativeUninstallCommand(packageManager, packageId, silent);
+        return command.ToRedactedCommandLine();
     }
 
-    private static ProcessStartInfo CreateWingetUninstallStartInfo(string packageId, bool silent)
+    private static ExternalProcessCommand CreateWingetUninstallCommand(string packageId, bool silent)
     {
-        var psi = CreateHiddenProcess("winget.exe");
-        psi.ArgumentList.Add("uninstall");
-        psi.ArgumentList.Add("--id");
-        psi.ArgumentList.Add(packageId);
-        psi.ArgumentList.Add("--exact");
-        psi.ArgumentList.Add("--disable-interactivity");
-        psi.ArgumentList.Add("--accept-source-agreements");
-        if (silent) psi.ArgumentList.Add("--silent");
-        return psi;
+        var args = new List<string>
+        {
+            "uninstall",
+            "--id",
+            packageId,
+            "--exact",
+            "--disable-interactivity",
+            "--accept-source-agreements",
+        };
+        if (silent) args.Add("--silent");
+        return new ExternalProcessCommand("winget.exe") { Arguments = args };
     }
 
-    private static ProcessStartInfo CreateScoopUninstallStartInfo(string packageId)
+    private static ExternalProcessCommand CreateScoopUninstallCommand(string packageId)
     {
         // Scoop is normally a shim/cmd wrapper on PATH. Invoke it through cmd.exe,
         // but only after strict package-id validation keeps shell metacharacters out.
-        var psi = CreateHiddenProcess("cmd.exe");
-        psi.ArgumentList.Add("/d");
-        psi.ArgumentList.Add("/c");
-        psi.ArgumentList.Add("scoop");
-        psi.ArgumentList.Add("uninstall");
-        psi.ArgumentList.Add(packageId);
-        return psi;
-    }
-
-    private static ProcessStartInfo CreateChocolateyUninstallStartInfo(string packageId)
-    {
-        var psi = CreateHiddenProcess("choco.exe");
-        psi.ArgumentList.Add("uninstall");
-        psi.ArgumentList.Add(packageId);
-        psi.ArgumentList.Add("--yes");
-        psi.ArgumentList.Add("--no-progress");
-        psi.ArgumentList.Add("--no-color");
-        psi.ArgumentList.Add("--limit-output");
-        return psi;
-    }
-
-    private static ProcessStartInfo CreateHiddenProcess(string fileName)
-        => new()
+        return new ExternalProcessCommand("cmd.exe")
         {
-            FileName = fileName,
-            UseShellExecute = false,
-            CreateNoWindow = true,
+            Arguments = new[] { "/d", "/c", "scoop", "uninstall", packageId },
+        };
+    }
+
+    private static ExternalProcessCommand CreateChocolateyUninstallCommand(string packageId)
+        => new("choco.exe")
+        {
+            Arguments = new[]
+            {
+                "uninstall",
+                packageId,
+                "--yes",
+                "--no-progress",
+                "--no-color",
+                "--limit-output",
+            },
         };
 
     private static string NormalizeManager(string? packageManager)
         => (packageManager ?? "").Trim().ToLowerInvariant();
-
-    private static string QuoteForDisplay(string value)
-        => value.Any(char.IsWhiteSpace) ? $"\"{value.Replace("\"", "\\\"")}\"" : value;
 }

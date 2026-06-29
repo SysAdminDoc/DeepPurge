@@ -1,6 +1,6 @@
-using System.Diagnostics;
 using System.Text;
 using DeepPurge.Core.Diagnostics;
+using DeepPurge.Core.Execution;
 using DeepPurge.Core.Models;
 
 namespace DeepPurge.Core.Packages;
@@ -142,7 +142,7 @@ public static class PackageManagerScanner
         try
         {
             var jsonOutput = RunProcess("winget.exe",
-                "list --disable-interactivity --accept-source-agreements --output json", ct);
+                new[] { "list", "--disable-interactivity", "--accept-source-agreements", "--output", "json" }, ct);
             if (!string.IsNullOrWhiteSpace(jsonOutput) && jsonOutput.TrimStart().StartsWith('['))
                 return ParseWingetJson(jsonOutput);
         }
@@ -151,7 +151,7 @@ public static class PackageManagerScanner
         try
         {
             var tableOutput = RunProcess("winget.exe",
-                "list --disable-interactivity --accept-source-agreements", ct);
+                new[] { "list", "--disable-interactivity", "--accept-source-agreements" }, ct);
             if (!string.IsNullOrWhiteSpace(tableOutput)) return ParseWingetTable(tableOutput);
         }
         catch (Exception ex) { Log.Warn($"Winget table query failed: {ex.Message}"); }
@@ -324,7 +324,7 @@ public static class PackageManagerScanner
         try
         {
             var output = RunProcess("choco.exe",
-                "list --local-only --limit-output --no-color", ct);
+                new[] { "list", "--local-only", "--limit-output", "--no-color" }, ct);
             if (!string.IsNullOrWhiteSpace(output))
                 return ParseChocolateyLimitOutput(output);
         }
@@ -359,14 +359,14 @@ public static class PackageManagerScanner
 
     private static PackageSourceHealth CheckWingetHealth(CancellationToken ct)
     {
-        var version = RunProcessDetailed("winget.exe", "--version", ct, timeoutMs: 5_000);
+        var version = RunProcessDetailed("winget.exe", new[] { "--version" }, ct, timeoutMs: 5_000);
         if (!version.Started)
             return new("winget", SelfTestStatus.Warn, "Not on PATH", "", "", 0, version.Error,
                 "Install Microsoft App Installer or run winget from an account where it is on PATH.");
 
         var versionText = FirstLine(version.OutputAndError);
         var json = RunProcessDetailed("winget.exe",
-            "list --disable-interactivity --accept-source-agreements --output json", ct, timeoutMs: 10_000);
+            new[] { "list", "--disable-interactivity", "--accept-source-agreements", "--output", "json" }, ct, timeoutMs: 10_000);
         if (!string.IsNullOrWhiteSpace(json.Output) && json.Output.TrimStart().StartsWith('['))
         {
             var entries = ParseWingetJson(json.Output);
@@ -374,7 +374,7 @@ public static class PackageManagerScanner
         }
 
         var table = RunProcessDetailed("winget.exe",
-            "list --disable-interactivity --accept-source-agreements", ct, timeoutMs: 10_000);
+            new[] { "list", "--disable-interactivity", "--accept-source-agreements" }, ct, timeoutMs: 10_000);
         if (!string.IsNullOrWhiteSpace(table.Output))
         {
             var entries = ParseWingetTable(table.Output);
@@ -392,7 +392,7 @@ public static class PackageManagerScanner
         var root = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             "scoop", "apps");
-        var version = RunProcessDetailed("cmd.exe", "/d /c scoop --version", ct, timeoutMs: 5_000);
+        var version = RunProcessDetailed("cmd.exe", new[] { "/d", "/c", "scoop", "--version" }, ct, timeoutMs: 5_000);
         var versionText = version.Started ? FirstLine(version.OutputAndError) : "";
         return InspectScoopRoot(root, versionText);
     }
@@ -421,13 +421,13 @@ public static class PackageManagerScanner
 
     private static PackageSourceHealth CheckChocolateyHealth(CancellationToken ct)
     {
-        var version = RunProcessDetailed("choco.exe", "--version", ct, timeoutMs: 5_000);
+        var version = RunProcessDetailed("choco.exe", new[] { "--version" }, ct, timeoutMs: 5_000);
         if (!version.Started)
             return new("chocolatey", SelfTestStatus.Warn, "Not on PATH", "", "", 0, version.Error,
                 "Install Chocolatey or verify choco.exe is on PATH.");
 
         var output = RunProcessDetailed("choco.exe",
-            "list --local-only --limit-output --no-color", ct, timeoutMs: 10_000);
+            new[] { "list", "--local-only", "--limit-output", "--no-color" }, ct, timeoutMs: 10_000);
         if (output.ExitCode == 0 && !string.IsNullOrWhiteSpace(output.Output))
         {
             var entries = ParseChocolateyLimitOutput(output.Output);
@@ -490,73 +490,42 @@ public static class PackageManagerScanner
         return value.Length <= max ? value : value[..max] + "...";
     }
 
-    private static ProcessProbeResult RunProcessDetailed(string exe, string args, CancellationToken ct, int timeoutMs)
+    private static ProcessProbeResult RunProcessDetailed(
+        string exe,
+        IReadOnlyList<string> args,
+        CancellationToken ct,
+        int timeoutMs)
     {
-        try
+        var result = ExternalProcessRunner.Run(new ExternalProcessCommand(exe)
         {
-            var psi = new ProcessStartInfo
-            {
-                FileName = exe,
-                Arguments = args,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-                StandardOutputEncoding = Encoding.UTF8,
-                StandardErrorEncoding = Encoding.UTF8,
-            };
+            Arguments = args,
+            Timeout = TimeSpan.FromMilliseconds(timeoutMs),
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
+        }, ct: ct);
 
-            using var proc = Process.Start(psi);
-            if (proc == null) return new(false, -1, "", "process did not start", false);
-
-            var stdoutTask = proc.StandardOutput.ReadToEndAsync(ct);
-            var stderrTask = proc.StandardError.ReadToEndAsync(ct);
-            if (!proc.WaitForExit(timeoutMs))
-            {
-                try { proc.Kill(entireProcessTree: true); } catch (Exception ex) { Log.Warn($"Process kill failed: {ex.Message}"); }
-                return new(true, -1, stdoutTask.IsCompletedSuccessfully ? stdoutTask.Result : "", "timed out", true);
-            }
-
-            var output = stdoutTask.GetAwaiter().GetResult();
-            var error = stderrTask.GetAwaiter().GetResult();
-            ct.ThrowIfCancellationRequested();
-            return new(true, proc.ExitCode, output, error, false);
-        }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
-        {
-            return new(false, -1, "", ex.Message, false);
-        }
+        return new(
+            result.Started,
+            result.ExitCode,
+            result.Output,
+            result.StartError ?? result.Error,
+            result.TimedOut);
     }
 
-    private static string RunProcess(string exe, string args, CancellationToken ct)
+    private static string RunProcess(string exe, IReadOnlyList<string> args, CancellationToken ct)
     {
-        var psi = new ProcessStartInfo
+        var result = ExternalProcessRunner.Run(new ExternalProcessCommand(exe)
         {
-            FileName = exe,
             Arguments = args,
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
+            Timeout = TimeSpan.FromMilliseconds(ProcessTimeoutMs),
             StandardOutputEncoding = Encoding.UTF8,
-        };
-
-        using var proc = Process.Start(psi);
-        if (proc == null) return "";
-
-        var sb = new StringBuilder();
-        proc.OutputDataReceived += (_, e) => { if (e.Data != null) sb.AppendLine(e.Data); };
-        proc.BeginOutputReadLine();
-        proc.BeginErrorReadLine();
-
-        if (!proc.WaitForExit(ProcessTimeoutMs))
-        {
-            try { proc.Kill(entireProcessTree: true); } catch (Exception ex) { Log.Warn($"Process kill failed: {ex.Message}"); }
-            return sb.ToString();
-        }
-        proc.WaitForExit(); // flush async handlers
+            StandardErrorEncoding = Encoding.UTF8,
+        }, ct: ct);
         ct.ThrowIfCancellationRequested();
-        return sb.ToString();
+        if (result.TimedOut)
+            Log.Warn($"{exe} timed out after {ProcessTimeoutMs} ms");
+        if (!result.Started && result.StartError is not null)
+            Log.Warn($"{exe} failed to start: {result.StartError}");
+        return result.Output;
     }
 }

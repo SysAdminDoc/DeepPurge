@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Management;
 using DeepPurge.Core.Diagnostics;
+using DeepPurge.Core.Execution;
 
 namespace DeepPurge.Core.Safety;
 
@@ -101,16 +102,13 @@ public static class SystemRestoreManager
     {
         try
         {
-            var psi = new ProcessStartInfo
+            var script = $"Checkpoint-Computer -Description '{description.Replace("'", "''")}' -RestorePointType 'MODIFY_SETTINGS'";
+            var result = ExternalProcessRunner.Run(new ExternalProcessCommand("powershell.exe")
             {
-                FileName = "powershell.exe",
-                Arguments = $"-NoProfile -Command \"Checkpoint-Computer -Description '{description.Replace("'", "''")}' -RestorePointType 'MODIFY_SETTINGS'\"",
-                UseShellExecute = false, CreateNoWindow = true,
-                RedirectStandardOutput = true, RedirectStandardError = true,
-            };
-            using var p = Process.Start(psi);
-            p?.WaitForExit(120000);
-            return p?.ExitCode == 0;
+                Arguments = new[] { "-NoProfile", "-Command", script },
+                Timeout = TimeSpan.FromMinutes(2),
+            });
+            return result.Success;
         }
         catch (Exception ex) { Log.Warn($"Create restore point failed: {ex.Message}"); return false; }
     }
@@ -119,16 +117,12 @@ public static class SystemRestoreManager
     {
         try
         {
-            var psi = new ProcessStartInfo
+            var result = ExternalProcessRunner.Run(new ExternalProcessCommand("vssadmin.exe")
             {
-                FileName = "vssadmin.exe",
-                Arguments = $"delete shadows /Shadow={{sequence:{sequenceNumber}}} /quiet",
-                UseShellExecute = false, CreateNoWindow = true,
-                RedirectStandardOutput = true, RedirectStandardError = true,
-            };
-            using var p = Process.Start(psi);
-            p?.WaitForExit(30000);
-            return p?.ExitCode == 0;
+                Arguments = new[] { "delete", "shadows", $"/Shadow={{sequence:{sequenceNumber}}}", "/quiet" },
+                Timeout = TimeSpan.FromSeconds(30),
+            });
+            return result.Success;
         }
         catch (Exception ex) { Log.Warn($"Delete restore point failed: {ex.Message}"); return false; }
     }
@@ -137,17 +131,12 @@ public static class SystemRestoreManager
     {
         try
         {
-            var psi = new ProcessStartInfo
+            var result = ExternalProcessRunner.Run(new ExternalProcessCommand("powershell.exe")
             {
-                FileName = "powershell.exe",
-                Arguments = "-NoProfile -Command \"(Get-ComputerRestorePoint -ErrorAction SilentlyContinue) -ne $null; $?\"",
-                UseShellExecute = false, CreateNoWindow = true,
-                RedirectStandardOutput = true,
-            };
-            using var p = Process.Start(psi);
-            var output = p?.StandardOutput.ReadToEnd().Trim();
-            p?.WaitForExit(15000);
-            return output?.Contains("True") == true;
+                Arguments = new[] { "-NoProfile", "-Command", "(Get-ComputerRestorePoint -ErrorAction SilentlyContinue) -ne $null; $?" },
+                Timeout = TimeSpan.FromSeconds(15),
+            });
+            return result.Output.Contains("True", StringComparison.OrdinalIgnoreCase);
         }
         catch (Exception ex) { Log.Warn($"Check restore enabled failed: {ex.Message}"); return false; }
     }

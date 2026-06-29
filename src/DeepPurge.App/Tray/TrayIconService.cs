@@ -8,6 +8,7 @@ using System.Windows.Interop;
 using System.Windows.Threading;
 using DeepPurge.App.ViewModels;
 using DeepPurge.Core.Diagnostics;
+using DeepPurge.Core.Execution;
 using DeepPurge.Core.Schedule;
 
 namespace DeepPurge.App.Tray;
@@ -200,38 +201,24 @@ internal sealed class TrayIconService : IDisposable
 
         try
         {
-            var psi = new ProcessStartInfo
+            var result = await ExternalProcessRunner.RunAsync(new ExternalProcessCommand(cliPath)
             {
-                FileName = cliPath,
-                Arguments = "clean junk evidence --dry-run --json",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            };
+                Arguments = new[] { "clean", "junk", "evidence", "--dry-run", "--json" },
+                Timeout = TimeSpan.FromMinutes(5),
+                RedactAbsolutePaths = true,
+            }).ConfigureAwait(true);
 
-            using var process = Process.Start(psi);
-            if (process == null)
+            if (!result.Success)
             {
-                ShowBalloon("Clean preview", "Could not start DeepPurgeCli.exe.", BalloonIcon.Error);
-                return;
-            }
-
-            var stdoutTask = process.StandardOutput.ReadToEndAsync();
-            var stderrTask = process.StandardError.ReadToEndAsync();
-            await process.WaitForExitAsync();
-            var stdout = await stdoutTask;
-            var stderr = await stderrTask;
-
-            if (process.ExitCode != 0)
-            {
-                var message = string.IsNullOrWhiteSpace(stderr) ? $"Exit code {process.ExitCode}" : stderr.Trim();
+                var message = string.IsNullOrWhiteSpace(result.Error)
+                    ? $"{result.Status} ({result.ExitCode})"
+                    : result.Error.Trim();
                 ShowBalloon("Clean preview failed", message, BalloonIcon.Error);
                 _showToast($"Tray clean preview failed: {message}", true, false);
                 return;
             }
 
-            var totalBytes = TryReadTotalBytes(stdout);
+            var totalBytes = TryReadTotalBytes(result.Output);
             var summary = totalBytes.HasValue
                 ? $"Dry run found {SizeFormatter.Format(totalBytes.Value)} reclaimable."
                 : "Dry-run clean preview completed.";
