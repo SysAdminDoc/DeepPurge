@@ -79,6 +79,14 @@ development passes.
       verification. HighContrast ResourceDictionary must map brushes to
       SystemColor*Color and meet 2px/3:1 focus indicator requirements.
 
+- [ ] **Run elevated rendered QA across all themes**
+      Blocked: DeepPurge.exe requires administrator elevation, and this
+      autonomous session is non-elevated. Launch `build\DeepPurge.exe`
+      elevated and inspect Programs, Deletion Recovery, Settings / Privacy,
+      Scheduled Cleaning, About / Updates, and legacy safety panels across
+      every built-in theme; fix any clipping, contrast, focus, disabled-state,
+      or empty-state regressions found.
+
 - [ ] **Publish independent accuracy benchmark**
       Blocked: requires a clean VM image, 8 specific test apps (Adobe CC,
       Discord, Steam, Bongo Cat, Notepad++ Portable, Brave Portable,

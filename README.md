@@ -147,7 +147,7 @@ DeepPurgeCli doctor                         # Environment self-test (16 checks, 
 dotnet test tests/DeepPurge.Tests/DeepPurge.Tests.csproj
 ```
 
-The current suite has 317 tests covering parser routing, shared external-process execution, package-manager command builders and source diagnostics, cleaner schema validation, release validation, privacy retention, SafetyGuard block/allow lists, schedule sanitisation, recovery manifests, and versioned settings import/export contracts.
+The current suite has 321 tests covering parser routing, shared external-process execution, package-manager command builders and source diagnostics, cleaner schema validation, release validation, privacy retention, SafetyGuard block/allow lists, schedule sanitisation, recovery manifests, versioned settings import/export contracts, and static WPF accessibility/resource-drift checks.
 
 ## Packaging
 
