@@ -753,18 +753,27 @@ if ($app) {{
                 var validated = ValidateExportPath(path);
                 if (path != null && validated == null) return 2;
                 if (validated == null) return Fail("usage: deeppurgecli settings export <path.json>");
-                AppSettings.Current.ExportTo(validated);
+                var preview = AppSettings.Current.ExportTo(validated);
                 Console.WriteLine($"Settings exported to {validated}");
+                Console.WriteLine($"Preview: {preview.ToRedactedSummary()}");
                 return 0;
             }
             case "import":
             {
                 var path = a.Positional.Count > 1 ? a.Positional[1] : null;
                 if (string.IsNullOrEmpty(path) || !File.Exists(path))
-                    return Fail("usage: deeppurgecli settings import <path.json>");
-                var imported = AppSettings.ImportFrom(path);
-                imported.Save();
-                Console.WriteLine($"Settings imported from {path} and saved");
+                    return Fail("usage: deeppurgecli settings import <path.json> [--preview]");
+
+                var plan = AppSettings.PreviewImportFromFile(path);
+                PrintSettingsImportPlan(plan);
+                if (!plan.IsValid) return 2;
+                if (a.HasFlag("preview")) return 0;
+
+                var outcome = AppSettings.ImportAndApply(path);
+                Console.WriteLine($"Settings imported from {path}");
+                Console.WriteLine(string.IsNullOrWhiteSpace(outcome.BackupPath)
+                    ? "Rollback: no previous settings file existed"
+                    : $"Rollback: previous settings saved to {outcome.BackupPath}");
                 return 0;
             }
             case "show":
@@ -802,8 +811,22 @@ if ($app) {{
                 return 0;
             }
             default:
-                return Fail("usage: deeppurgecli settings [show|export <path>|import <path>|prune [--dry-run]]");
+                return Fail("usage: deeppurgecli settings [show|export <path>|import <path> [--preview]|prune [--dry-run]]");
         }
+    }
+
+    private static void PrintSettingsImportPlan(SettingsImportPlan plan)
+    {
+        Console.WriteLine($"Preview: {plan.Preview.ToRedactedSummary()}");
+        if (plan.Issues.Count == 0)
+        {
+            Console.WriteLine("Validation: OK");
+            return;
+        }
+
+        Console.WriteLine("Validation:");
+        foreach (var issue in plan.Issues)
+            Console.WriteLine($"  [{issue.Severity}] {issue.Field}: {issue.Message}");
     }
 
     private static int CmdOrphans(ParsedArgs a)
@@ -1116,7 +1139,7 @@ if ($app) {{
         Console.WriteLine("  cleaners schema [--export file.json]      Print or export the cleaner JSON schema");
         Console.WriteLine("  register-shell                           Add 'Uninstall with DeepPurge' to .exe right-click menu");
         Console.WriteLine("  unregister-shell                         Remove the shell context menu entry");
-        Console.WriteLine("  settings [show|export <path>|import <path>|prune [--dry-run]]  View settings or prune old privacy logs");
+        Console.WriteLine("  settings [show|export <path>|import <path> [--preview]|prune [--dry-run]]  View, move, validate, or prune settings");
         Console.WriteLine("  detection-script --program \"Name\" [--export file.ps1]   Generate Intune/SCCM detection script");
         Console.WriteLine("  update-winapp2 [--check-only]            Download latest winapp2.ini from GitHub");
         Console.WriteLine("  restore [--date YYYY-MM-DD] [--list] [--dry-run]  List or restore from deletion manifests");

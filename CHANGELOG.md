@@ -13,6 +13,7 @@ All notable changes to DeepPurge will be documented in this file.
 
 ### Added (P2 privacy)
 - **Retention and scrub controls** - Settings / Privacy now configures log, activity, and deletion-manifest retention windows plus optional local-path redaction for reports. The GUI can prune expired data, and CLI `settings prune [--dry-run]` reports files, bytes, and activity entries affected.
+- **Guarded settings import/export** - Settings files now export as schema-versioned documents with app version and timestamp metadata. CLI `settings import <path> --preview` reports a redacted summary and validation errors without writing, normal imports create rollback backups, and legacy raw `settings.json` files migrate forward under test coverage.
 
 ### Fixed (P2 docs)
 - **Local-only release documentation** - CONTRIBUTING, ARCHITECTURE, README, and packaging guidance now match xUnit v3, the 301-test suite, current release assets, SHA256 validation, and the absence of GitHub Actions workflows.
