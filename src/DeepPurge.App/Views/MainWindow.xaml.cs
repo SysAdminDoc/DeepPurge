@@ -339,6 +339,9 @@ public partial class MainWindow : Window
                 break;
             case "About":
                 panelAbout.Visibility = Visibility.Visible; txtPanelTitle.Text = "About / Updates";
+                _vm.RefreshAboutTrustFacts();
+                AppendToolbarButton("Refresh Trust", RefreshAboutTrust_Click, "AccentButton");
+                AppendToolbarButton("Copy SHA256", CopyAboutSha256_Click);
                 break;
         }
     }
@@ -521,6 +524,34 @@ public partial class MainWindow : Window
         ShowToast(ok ? "Settings imported" : _vm.StatusText, isError: !ok);
     }
 
+    private void RefreshAboutTrust_Click(object s, RoutedEventArgs e)
+    {
+        _vm.RefreshAboutTrustFacts();
+        ShowToast("Executable trust facts refreshed");
+    }
+
+    private void CopyAboutSha256_Click(object s, RoutedEventArgs e)
+    {
+        var value = _vm.LocalSha256Display;
+        if (string.IsNullOrWhiteSpace(value) ||
+            value.Contains("unavailable", StringComparison.OrdinalIgnoreCase) ||
+            value.Contains("not calculated", StringComparison.OrdinalIgnoreCase))
+        {
+            ShowToast("Refresh trust facts before copying SHA256", isWarning: true);
+            return;
+        }
+
+        try
+        {
+            Clipboard.SetText(value);
+            ShowToast("Executable SHA256 copied");
+        }
+        catch (Exception ex)
+        {
+            ShowToast($"Copy failed: {ex.Message}", isError: true);
+        }
+    }
+
     /// <summary>
     /// Auto-scroll the Repair output box to the tail as new lines stream in.
     /// Wired via TextChanged so it's independent of which repair button
@@ -571,6 +602,8 @@ public partial class MainWindow : Window
             "Reload" => "Reload Settings and Privacy values from the saved settings file.",
             "Import" => "Import Settings and Privacy values from a JSON settings file.",
             "Export" => "Export Settings and Privacy values to a JSON settings file.",
+            "Refresh Trust" => "Recalculate executable path, signature status, and SHA256 for this running app.",
+            "Copy SHA256" => "Copy the running executable SHA256 for release checksum comparison.",
             _ => text,
         };
     }
