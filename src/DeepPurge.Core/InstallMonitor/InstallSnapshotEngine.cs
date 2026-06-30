@@ -5,7 +5,7 @@ using DeepPurge.Core.Safety;
 
 namespace DeepPurge.Core.InstallMonitor;
 
-public record SnapshotEntry(string Path, long SizeBytes, DateTime LastWriteUtc);
+public record SnapshotEntry(string Path, long SizeBytes, DateTime LastWriteUtc, string? Sha256 = null);
 public record RegistryKeyEntry(string Path);
 
 public class InstallSnapshot
@@ -26,6 +26,20 @@ public class InstallDelta
     public List<string>        RemovedRegistryKeys{ get; set; } = new();
     public long TotalAddedBytes => AddedFiles.Sum(f => f.SizeBytes);
     public bool IsUpgrade => RemovedFiles.Count > 0 || RemovedRegistryKeys.Count > 0;
+}
+
+public sealed record InstallReplayResult(
+    int Removed,
+    int Skipped,
+    long Freed,
+    IReadOnlyList<string> SkippedReasons)
+{
+    public void Deconstruct(out int removed, out int skipped, out long freed)
+    {
+        removed = Removed;
+        skipped = Skipped;
+        freed = Freed;
+    }
 }
 
 /// <summary>
@@ -49,6 +63,7 @@ public class InstallSnapshotEngine
 {
     private const int MaxSnapshotsPerProgram = 3;
     private const int MaxTotalSnapshots      = 30;
+    private const long MaxReplayHashBytes    = 256L * 1024 * 1024;
 
     private static readonly string[] FsRoots =
     {
@@ -124,7 +139,9 @@ public class InstallSnapshotEngine
         var afterKeys   = new HashSet<string>(after.RegistryKeys.Select(k => k.Path),  StringComparer.OrdinalIgnoreCase);
 
         var delta = new InstallDelta();
-        foreach (var f in after.Files) if (!beforeFiles.Contains(f.Path)) delta.AddedFiles.Add(f);
+        foreach (var f in after.Files)
+            if (!beforeFiles.Contains(f.Path))
+                delta.AddedFiles.Add(StampReplayIdentity(f));
         foreach (var k in after.RegistryKeys) if (!beforeKeys.Contains(k.Path)) delta.AddedRegistryKeys.Add(k.Path);
         foreach (var f in before.Files) if (!afterFiles.Contains(f.Path)) delta.RemovedFiles.Add(f.Path);
         foreach (var k in before.RegistryKeys) if (!afterKeys.Contains(k.Path)) delta.RemovedRegistryKeys.Add(k.Path);
@@ -193,7 +210,7 @@ public class InstallSnapshotEngine
     /// Remove every file in a saved install manifest. SafetyGuard is applied
     /// per-item, so protected paths are skipped with a count.
     /// </summary>
-    public async Task<(int Removed, int Skipped, long Freed)> ReplayRemoveAsync(
+    public async Task<InstallReplayResult> ReplayRemoveAsync(
         InstallDelta delta,
         DeleteOptions opt,
         IProgress<DeleteProgress>? progress = null,
@@ -202,6 +219,7 @@ public class InstallSnapshotEngine
         int removed = 0, skipped = 0;
         long freed = 0;
         int total = delta.AddedFiles.Count, i = 0;
+        var skippedReasons = new ConcurrentBag<string>();
 
         await Task.Run(() =>
         {
@@ -210,11 +228,30 @@ public class InstallSnapshotEngine
                 ct.ThrowIfCancellationRequested();
                 i++;
                 progress?.Report(new DeleteProgress(i, total, freed, f.Path, false));
-                if (!SafetyGuard.IsPathSafeToDelete(f.Path)) { skipped++; continue; }
+                if (!SafetyGuard.IsPathSafeToDelete(f.Path))
+                {
+                    skipped++;
+                    skippedReasons.Add($"Unsafe path: {f.Path}");
+                    continue;
+                }
                 try
                 {
-                    if (!File.Exists(f.Path)) { skipped++; continue; }
-                    long size = new FileInfo(f.Path).Length;
+                    if (!File.Exists(f.Path))
+                    {
+                        skipped++;
+                        skippedReasons.Add($"Missing: {f.Path}");
+                        continue;
+                    }
+                    var fi = new FileInfo(f.Path);
+                    var skipReason = GetReplaySkipReason(f, fi);
+                    if (skipReason != null)
+                    {
+                        skipped++;
+                        skippedReasons.Add($"{skipReason}: {f.Path}");
+                        continue;
+                    }
+
+                    long size = fi.Length;
                     if (opt.IsDestructive)
                     {
                         if (opt.SecureDelete) SecureDelete.Wipe(f.Path);
@@ -223,11 +260,16 @@ public class InstallSnapshotEngine
                     freed += size;
                     removed++;
                 }
-                catch (Exception ex) { Log.Warn($"Replay '{f.Path}': {ex.Message}"); skipped++; }
+                catch (Exception ex)
+                {
+                    Log.Warn($"Replay '{f.Path}': {ex.Message}");
+                    skipped++;
+                    skippedReasons.Add($"Error: {f.Path} ({ex.Message})");
+                }
             }
         }, ct);
 
-        return (removed, skipped, freed);
+        return new InstallReplayResult(removed, skipped, freed, skippedReasons.ToArray());
     }
 
     // ═══════════════════════════════════════════════════════
@@ -284,7 +326,8 @@ public class InstallSnapshotEngine
                     try
                     {
                         var fi = new FileInfo(c.Path);
-                        if (fi.Exists) delta.AddedFiles.Add(new SnapshotEntry(c.Path, fi.Length, fi.LastWriteTimeUtc));
+                        if (fi.Exists) delta.AddedFiles.Add(StampReplayIdentity(
+                            new SnapshotEntry(c.Path, fi.Length, fi.LastWriteTimeUtc)));
                     }
                     catch (Exception ex) { Log.Warn($"USN file info '{c.Path}': {ex.Message}"); }
                 }
@@ -338,6 +381,74 @@ public class InstallSnapshotEngine
     }
 
     // ═══════════════════════════════════════════════════════
+
+    private static SnapshotEntry StampReplayIdentity(SnapshotEntry entry)
+    {
+        if (!string.IsNullOrWhiteSpace(entry.Sha256)) return entry;
+
+        try
+        {
+            var fi = new FileInfo(entry.Path);
+            if (!fi.Exists) return entry;
+            return entry with
+            {
+                SizeBytes = fi.Length,
+                LastWriteUtc = fi.LastWriteTimeUtc,
+                Sha256 = TryComputeSha256(fi),
+            };
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Snapshot replay identity '{entry.Path}': {ex.Message}");
+            return entry;
+        }
+    }
+
+    private static string? GetReplaySkipReason(SnapshotEntry expected, FileInfo current)
+    {
+        current.Refresh();
+        if (!current.Exists) return "Missing";
+        if (current.Length != expected.SizeBytes)
+        {
+            Log.Warn($"Replay skipped changed file '{expected.Path}': size changed from {expected.SizeBytes} to {current.Length}");
+            return "Size changed";
+        }
+
+        if (!string.IsNullOrWhiteSpace(expected.Sha256))
+        {
+            var currentHash = TryComputeSha256(current);
+            if (!string.Equals(currentHash, expected.Sha256, StringComparison.OrdinalIgnoreCase))
+            {
+                Log.Warn($"Replay skipped changed file '{expected.Path}': SHA256 mismatch");
+                return "SHA256 mismatch";
+            }
+            return null;
+        }
+
+        var delta = (current.LastWriteTimeUtc - expected.LastWriteUtc).Duration();
+        if (delta > TimeSpan.FromSeconds(2))
+        {
+            Log.Warn($"Replay skipped changed file '{expected.Path}': last-write time changed");
+            return "Last-write time changed";
+        }
+        return null;
+    }
+
+    private static string? TryComputeSha256(FileInfo file)
+    {
+        if (file.Length > MaxReplayHashBytes) return null;
+
+        try
+        {
+            using var stream = file.Open(FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream)).ToLowerInvariant();
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"SHA256 '{file.FullName}': {ex.Message}");
+            return null;
+        }
+    }
 
     private static string ManifestPath(string programName)
         => Path.Combine(SnapshotDir, $"{SanitizeFilename(programName)}.manifest.json");

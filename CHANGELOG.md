@@ -4,6 +4,9 @@ All notable changes to DeepPurge will be documented in this file.
 
 ## [Unreleased]
 
+### Added (P1 trust)
+- **Install-manifest replay identity guards** - install-trace manifests now stamp added files with replay identity data and forced-uninstall replay skips missing, changed-size, changed-timestamp, or SHA256-mismatched files instead of deleting by path alone.
+
 ### Added (P2 package managers)
 - **Source-native package-manager uninstall** - winget, Scoop, and Chocolatey managed rows now uninstall through strict source-specific command builders before falling back to registry uninstall strings. CLI `uninstall --dry-run` previews the exact native command, package-only synthetic rows can be removed without a registry uninstaller, and injection tests cover unsafe package IDs.
 - **Release readiness validator** - `Build.ps1` now emits `SHA256SUMS.txt` and can validate version alignment, package release URLs, asset names, manifest hashes, and placeholder removal before publishing winget/Scoop manifests.
