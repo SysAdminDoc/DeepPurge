@@ -34,6 +34,7 @@ param(
     [string]$TimestampUrl = "http://timestamp.digicert.com",
     [switch]$ValidateRelease,
     [switch]$ValidateReleaseOnly,
+    [switch]$AuditDependenciesOnly,
     [string]$ReleaseChecksumsPath
 )
 
@@ -46,6 +47,7 @@ $SolutionFile = Join-Path $ProjectRoot "DeepPurge.sln"
 $AppProject = Join-Path $ProjectRoot "src\DeepPurge.App\DeepPurge.App.csproj"
 $CliProject = Join-Path $ProjectRoot "src\DeepPurge.Cli\DeepPurge.Cli.csproj"
 $CoreProject = Join-Path $ProjectRoot "src\DeepPurge.Core\DeepPurge.Core.csproj"
+$TestsProject = Join-Path $ProjectRoot "tests\DeepPurge.Tests\DeepPurge.Tests.csproj"
 
 Write-Host ""
 Write-Host "  ============================================" -ForegroundColor Cyan
@@ -417,6 +419,10 @@ function Invoke-ReleaseReadinessValidation {
         Add-ReleaseValidationFailure "packaging/scoop/deeppurge.json" "file is missing"
     }
 
+    if (-not (Invoke-DependencyAuditValidation)) {
+        Add-ReleaseValidationFailure "NuGet dependency audit" "project-level dependency audit failed"
+    }
+
     if ($script:ReleaseValidationFailures.Count -gt 0) {
         Write-Host "  [ERROR] Release readiness validation failed:" -ForegroundColor Red
         foreach ($failure in $script:ReleaseValidationFailures) {
@@ -426,6 +432,84 @@ function Invoke-ReleaseReadinessValidation {
     }
 
     Write-Host "  [OK] Release readiness validation passed" -ForegroundColor Green
+    return $true
+}
+
+function Add-DependencyAuditFailure {
+    param(
+        [Parameter(Mandatory=$true)][string]$Key,
+        [Parameter(Mandatory=$true)][string]$Message
+    )
+
+    if ($null -eq $script:DependencyAuditFailures) {
+        $script:DependencyAuditFailures = [System.Collections.Generic.List[string]]::new()
+    }
+    $script:DependencyAuditFailures.Add("${Key}: $Message") | Out-Null
+}
+
+function Invoke-DependencyAuditCommand {
+    param(
+        [Parameter(Mandatory=$true)][string]$ProjectName,
+        [Parameter(Mandatory=$true)][string]$AuditName,
+        [Parameter(Mandatory=$true)][string[]]$Arguments,
+        [Parameter(Mandatory=$true)][string]$SuccessText,
+        [Parameter(Mandatory=$true)][string]$FailureMessage
+    )
+
+    $output = & $script:DotNetExe @Arguments 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 0) {
+        Add-DependencyAuditFailure "$ProjectName $AuditName" "command failed with exit $LASTEXITCODE`n$output"
+        return
+    }
+
+    if ($output -notmatch [regex]::Escape($SuccessText)) {
+        Add-DependencyAuditFailure "$ProjectName $AuditName" "$FailureMessage`n$output"
+    }
+}
+
+function Invoke-DependencyAuditValidation {
+    $script:DependencyAuditFailures = [System.Collections.Generic.List[string]]::new()
+
+    Write-Host ""
+    Write-Host "  [*] Auditing NuGet dependencies project-by-project..." -ForegroundColor Yellow
+
+    $projects = @(
+        @{ Name = "DeepPurge.Core";  Path = $CoreProject  },
+        @{ Name = "DeepPurge.App";   Path = $AppProject   },
+        @{ Name = "DeepPurge.Cli";   Path = $CliProject   },
+        @{ Name = "DeepPurge.Tests"; Path = $TestsProject }
+    )
+
+    foreach ($project in $projects) {
+        if (-not (Test-Path $project.Path)) {
+            Add-DependencyAuditFailure $project.Name "project file is missing at '$($project.Path)'"
+            continue
+        }
+
+        Invoke-DependencyAuditCommand `
+            -ProjectName $project.Name `
+            -AuditName "outdated" `
+            -Arguments @("list", $project.Path, "package", "--outdated", "--no-restore") `
+            -SuccessText "has no updates" `
+            -FailureMessage "outdated packages found"
+
+        Invoke-DependencyAuditCommand `
+            -ProjectName $project.Name `
+            -AuditName "vulnerable" `
+            -Arguments @("list", $project.Path, "package", "--vulnerable", "--include-transitive", "--no-restore") `
+            -SuccessText "has no vulnerable packages" `
+            -FailureMessage "vulnerable packages found"
+    }
+
+    if ($script:DependencyAuditFailures.Count -gt 0) {
+        Write-Host "  [ERROR] NuGet dependency audit failed:" -ForegroundColor Red
+        foreach ($failure in $script:DependencyAuditFailures) {
+            Write-Host "       - $failure" -ForegroundColor Red
+        }
+        return $false
+    }
+
+    Write-Host "  [OK] NuGet dependency audit passed" -ForegroundColor Green
     return $true
 }
 
@@ -534,6 +618,11 @@ if (-not (Test-Path $CoreProject)) {
 
 if ($ValidateReleaseOnly) {
     if (-not (Invoke-ReleaseReadinessValidation)) { exit 1 }
+    exit 0
+}
+
+if ($AuditDependenciesOnly) {
+    if (-not (Invoke-DependencyAuditValidation)) { exit 1 }
     exit 0
 }
 

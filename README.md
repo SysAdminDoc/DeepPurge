@@ -147,13 +147,14 @@ DeepPurgeCli doctor                         # Environment self-test (16 checks, 
 dotnet test tests/DeepPurge.Tests/DeepPurge.Tests.csproj
 ```
 
-The current suite has 321 tests covering parser routing, shared external-process execution, package-manager command builders and source diagnostics, cleaner schema validation, release validation, privacy retention, SafetyGuard block/allow lists, schedule sanitisation, recovery manifests, versioned settings import/export contracts, and static WPF accessibility/resource-drift checks.
+The current suite has 326 tests covering parser routing, shared external-process execution, package-manager command builders and source diagnostics, cleaner schema validation, release validation, privacy retention, SafetyGuard block/allow lists, schedule sanitisation, recovery manifests, versioned settings import/export contracts, and static WPF accessibility/resource-drift checks.
 
 ## Packaging
 
 - **winget** — `packaging/winget/SysAdminDoc.DeepPurge.yaml` (submit via `wingetcreate`)
 - **Scoop**  — `packaging/scoop/deeppurge.json` (drop into a personal bucket)
-- **GitHub Releases** — build locally with `BUILD.bat` / `Build.ps1`, attach both executables plus `SHA256SUMS.txt`, then run `Build.ps1 -ValidateReleaseOnly -ReleaseChecksumsPath <path-to-SHA256SUMS.txt>` before publishing package manifests
+- **GitHub Releases** — build locally with `BUILD.bat` / `Build.ps1`, attach both executables plus `SHA256SUMS.txt`, then run `Build.ps1 -ValidateReleaseOnly -ReleaseChecksumsPath <path-to-SHA256SUMS.txt>` before publishing package manifests; the validator includes the project-level NuGet dependency audit
+- **Dependency audit** — run `Build.ps1 -AuditDependenciesOnly` to check Core, App, CLI, and Tests for outdated or vulnerable NuGet packages without using the solution-level `dotnet list` path
 - **Authenticode signing** — `./Build.ps1 -Sign -CertPath signing.pfx -CertPassword (Read-Host -AsSecureString)`
 
 

@@ -6,7 +6,8 @@ Package-manager manifests and publish checklists for DeepPurge releases.
 
 1. Run `Build.ps1 -Test -Sign` locally and verify `build\DeepPurge.exe`, `build\DeepPurgeCli.exe`, and `build\SHA256SUMS.txt`.
 2. Copy the generated SHA256 values into the winget and Scoop manifests for the exact assets being released.
-3. Run `Build.ps1 -ValidateReleaseOnly -ReleaseChecksumsPath build\SHA256SUMS.txt`; fix every reported file/key before publishing.
+3. Run `Build.ps1 -ValidateReleaseOnly -ReleaseChecksumsPath build\SHA256SUMS.txt`; fix every reported file/key before publishing. This also runs the project-level NuGet dependency audit for Core, App, CLI, and Tests.
+   To run only that audit during release prep, use `Build.ps1 -AuditDependenciesOnly`.
 4. Tag the release: `git tag v0.9.0 && git push --tags`.
 5. Create or update the GitHub Release with `gh release create` / `gh release upload` and attach both executables plus `SHA256SUMS.txt`.
 

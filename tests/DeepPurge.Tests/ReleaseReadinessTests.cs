@@ -16,12 +16,32 @@ public class ReleaseReadinessTests
 
         Assert.Contains("[switch]$ValidateRelease", script);
         Assert.Contains("[switch]$ValidateReleaseOnly", script);
+        Assert.Contains("[switch]$AuditDependenciesOnly", script);
         Assert.Contains("[string]$ReleaseChecksumsPath", script);
         Assert.Contains("function Write-Sha256Sums", script);
         Assert.Contains("function Invoke-ReleaseReadinessValidation", script);
+        Assert.Contains("function Invoke-DependencyAuditValidation", script);
         Assert.Contains("SHA256SUMS.txt", script);
         Assert.Contains("packaging/winget/SysAdminDoc.DeepPurge.yaml:Installers[$i].InstallerSha256", script);
         Assert.Contains("packaging/scoop/deeppurge.json:architecture.$($arch.Name).hash[$i]", script);
+    }
+
+    [Fact]
+    public void Build_script_audits_dependencies_project_by_project()
+    {
+        var root = FindRepoRoot();
+        var script = File.ReadAllText(Path.Combine(root, "Build.ps1"));
+
+        Assert.Contains("DeepPurge.Core", script);
+        Assert.Contains("DeepPurge.App", script);
+        Assert.Contains("DeepPurge.Cli", script);
+        Assert.Contains("DeepPurge.Tests", script);
+        Assert.Contains("\"list\", $project.Path, \"package\", \"--outdated\", \"--no-restore\"", script);
+        Assert.Contains("\"list\", $project.Path, \"package\", \"--vulnerable\", \"--include-transitive\", \"--no-restore\"", script);
+        Assert.Contains("if ($AuditDependenciesOnly)", script);
+        Assert.Contains("Invoke-DependencyAuditValidation", script);
+        Assert.DoesNotContain("\"list\", $SolutionFile, \"package\", \"--outdated\"", script);
+        Assert.DoesNotContain("\"list\", $SolutionFile, \"package\", \"--vulnerable\"", script);
     }
 
     [Fact]
@@ -58,6 +78,10 @@ public class ReleaseReadinessTests
 
         Assert.Contains("Build.ps1 -ValidateReleaseOnly -ReleaseChecksumsPath", readme);
         Assert.Contains("Build.ps1 -ValidateReleaseOnly -ReleaseChecksumsPath", packagingReadme);
+        Assert.Contains("Build.ps1 -AuditDependenciesOnly", readme);
+        Assert.Contains("Build.ps1 -AuditDependenciesOnly", packagingReadme);
+        Assert.Contains("project-level NuGet dependency audit", readme);
+        Assert.Contains("project-level NuGet dependency audit", packagingReadme);
         Assert.Contains("build\\SHA256SUMS.txt", readme);
         Assert.Contains("build\\SHA256SUMS.txt", packagingReadme);
     }
