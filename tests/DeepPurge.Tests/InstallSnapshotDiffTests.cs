@@ -1,4 +1,5 @@
 using DeepPurge.Core.InstallMonitor;
+using DeepPurge.Core.Safety;
 using Xunit;
 
 namespace DeepPurge.Tests;
@@ -100,5 +101,125 @@ public class InstallSnapshotDiffTests
 
         Assert.Empty(d.AddedRegistryKeys);
         Assert.Empty(d.RemovedRegistryKeys);
+    }
+
+    [Fact]
+    public void Diff_stamps_added_files_with_replay_hash_when_file_exists()
+    {
+        var root = NewTempDir();
+        try
+        {
+            var file = Path.Combine(root, "added.bin");
+            File.WriteAllText(file, "original");
+            var info = new FileInfo(file);
+
+            var before = new InstallSnapshot();
+            var after = new InstallSnapshot
+            {
+                Files = new() { new SnapshotEntry(file, info.Length, info.LastWriteTimeUtc) },
+            };
+
+            var d = new InstallSnapshotEngine().Diff(before, after);
+
+            var entry = Assert.Single(d.AddedFiles);
+            Assert.False(string.IsNullOrWhiteSpace(entry.Sha256));
+            Assert.Equal(info.Length, entry.SizeBytes);
+        }
+        finally { TryDeleteDir(root); }
+    }
+
+    [Fact]
+    public async Task ReplayRemoveAsync_deletes_unchanged_manifest_file()
+    {
+        var root = NewTempDir();
+        try
+        {
+            var file = Path.Combine(root, "unchanged.bin");
+            File.WriteAllText(file, "original");
+            var delta = BuildDeltaFor(file);
+
+            var result = await new InstallSnapshotEngine()
+                .ReplayRemoveAsync(
+                    delta,
+                    new DeleteOptions(DryRun: false, UseRecycleBin: false),
+                    ct: TestContext.Current.CancellationToken);
+
+            Assert.Equal(1, result.Removed);
+            Assert.Equal(0, result.Skipped);
+            Assert.False(File.Exists(file));
+        }
+        finally { TryDeleteDir(root); }
+    }
+
+    [Fact]
+    public async Task ReplayRemoveAsync_skips_changed_manifest_file()
+    {
+        var root = NewTempDir();
+        try
+        {
+            var file = Path.Combine(root, "changed.bin");
+            File.WriteAllText(file, "original");
+            var delta = BuildDeltaFor(file);
+            File.WriteAllText(file, "modified");
+
+            var result = await new InstallSnapshotEngine()
+                .ReplayRemoveAsync(
+                    delta,
+                    new DeleteOptions(DryRun: false, UseRecycleBin: false),
+                    ct: TestContext.Current.CancellationToken);
+
+            Assert.Equal(0, result.Removed);
+            Assert.Equal(1, result.Skipped);
+            Assert.Contains(result.SkippedReasons, r => r.Contains("SHA256 mismatch"));
+            Assert.True(File.Exists(file));
+        }
+        finally { TryDeleteDir(root); }
+    }
+
+    [Fact]
+    public async Task ReplayRemoveAsync_skips_missing_manifest_file()
+    {
+        var root = NewTempDir();
+        try
+        {
+            var file = Path.Combine(root, "missing.bin");
+            File.WriteAllText(file, "original");
+            var delta = BuildDeltaFor(file);
+            File.Delete(file);
+
+            var result = await new InstallSnapshotEngine()
+                .ReplayRemoveAsync(
+                    delta,
+                    new DeleteOptions(DryRun: false, UseRecycleBin: false),
+                    ct: TestContext.Current.CancellationToken);
+
+            Assert.Equal(0, result.Removed);
+            Assert.Equal(1, result.Skipped);
+            Assert.Contains(result.SkippedReasons, r => r.Contains("Missing"));
+        }
+        finally { TryDeleteDir(root); }
+    }
+
+    private static InstallDelta BuildDeltaFor(string file)
+    {
+        var info = new FileInfo(file);
+        var after = new InstallSnapshot
+        {
+            Files = new() { new SnapshotEntry(file, info.Length, info.LastWriteTimeUtc) },
+        };
+        return new InstallSnapshotEngine().Diff(new InstallSnapshot(), after);
+    }
+
+    private static string NewTempDir()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "deeppurge-install-snapshot-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        return root;
+    }
+
+    private static void TryDeleteDir(string path)
+    {
+        try { if (Directory.Exists(path)) Directory.Delete(path, recursive: true); }
+        catch { }
     }
 }

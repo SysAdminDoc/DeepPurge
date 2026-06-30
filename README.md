@@ -47,7 +47,7 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 
 ### Installation Monitor *(flagship)*
 - **Before/after snapshot** - Captures filesystem + registry manifest before and after a traced installer; the diff becomes a precise per-app removal list
-- **Replay uninstall** - "Forced Uninstall" now references the exact manifest instead of heuristic name-matching — closed-source Revo's headline feature, open-source
+- **Replay uninstall** - "Forced Uninstall" references the exact manifest instead of heuristic name-matching and skips replay files whose size, timestamp, or SHA256 no longer matches the captured identity
 - Manifests persisted in `%LocalAppData%\DeepPurge\Snapshots\<name>.manifest.json` (or `./Data/Snapshots/` in portable mode)
 
 ### Community Cleaner Definitions

@@ -21,13 +21,6 @@ Explicit "no" list, so anyone proposing these doesn't waste effort:
 
 ## Research-Driven Additions
 
-- [ ] P1 — Add install-manifest replay identity guards
-  Why: Forced uninstall replay currently deletes by path after SafetyGuard checks, so a reused or changed path could be removed after the manifest was captured.
-  Evidence: `src/DeepPurge.Core/InstallMonitor/InstallSnapshotEngine.cs`; Revo/Ashampoo/HiBit install-trace competitor research.
-  Touches: `src/DeepPurge.Core/InstallMonitor/InstallSnapshotEngine.cs`, `src/DeepPurge.App/ViewModels/MainViewModel.Extensions.cs`, `src/DeepPurge.Cli/Program.cs`, `tests/DeepPurge.Tests/InstallSnapshotDiffTests.cs`.
-  Acceptance: saved manifests include a replay identity such as hash plus size/mtime for captured files; dry-run and destructive replay skip changed, missing, or mismatched files with clear counts/reasons; tests cover changed-file skip and unchanged-file deletion.
-  Complexity: M
-
 - [ ] P1 — Add deterministic project-level dependency audit gate
   Why: Project-level package audits pass, but solution-level `dotnet list DeepPurge.sln package --outdated/--vulnerable` currently fails during restore, leaving release proof dependent on manual commands.
   Evidence: 2026-06-30 local audit run; `Directory.Build.props` NuGet audit settings; NuGet Audit and `dotnet package list` docs.
