@@ -6,6 +6,7 @@ All notable changes to DeepPurge will be documented in this file.
 
 ### Added (P1 trust)
 - **Install-manifest replay identity guards** - install-trace manifests now stamp added files with replay identity data and forced-uninstall replay skips missing, changed-size, changed-timestamp, or SHA256-mismatched files instead of deleting by path alone.
+- **Project-level dependency audit gate** - release validation now audits Core, App, CLI, and Tests project files directly for outdated and vulnerable NuGet packages without using the failing solution-level `dotnet list` path.
 
 ### Added (P2 package managers)
 - **Source-native package-manager uninstall** - winget, Scoop, and Chocolatey managed rows now uninstall through strict source-specific command builders before falling back to registry uninstall strings. CLI `uninstall --dry-run` previews the exact native command, package-only synthetic rows can be removed without a registry uninstaller, and injection tests cover unsafe package IDs.

@@ -71,7 +71,8 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the cross-cutting flow and the v0.9 f
 Before a PR lands:
 
 - [ ] `dotnet build DeepPurge.sln -c Release` — 0 errors and no new warnings
-- [ ] `dotnet test tests/DeepPurge.Tests/DeepPurge.Tests.csproj` — all 301 tests pass
+- [ ] `dotnet test tests/DeepPurge.Tests/DeepPurge.Tests.csproj` — all 326 tests pass
+- [ ] `Build.ps1 -AuditDependenciesOnly` — no outdated or vulnerable NuGet packages in Core, App, CLI, or Tests
 - [ ] If a feature: `deeppurgecli doctor` still reports 0 FAIL on a clean install
 - [ ] README / CHANGELOG updated if the PR changes observable behaviour
 - [ ] Version bumped everywhere listed below

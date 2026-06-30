@@ -21,13 +21,6 @@ Explicit "no" list, so anyone proposing these doesn't waste effort:
 
 ## Research-Driven Additions
 
-- [ ] P1 — Add deterministic project-level dependency audit gate
-  Why: Project-level package audits pass, but solution-level `dotnet list DeepPurge.sln package --outdated/--vulnerable` currently fails during restore, leaving release proof dependent on manual commands.
-  Evidence: 2026-06-30 local audit run; `Directory.Build.props` NuGet audit settings; NuGet Audit and `dotnet package list` docs.
-  Touches: `Build.ps1`, `tests/DeepPurge.Tests/ReleaseReadinessTests.cs`, `README.md`, `CONTRIBUTING.md`, `packaging/README.md`.
-  Acceptance: a local build/release validation switch audits Core/App/Cli/Tests for outdated and vulnerable direct/transitive packages without using the failing solution-level path, exits non-zero on findings, and has a static regression test for the command list.
-  Complexity: M
-
 - [ ] P1 — Surface per-item cleanup failure reasons
   Why: Cleanup paths can partially skip items without preserving actionable reasons, and comparable cleaner users explicitly ask for easier error access.
   Evidence: `src/DeepPurge.Core/Privacy/EvidenceRemover.cs`; BleachBit issue `Make the errors easier to access`; Czkawka large-preview feedback issue.
