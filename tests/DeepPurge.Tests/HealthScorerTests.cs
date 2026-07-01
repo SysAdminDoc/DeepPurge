@@ -15,6 +15,33 @@ public class HealthScorerTests
         Assert.Equal(4, report.Categories.Count);
     }
 
+    [Fact]
+    public void Assess_includes_command_targets()
+    {
+        var report = HealthScorer.Assess();
+        foreach (var cat in report.Categories)
+        {
+            Assert.False(string.IsNullOrEmpty(cat.CommandTarget),
+                $"Category '{cat.Category}' is missing a CommandTarget");
+        }
+    }
+
+    [Fact]
+    public void Assess_records_trend()
+    {
+        var report = HealthScorer.Assess();
+        Assert.Contains(report.Trend, new[] { HealthTrend.Improved, HealthTrend.Worsened, HealthTrend.Stable, HealthTrend.Unknown });
+    }
+
+    [Fact]
+    public void HealthHistory_records_and_loads()
+    {
+        var report = HealthScorer.Assess();
+        var history = HealthHistory.LoadRecent(5);
+        Assert.True(history.Count > 0);
+        Assert.Equal(report.OverallScore, history[0].OverallScore);
+    }
+
     [Theory]
     [InlineData(100, "A")]
     [InlineData(90, "A")]
