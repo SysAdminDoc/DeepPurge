@@ -21,13 +21,6 @@ Explicit "no" list, so anyone proposing these doesn't waste effort:
 
 ## Research-Driven Additions
 
-- [ ] P2 — Implement domain-level cookie preservation
-  Why: The current cookie whitelist preserves all browser cookie databases when any domain is listed, while BleachBit/CCleaner-style behavior preserves selected cookies and removes the rest.
-  Evidence: `src/DeepPurge.Core/Privacy/EvidenceRemover.cs`; `src/DeepPurge.Core/App/AppSettings.cs`; CCleaner cookie manager docs; BleachBit cleaner research.
-  Touches: `src/DeepPurge.Core/Privacy`, `src/DeepPurge.Core/App/AppSettings.cs`, `src/DeepPurge.App/ViewModels/MainViewModel.cs`, `src/DeepPurge.App/Views/MainWindow.xaml`, `tests/DeepPurge.Tests/CookieWhitelistTests.cs`.
-  Acceptance: dry-run reports preserved/deleted cookie counts per supported browser profile; destructive mode backs up SQLite cookie DBs, deletes only non-whitelisted domains where safe, and degrades with a clear locked-file reason when a browser holds the DB.
-  Complexity: L
-
 - [ ] P3 — Make health results actionable and trend-aware
   Why: HealthScorer already returns category actions, but the app does not turn them into panel-specific next steps or retain lightweight trends comparable to CCleaner/Microsoft PC Manager health surfaces.
   Evidence: `src/DeepPurge.Core/Diagnostics/HealthScorer.cs`; CCleaner Health Check docs; Microsoft PC Manager positioning.

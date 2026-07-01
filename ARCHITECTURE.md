@@ -9,7 +9,7 @@ DeepPurge.sln
 ├── src/DeepPurge.Core/       Pure logic: scanners, safety, diagnostics
 ├── src/DeepPurge.App/        WPF GUI (admin manifest, MVVM via CommunityToolkit.Mvvm)
 ├── src/DeepPurge.Cli/        Headless entry point (asInvoker manifest)
-└── tests/DeepPurge.Tests/    xUnit v3, 346 cases
+└── tests/DeepPurge.Tests/    xUnit v3, 349 cases
 ```
 
 `DeepPurge.Core` has exactly one hard WPF dependency — `IconExtractor` returns
