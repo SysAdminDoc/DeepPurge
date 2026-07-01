@@ -7,6 +7,9 @@ All notable changes to DeepPurge will be documented in this file.
 ### Added (P1 diagnostics)
 - **Redacted support bundle export** - `deeppurgecli support-bundle --output <zip>` and a GUI About panel action create a privacy-safe diagnostic ZIP containing doctor results, app summary, package-source health, recent redacted activity/logs, and executable trust facts with a final redaction pass that scrubs all user-profile paths.
 
+### Added (P3 health)
+- **Actionable and trend-aware health results** - Each health category now exposes a `CommandTarget` for the relevant panel. Score history is stored as JSONL and the GUI/CLI shows whether the score improved, worsened, or stayed stable since the last check.
+
 ### Added (P2 privacy)
 - **Domain-level cookie preservation** - Cookie whitelist now opens Chromium and Firefox SQLite cookie databases and deletes only non-whitelisted domains instead of skipping the entire database. Dry-run reports preserved/deleted counts per profile. Locked databases degrade with a clear reason. Backups are created before modification.
 

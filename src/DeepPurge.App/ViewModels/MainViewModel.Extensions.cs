@@ -746,6 +746,8 @@ public partial class MainViewModel
     [ObservableProperty] public partial string HealthGrade { get; set; } = "";
     [ObservableProperty] public partial string HealthSummary { get; set; } = "Run health check to assess system hygiene";
 
+    [ObservableProperty] public partial string HealthTrendDisplay { get; set; } = "";
+
     [RelayCommand]
     private async Task RunHealthCheckAsync()
     {
@@ -760,7 +762,27 @@ public partial class MainViewModel
                 foreach (var c in report.Categories) HealthCategories.Add(c);
                 HealthOverallScore = report.OverallScore;
                 HealthGrade = report.Grade;
-                HealthSummary = $"Overall: {report.Grade} ({report.OverallScore}/100)";
+
+                var trendIcon = report.Trend switch
+                {
+                    HealthTrend.Improved => "↑",
+                    HealthTrend.Worsened => "↓",
+                    HealthTrend.Stable => "→",
+                    _ => "",
+                };
+                var trendText = report.Trend switch
+                {
+                    HealthTrend.Improved => "improved",
+                    HealthTrend.Worsened => "worsened",
+                    HealthTrend.Stable => "stable",
+                    _ => "",
+                };
+
+                HealthTrendDisplay = report.Trend != HealthTrend.Unknown
+                    ? $"{trendIcon} {trendText} since last check"
+                    : "";
+                HealthSummary = $"Overall: {report.Grade} ({report.OverallScore}/100)" +
+                               (string.IsNullOrEmpty(HealthTrendDisplay) ? "" : $" — {HealthTrendDisplay}");
                 StatusText = HealthSummary;
             });
         }
