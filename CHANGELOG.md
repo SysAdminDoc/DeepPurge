@@ -7,6 +7,9 @@ All notable changes to DeepPurge will be documented in this file.
 ### Added (P1 diagnostics)
 - **Redacted support bundle export** - `deeppurgecli support-bundle --output <zip>` and a GUI About panel action create a privacy-safe diagnostic ZIP containing doctor results, app summary, package-source health, recent redacted activity/logs, and executable trust facts with a final redaction pass that scrubs all user-profile paths.
 
+### Added (P2 browser security)
+- **Browser extension permission risk labels** - Chromium and Firefox extension scans now extract manifest permissions and host_permissions, classify them (Low/Medium/High/Critical) for broad host access, sensitive APIs, native messaging, and background activity, and display risk level and labels in the GUI DataGrid.
+
 ### Added (P2 trust)
 - **Online release checksum verifier** - `deeppurgecli verify-checksum` and a GUI About panel action fetch the latest release `SHA256SUMS.txt` from GitHub, parse the matching asset entry, and show explicit match/mismatch/unavailable status without auto-installing updates.
 

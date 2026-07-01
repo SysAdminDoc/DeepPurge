@@ -5,6 +5,8 @@ using DeepPurge.Core.Diagnostics;
 
 namespace DeepPurge.Core.Browsers;
 
+public enum ExtensionRiskLevel { Low, Medium, High, Critical }
+
 public class BrowserExtension : INotifyPropertyChanged
 {
     private bool _isSelected;
@@ -19,6 +21,18 @@ public class BrowserExtension : INotifyPropertyChanged
     public bool IsEnabled { get; set; } = true;
     public long SizeBytes { get; set; }
 
+    public List<string> Permissions { get; set; } = new();
+    public List<string> HostPermissions { get; set; } = new();
+    public ExtensionRiskLevel RiskLevel { get; set; } = ExtensionRiskLevel.Low;
+    public List<string> RiskLabels { get; set; } = new();
+
+    public string RiskDisplay => RiskLevel.ToString();
+    public string RiskLabelsDisplay => RiskLabels.Count > 0 ? string.Join(", ", RiskLabels) : "";
+    public string PermissionsDisplay => Permissions.Count + HostPermissions.Count > 0
+        ? string.Join(", ", Permissions.Concat(HostPermissions).Take(5))
+          + (Permissions.Count + HostPermissions.Count > 5 ? $" (+{Permissions.Count + HostPermissions.Count - 5})" : "")
+        : "";
+
     public bool IsSelected
     {
         get => _isSelected;
@@ -30,6 +44,69 @@ public class BrowserExtension : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
     private void OnPropertyChanged([CallerMemberName] string? name = null)
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+}
+
+public static class ExtensionRiskClassifier
+{
+    private static readonly HashSet<string> SensitiveApis = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "nativeMessaging", "debugger", "proxy", "webRequestBlocking",
+        "management", "privacy", "browsingData", "downloads",
+        "history", "bookmarks", "topSites", "sessions", "cookies",
+    };
+
+    private static readonly HashSet<string> BackgroundApis = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "background", "webRequest", "webNavigation", "declarativeNetRequest",
+    };
+
+    public static void Classify(BrowserExtension ext)
+    {
+        var labels = new List<string>();
+        var risk = ExtensionRiskLevel.Low;
+
+        var allPerms = ext.Permissions.Concat(ext.HostPermissions).ToList();
+
+        if (HasBroadHostAccess(ext.HostPermissions) || HasBroadHostAccess(ext.Permissions))
+        {
+            labels.Add("Broad host access");
+            risk = MaxRisk(risk, ExtensionRiskLevel.High);
+        }
+
+        var sensitiveHits = allPerms.Where(p => SensitiveApis.Contains(p)).ToList();
+        if (sensitiveHits.Count > 0)
+        {
+            labels.Add($"Sensitive API ({string.Join(", ", sensitiveHits.Take(3))})");
+            risk = MaxRisk(risk, ExtensionRiskLevel.High);
+        }
+
+        if (allPerms.Any(p => p.Equals("nativeMessaging", StringComparison.OrdinalIgnoreCase)))
+        {
+            labels.Add("Native messaging");
+            risk = MaxRisk(risk, ExtensionRiskLevel.Critical);
+        }
+
+        if (allPerms.Any(p => BackgroundApis.Contains(p)))
+        {
+            labels.Add("Background activity");
+            risk = MaxRisk(risk, ExtensionRiskLevel.Medium);
+        }
+
+        if (allPerms.Any(p => p.Equals("tabs", StringComparison.OrdinalIgnoreCase) ||
+                              p.Equals("activeTab", StringComparison.OrdinalIgnoreCase)))
+        {
+            risk = MaxRisk(risk, ExtensionRiskLevel.Low);
+        }
+
+        ext.RiskLevel = risk;
+        ext.RiskLabels = labels;
+    }
+
+    private static bool HasBroadHostAccess(IEnumerable<string> perms)
+        => perms.Any(p => p is "<all_urls>" or "*://*/*" or "http://*/*" or "https://*/*");
+
+    private static ExtensionRiskLevel MaxRisk(ExtensionRiskLevel a, ExtensionRiskLevel b)
+        => a > b ? a : b;
 }
 
 public static class BrowserExtensionScanner
@@ -119,11 +196,20 @@ public static class BrowserExtensionScanner
                                     Path = versionDir,
                                     IsEnabled = true,
                                     SizeBytes = GetDirectorySize(versionDir),
+                                    Permissions = GetJsonStringArray(root, "permissions"),
+                                    HostPermissions = GetJsonStringArray(root, "host_permissions"),
                                 };
 
                                 if (ext.Description.StartsWith("__MSG_"))
                                     ext.Description = "";
 
+                                if (ext.HostPermissions.Count == 0 && root.TryGetProperty("permissions", out var permsEl))
+                                {
+                                    var urlPerms = ext.Permissions.Where(p => p.Contains("://") || p == "<all_urls>").ToList();
+                                    foreach (var u in urlPerms) { ext.Permissions.Remove(u); ext.HostPermissions.Add(u); }
+                                }
+
+                                ExtensionRiskClassifier.Classify(ext);
                                 extensions.Add(ext);
                             }
                             catch (Exception ex) { Log.Warn($"Parsing extension manifest in {versionDir}: {ex.Message}"); }
@@ -196,7 +282,7 @@ public static class BrowserExtensionScanner
                         var extPath = Path.Combine(profileDir, "extensions", id);
                         var xpiPath = extPath + ".xpi";
 
-                        extensions.Add(new BrowserExtension
+                        var ffExt = new BrowserExtension
                         {
                             Id = id,
                             Name = name,
@@ -208,7 +294,11 @@ public static class BrowserExtensionScanner
                             IsEnabled = addon.TryGetProperty("active", out var active) && active.GetBoolean(),
                             SizeBytes = Directory.Exists(extPath) ? GetDirectorySize(extPath) :
                                        File.Exists(xpiPath) ? new FileInfo(xpiPath).Length : 0,
-                        });
+                            Permissions = GetJsonStringArray(addon, "userPermissions", "permissions"),
+                            HostPermissions = GetJsonStringArray(addon, "userPermissions", "origins"),
+                        };
+                        ExtensionRiskClassifier.Classify(ffExt);
+                        extensions.Add(ffExt);
                     }
                 }
                 catch (Exception ex) { Log.Warn($"Parsing Firefox addons.json in {profileDir}: {ex.Message}"); }
@@ -234,6 +324,26 @@ public static class BrowserExtensionScanner
     {
         return element.TryGetProperty(property, out var val) && val.ValueKind == JsonValueKind.String
             ? val.GetString() : null;
+    }
+
+    private static List<string> GetJsonStringArray(JsonElement element, string property)
+    {
+        var result = new List<string>();
+        if (!element.TryGetProperty(property, out var arr) || arr.ValueKind != JsonValueKind.Array)
+            return result;
+        foreach (var item in arr.EnumerateArray())
+        {
+            if (item.ValueKind == JsonValueKind.String && item.GetString() is { Length: > 0 } s)
+                result.Add(s);
+        }
+        return result;
+    }
+
+    private static List<string> GetJsonStringArray(JsonElement element, string parent, string child)
+    {
+        if (!element.TryGetProperty(parent, out var parentEl) || parentEl.ValueKind != JsonValueKind.Object)
+            return new();
+        return GetJsonStringArray(parentEl, child);
     }
 
     private static long GetDirectorySize(string path)
