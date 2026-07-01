@@ -1019,6 +1019,41 @@ public partial class MainViewModel
     }
 
     // ═══════════════════════════════════════════════════════
+    //  RELEASE CHECKSUM VERIFICATION
+    // ═══════════════════════════════════════════════════════
+    [ObservableProperty] public partial string ChecksumVerifyDisplay { get; set; } = "Not verified yet.";
+
+    [RelayCommand]
+    private async Task VerifyReleaseChecksumAsync()
+    {
+        ChecksumVerifyDisplay = "Verifying against latest release...";
+        StatusText = ChecksumVerifyDisplay;
+        try
+        {
+            var exePath = ResolveCurrentExecutablePath();
+            var result = await new ReleaseChecksumVerifier().VerifyAsync(
+                string.IsNullOrWhiteSpace(exePath) ? null : exePath);
+            _dispatcher.Invoke(() =>
+            {
+                ChecksumVerifyDisplay = result.Status switch
+                {
+                    ChecksumVerifyStatus.Match =>
+                        $"MATCH — release {result.ReleaseTag}, asset {result.AssetName}.\nLocal: {result.LocalHash}\nRemote: {result.RemoteHash}",
+                    ChecksumVerifyStatus.Mismatch =>
+                        $"MISMATCH — release {result.ReleaseTag}, asset {result.AssetName}.\nLocal: {result.LocalHash}\nRemote: {result.RemoteHash}\nThe running executable does not match the published checksum.",
+                    _ => result.StatusDisplay,
+                };
+                StatusText = $"Checksum: {result.StatusDisplay}";
+            });
+        }
+        catch (Exception ex)
+        {
+            Log.Error("VerifyReleaseChecksumAsync", ex);
+            ChecksumVerifyDisplay = $"Verification failed: {ex.Message}";
+            StatusText = ChecksumVerifyDisplay;
+        }
+    }
+
     //  SUPPORT BUNDLE
     // ═══════════════════════════════════════════════════════
     [ObservableProperty] public partial string SupportBundleStatus { get; set; } = "";

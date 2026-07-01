@@ -80,6 +80,7 @@ public static class Program
                 "restore"         => CmdRestore(args),
                 "note"            => CmdNote(args),
                 "support-bundle"  => CmdSupportBundle(args),
+                "verify-checksum" => await CmdVerifyChecksumAsync(cts.Token),
                 _ => Fail($"Unknown command: {cmd}. Run 'deeppurgecli --help' for usage."),
             };
         }
@@ -1084,6 +1085,37 @@ if ($app) {{
         return 0;
     }
 
+    private static async Task<int> CmdVerifyChecksumAsync(CancellationToken ct)
+    {
+        Console.Write("Verifying executable checksum against latest release... ");
+        var result = await new ReleaseChecksumVerifier().VerifyAsync(ct: ct);
+        Console.WriteLine();
+
+        if (result.Status == ChecksumVerifyStatus.Match)
+        {
+            Console.WriteLine($"[MATCH] Release {result.ReleaseTag}");
+            Console.WriteLine($"  Local:  {result.LocalHash}");
+            Console.WriteLine($"  Remote: {result.RemoteHash}");
+            Console.WriteLine($"  Asset:  {result.AssetName}");
+            return 0;
+        }
+
+        if (result.Status == ChecksumVerifyStatus.Mismatch)
+        {
+            Console.Error.WriteLine($"[MISMATCH] Release {result.ReleaseTag}");
+            Console.Error.WriteLine($"  Local:  {result.LocalHash}");
+            Console.Error.WriteLine($"  Remote: {result.RemoteHash}");
+            Console.Error.WriteLine($"  Asset:  {result.AssetName}");
+            Console.Error.WriteLine("  The running executable does not match the published release checksum.");
+            return 1;
+        }
+
+        Console.Error.WriteLine($"[{result.StatusDisplay}]");
+        if (!string.IsNullOrEmpty(result.ErrorDetail))
+            Console.Error.WriteLine($"  {result.ErrorDetail}");
+        return 1;
+    }
+
     private static int CmdSupportBundle(ParsedArgs a)
     {
         var output = a.GetOption("output") ?? a.Positional.FirstOrDefault();
@@ -1193,6 +1225,7 @@ if ($app) {{
         Console.WriteLine("  update-winapp2 [--check-only]            Download latest winapp2.ini from GitHub");
         Console.WriteLine("  restore [--date YYYY-MM-DD] [--list] [--dry-run]  List or restore from deletion manifests");
         Console.WriteLine("  note <program> [text]                    Set/view per-program notes (--clear to remove)");
+        Console.WriteLine("  verify-checksum                          Verify running exe hash against latest GitHub release SHA256SUMS.txt");
         Console.WriteLine("  support-bundle --output <path.zip>       Export redacted diagnostic bundle for bug reports");
         Console.WriteLine("  check-update                             Check GitHub for a newer release");
         Console.WriteLine("  doctor                                   Run environment self-test + report");

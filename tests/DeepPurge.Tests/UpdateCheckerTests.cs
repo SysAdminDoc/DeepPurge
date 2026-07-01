@@ -51,4 +51,33 @@ public class UpdateCheckerTests
     {
         Assert.Equal(expected, Math.Sign(Compare(a, b)));
     }
+
+    [Fact]
+    public void ParseChecksumFile_finds_matching_entry()
+    {
+        var content = "abc123def456  DeepPurge.exe\n789abcdef012  DeepPurgeCli.exe\n";
+        Assert.Equal("abc123def456", ReleaseChecksumVerifier.ParseChecksumFile(content, "DeepPurge.exe"));
+        Assert.Equal("789abcdef012", ReleaseChecksumVerifier.ParseChecksumFile(content, "DeepPurgeCli.exe"));
+    }
+
+    [Fact]
+    public void ParseChecksumFile_returns_null_for_missing_entry()
+    {
+        var content = "abc123  DeepPurge.exe\n";
+        Assert.Null(ReleaseChecksumVerifier.ParseChecksumFile(content, "NotHere.exe"));
+    }
+
+    [Fact]
+    public void ParseChecksumFile_case_insensitive_filename()
+    {
+        var content = "ABC123DEF456  deeppurge.exe\n";
+        Assert.Equal("abc123def456", ReleaseChecksumVerifier.ParseChecksumFile(content, "DeepPurge.exe"));
+    }
+
+    [Fact]
+    public void ParseChecksumFile_handles_single_space_separator()
+    {
+        var content = "abc123 DeepPurge.exe\n";
+        Assert.Equal("abc123", ReleaseChecksumVerifier.ParseChecksumFile(content, "DeepPurge.exe"));
+    }
 }
