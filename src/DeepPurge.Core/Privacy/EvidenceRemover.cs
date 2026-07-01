@@ -94,6 +94,7 @@ public static class EvidenceRemover
 
         long freed = 0;
         int cleaned = 0, skipped = 0;
+        var skippedReasons = new List<string>();
 
         for (int i = 0; i < all.Count; i++)
         {
@@ -101,12 +102,31 @@ public static class EvidenceRemover
             var (_, item) = all[i];
             var label = string.IsNullOrEmpty(item.Path) ? item.Command : item.Path;
 
+            void Skip(string reason)
+            {
+                skipped++;
+                skippedReasons.Add(FormatSkippedReason(reason, label));
+                progress?.Report(new DeleteProgress(
+                    i + 1, all.Count, freed, label, Skipped: true));
+            }
+
             if (!item.IsCommand && !string.IsNullOrEmpty(item.Path) &&
                 IsCookiePath(item.Path) && AppSettings.Current.CookieWhitelist.Count > 0)
             {
-                skipped++;
-                progress?.Report(new DeleteProgress(
-                    i + 1, all.Count, freed, label, Skipped: true));
+                var cookieResult = CleanCookieDatabase(item.Path, AppSettings.Current.CookieWhitelist, options.DryRun);
+                if (cookieResult.Skipped)
+                {
+                    Skip(cookieResult.SkipReason ?? "Cookie whitelist");
+                }
+                else
+                {
+                    freed += cookieResult.DeletedCookies > 0 ? item.SizeBytes / Math.Max(cookieResult.TotalCookies, 1) * cookieResult.DeletedCookies : 0;
+                    cleaned += cookieResult.DeletedCookies > 0 ? 1 : 0;
+                    progress?.Report(new DeleteProgress(
+                        i + 1, all.Count, freed,
+                        $"{item.Path} ({cookieResult.PreservedCookies} kept, {cookieResult.DeletedCookies} removed)",
+                        Skipped: false));
+                }
                 continue;
             }
 
@@ -117,17 +137,38 @@ public static class EvidenceRemover
                     var cutoff = DateTime.UtcNow.AddDays(-options.MinAgeDays);
                     if (File.GetLastWriteTimeUtc(item.Path) > cutoff)
                     {
-                        skipped++;
-                        progress?.Report(new DeleteProgress(
-                            i + 1, all.Count, freed, label, Skipped: true));
+                        Skip("Too recent");
                         continue;
                     }
                 }
-                catch (Exception ex) { Log.Warn($"MinAge check failed for '{item.Path}': {ex.Message}"); }
+                catch (Exception ex)
+                {
+                    Skip($"MinAge check failed: {ex.Message}");
+                    continue;
+                }
+            }
+
+            if (!item.IsCommand && item.IsDirectory && Directory.Exists(item.Path) &&
+                Safety.SafetyGuard.IsReparsePoint(item.Path))
+            {
+                Skip("Reparse point");
+                continue;
             }
 
             if (options.DryRun)
             {
+                if (!item.IsCommand && !string.IsNullOrEmpty(item.Path))
+                {
+                    var exists = item.IsDirectory
+                        ? Directory.Exists(item.Path)
+                        : File.Exists(item.Path);
+                    if (!exists)
+                    {
+                        Skip("Missing");
+                        continue;
+                    }
+                }
+
                 freed += item.SizeBytes;
                 cleaned++;
                 progress?.Report(new DeleteProgress(
@@ -139,37 +180,67 @@ public static class EvidenceRemover
             {
                 if (item.IsCommand && !string.IsNullOrEmpty(item.Command))
                 {
-                    RunCommand(item.Command, item.CommandArgs);
+                    var commandFailure = RunCommand(item.Command, item.CommandArgs);
+                    if (commandFailure != null)
+                    {
+                        Skip(commandFailure);
+                        continue;
+                    }
+
                     freed += item.SizeBytes;
                     cleaned++;
                 }
-                else if (item.IsDirectory && Directory.Exists(item.Path))
+                else if (item.IsDirectory)
                 {
-                    if (Safety.SafetyGuard.IsReparsePoint(item.Path)) { skipped++; continue; }
-                    if (options.SecureDelete) SecureDelete.WipeDirectory(item.Path);
-                    else Safety.SafetyGuard.SafeDeleteDirectory(item.Path);
-                    freed += item.SizeBytes;
-                    cleaned++;
-                }
-                else if (File.Exists(item.Path))
-                {
-                    if (options.SecureDelete) SecureDelete.Wipe(item.Path);
-                    else Safety.SafetyGuard.SafeDeleteFile(item.Path);
+                    if (!Directory.Exists(item.Path))
+                    {
+                        Skip("Missing");
+                        continue;
+                    }
+                    var deleted = options.SecureDelete
+                        ? SecureDelete.WipeDirectory(item.Path)
+                        : Safety.SafetyGuard.SafeDeleteDirectory(item.Path);
+                    if (!deleted)
+                    {
+                        Skip("Delete failed");
+                        continue;
+                    }
+
                     freed += item.SizeBytes;
                     cleaned++;
                 }
                 else
                 {
-                    skipped++;
+                    if (!File.Exists(item.Path))
+                    {
+                        Skip("Missing");
+                        continue;
+                    }
+
+                    var deleted = options.SecureDelete
+                        ? SecureDelete.Wipe(item.Path)
+                        : Safety.SafetyGuard.SafeDeleteFile(item.Path);
+                    if (!deleted)
+                    {
+                        Skip("Delete failed");
+                        continue;
+                    }
+
+                    freed += item.SizeBytes;
+                    cleaned++;
                 }
             }
-            catch { skipped++; }
+            catch (Exception ex)
+            {
+                Skip($"Error: {ex.Message}");
+                continue;
+            }
 
             progress?.Report(new DeleteProgress(
                 i + 1, all.Count, freed, label, Skipped: false));
         }
 
-        return new DeleteSummary(cleaned, skipped, freed, options.DryRun);
+        return new DeleteSummary(cleaned, skipped, freed, options.DryRun, skippedReasons);
     }
 
     // ═══════════════════════════════════════════════════════
@@ -523,6 +594,17 @@ public static class EvidenceRemover
     public static bool IsCookiePath(string path) =>
         CookieFileNames.Contains(Path.GetFileName(path));
 
+    private static CookieCleanResult CleanCookieDatabase(
+        string dbPath, IReadOnlyList<string> whitelist, bool dryRun)
+    {
+        var fileName = Path.GetFileName(dbPath);
+        var profile = Path.GetFileName(Path.GetDirectoryName(dbPath) ?? "");
+        var isFirefox = fileName.StartsWith("cookies.sqlite", StringComparison.OrdinalIgnoreCase);
+        return isFirefox
+            ? CookieDomainCleaner.CleanFirefox(dbPath, whitelist, dryRun, profile)
+            : CookieDomainCleaner.CleanChromium(dbPath, whitelist, dryRun, profile);
+    }
+
     private static TraceCategory ScanBrowserCookies()
     {
         var cat = new TraceCategory
@@ -594,7 +676,7 @@ public static class EvidenceRemover
         catch (Exception ex) { Log.Warn($"Failed to add file '{path}': {ex.Message}"); }
     }
 
-    private static void RunCommand(string exe, string args)
+    private static string? RunCommand(string exe, string args)
     {
         try
         {
@@ -605,9 +687,18 @@ public static class EvidenceRemover
                 RedactAbsolutePaths = true,
             });
             if (!result.Success)
+            {
                 Log.Warn($"Command execution failed ({result.RedactedCommandLine}): {result.Status}");
+                return $"Command failed ({result.Status}): {result.RedactedCommandLine}";
+            }
+
+            return null;
         }
-        catch (Exception ex) { Log.Warn($"Command execution failed ({exe}): {ex.Message}"); }
+        catch (Exception ex)
+        {
+            Log.Warn($"Command execution failed ({exe}): {ex.Message}");
+            return $"Command failed: {exe}";
+        }
     }
 
     private static IReadOnlyList<string> SplitCommandLine(string args)
@@ -656,4 +747,7 @@ public static class EvidenceRemover
         }
         catch { return 0; }
     }
+
+    private static string FormatSkippedReason(string reason, string label)
+        => PrivacyRedactor.RedactPaths($"{reason}: {label}");
 }

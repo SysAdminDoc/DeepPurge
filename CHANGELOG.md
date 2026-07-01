@@ -7,6 +7,9 @@ All notable changes to DeepPurge will be documented in this file.
 ### Added (P1 diagnostics)
 - **Redacted support bundle export** - `deeppurgecli support-bundle --output <zip>` and a GUI About panel action create a privacy-safe diagnostic ZIP containing doctor results, app summary, package-source health, recent redacted activity/logs, and executable trust facts with a final redaction pass that scrubs all user-profile paths.
 
+### Added (P2 privacy)
+- **Domain-level cookie preservation** - Cookie whitelist now opens Chromium and Firefox SQLite cookie databases and deletes only non-whitelisted domains instead of skipping the entire database. Dry-run reports preserved/deleted counts per profile. Locked databases degrade with a clear reason. Backups are created before modification.
+
 ### Changed (P2 UX)
 - **Inline risk preview replaces modal confirmations** - Driver removal, duplicate cleanup, winapp2 execution, bulk uninstall, and deletion manifest restore no longer use blocking MessageBox dialogs. Each action shows risk/count preview in the status bar and proceeds through existing dry-run/recovery paths. A contract test prevents reintroduction.
 
