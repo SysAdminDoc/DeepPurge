@@ -7,6 +7,9 @@ All notable changes to DeepPurge will be documented in this file.
 ### Added (P1 diagnostics)
 - **Redacted support bundle export** - `deeppurgecli support-bundle --output <zip>` and a GUI About panel action create a privacy-safe diagnostic ZIP containing doctor results, app summary, package-source health, recent redacted activity/logs, and executable trust facts with a final redaction pass that scrubs all user-profile paths.
 
+### Changed (P2 UX)
+- **Inline risk preview replaces modal confirmations** - Driver removal, duplicate cleanup, winapp2 execution, bulk uninstall, and deletion manifest restore no longer use blocking MessageBox dialogs. Each action shows risk/count preview in the status bar and proceeds through existing dry-run/recovery paths. A contract test prevents reintroduction.
+
 ### Added (P2 browser security)
 - **Browser extension permission risk labels** - Chromium and Firefox extension scans now extract manifest permissions and host_permissions, classify them (Low/Medium/High/Critical) for broad host access, sensitive APIs, native messaging, and background activity, and display risk level and labels in the GUI DataGrid.
 

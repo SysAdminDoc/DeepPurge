@@ -251,6 +251,19 @@ public class WpfPolishContractTests
         Assert.Empty(unexpectedHardcoded);
     }
 
+    [Fact]
+    public void Code_behind_has_no_blocking_confirmation_dialogs()
+    {
+        var root = FindRepoRoot();
+        var codeBehind = File.ReadAllText(Path.Combine(root, "src", "DeepPurge.App", "Views", "MainWindow.xaml.cs"));
+
+        var pattern = new Regex(@"MessageBox\.Show\s*\(.*MessageBoxButton\.OKCancel", RegexOptions.Singleline);
+        var matches = pattern.Matches(codeBehind);
+        Assert.True(matches.Count == 0,
+            $"MainWindow.xaml.cs still has {matches.Count} blocking MessageBox confirmation dialog(s). " +
+            "Replace with inline risk preview via status text and dry-run affordances.");
+    }
+
     private static string FindRepoRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);

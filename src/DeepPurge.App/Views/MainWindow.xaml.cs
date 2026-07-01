@@ -374,10 +374,7 @@ public partial class MainWindow : Window
     {
         var row = dgDrivers.SelectedItem as DeepPurge.Core.Drivers.DriverPackage;
         if (row == null) { WarnStatus("Select a driver row first."); return; }
-        if (MessageBox.Show(this,
-                $"Remove driver package '{row.PublishedName}' ({row.OriginalName})?\n\nThis calls pnputil /delete-driver.",
-                "Confirm driver removal", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
-            return;
+        _vm.StatusText = $"Removing driver '{row.PublishedName}' ({row.OriginalName}) via pnputil...";
         try
         {
             var (ok, output) = await new DeepPurge.Core.Drivers.DriverStoreScanner().DeleteAsync(row.PublishedName, force: false);
@@ -402,10 +399,9 @@ public partial class MainWindow : Window
     private void DeleteDuplicates_Click(object s, RoutedEventArgs e)
     {
         if (_vm.DuplicateGroups.Count == 0) { WarnStatus("Run a duplicate scan first."); return; }
-        if (MessageBox.Show(this,
-                $"Delete the oldest copy from each of {_vm.DuplicateGroups.Count} duplicate group(s)?",
-                "Confirm duplicate cleanup", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
-            return;
+        var wasted = _vm.DuplicateGroups.Sum(g => g.WastedBytes);
+        _vm.StatusText = $"Deleting oldest copy from {_vm.DuplicateGroups.Count} group(s), {DeepPurge.Core.Diagnostics.SizeFormatter.Format(wasted)} reclaimable" +
+                         (_vm.DryRunEnabled ? " (dry-run)" : "") + "...";
         _vm.DeleteDuplicatesCommand.Execute(null);
     }
 
@@ -415,11 +411,8 @@ public partial class MainWindow : Window
     private void RunWinapp2_Click(object s, RoutedEventArgs e)
     {
         if (_vm.Winapp2Entries.Count == 0) { WarnStatus("Load community cleaners first."); return; }
-        if (MessageBox.Show(this,
-                $"Run {_vm.Winapp2Entries.Count} applicable cleaners?\n\n" +
-                (_vm.DryRunEnabled ? "(dry-run — no files will be deleted)" : "Files will be deleted."),
-                "Confirm winapp2 run", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
-            return;
+        _vm.StatusText = $"Running {_vm.Winapp2Entries.Count} applicable cleaners" +
+                         (_vm.DryRunEnabled ? " (dry-run)" : "") + "...";
         _vm.RunWinapp2Command.Execute(null);
     }
 
@@ -773,7 +766,7 @@ public partial class MainWindow : Window
         try
         {
             await _vm.CleanEvidenceAsync(selected);
-            ShowToast("Traces cleaned");
+            ShowToast(_vm.StatusText, isWarning: _vm.StatusText.Contains("skipped", StringComparison.OrdinalIgnoreCase));
         }
         catch (Exception ex) { ShowToast($"Clean error: {ex.Message}", isError: true); }
     }
@@ -1241,14 +1234,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var confirm = MessageBox.Show(
-            this,
-            $"Uninstall {selected.Count} programs silently?\n\nA single restore point is created at the start. " +
-            "Each uninstaller runs with its known silent flag (/S, /qn, /VERYSILENT, etc.).",
-            "DeepPurge — Bulk Uninstall",
-            MessageBoxButton.OKCancel,
-            MessageBoxImage.Warning);
-        if (confirm != MessageBoxResult.OK) return;
+        _vm.StatusText = $"Bulk uninstalling {selected.Count} program(s) silently (restore point created at start)...";
 
         try
         {
@@ -1293,11 +1279,7 @@ public partial class MainWindow : Window
     private void RestoreDeletionManifest_Click(object sender, RoutedEventArgs e)
     {
         if (_vm.SelectedDeletionManifest == null) { WarnStatus("Select a deletion manifest first."); return; }
-        if (MessageBox.Show(this,
-                $"Restore registry backups referenced by {_vm.SelectedDeletionManifest.Date:yyyy-MM-dd}?\n\n" +
-                "Files are not restored automatically; DeepPurge reports Recycle Bin recovery candidates.",
-                "Confirm deletion manifest restore", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
-            return;
+        _vm.StatusText = $"Restoring registry backups from {_vm.SelectedDeletionManifest.Date:yyyy-MM-dd} (files: check Recycle Bin)...";
         _vm.RestoreSelectedDeletionManifestCommand.Execute(null);
     }
 

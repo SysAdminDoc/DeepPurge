@@ -28,13 +28,6 @@ Explicit "no" list, so anyone proposing these doesn't waste effort:
   Acceptance: dry-run reports preserved/deleted cookie counts per supported browser profile; destructive mode backs up SQLite cookie DBs, deletes only non-whitelisted domains where safe, and degrades with a clear locked-file reason when a browser holds the DB.
   Complexity: L
 
-- [ ] P2 — Replace destructive modal confirmations with inline risk preview
-  Why: Driver removal, duplicate cleanup, winapp2 execution, bulk uninstall, and deletion restore still use blocking MessageBox confirmations instead of inline preview, toast, and recovery affordances.
-  Evidence: `src/DeepPurge.App/Views/MainWindow.xaml.cs`; current deletion manifests/dry-run/recovery surfaces; local UX rules.
-  Touches: `src/DeepPurge.App/Views/MainWindow.xaml`, `src/DeepPurge.App/Views/MainWindow.xaml.cs`, `src/DeepPurge.App/ViewModels/MainViewModel.cs`, `tests/DeepPurge.Tests/WpfPolishContractTests.cs`.
-  Acceptance: destructive GUI handlers no longer call `MessageBox.Show` for user confirmation; each action shows risk/count preview in its panel, runs through existing dry-run/recovery paths where available, and reports completion or failure by toast/activity log.
-  Complexity: M
-
 - [ ] P3 — Make health results actionable and trend-aware
   Why: HealthScorer already returns category actions, but the app does not turn them into panel-specific next steps or retain lightweight trends comparable to CCleaner/Microsoft PC Manager health surfaces.
   Evidence: `src/DeepPurge.Core/Diagnostics/HealthScorer.cs`; CCleaner Health Check docs; Microsoft PC Manager positioning.
