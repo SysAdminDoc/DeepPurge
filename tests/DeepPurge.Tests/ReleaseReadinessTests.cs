@@ -86,6 +86,37 @@ public class ReleaseReadinessTests
         Assert.Contains("build\\SHA256SUMS.txt", packagingReadme);
     }
 
+    [Fact]
+    public void Doc_test_counts_are_consistent()
+    {
+        var root = FindRepoRoot();
+        var pattern = new System.Text.RegularExpressions.Regex(@"\ball\s+(\d+)\s+tests\b|\b(\d+)\s+tests?\s+pass|\b(\d+)\s+cases\b");
+
+        var docs = new[] { "README.md", "CONTRIBUTING.md", "ARCHITECTURE.md" };
+        var counts = new Dictionary<string, int>();
+
+        foreach (var doc in docs)
+        {
+            var content = File.ReadAllText(Path.Combine(root, doc));
+            var match = pattern.Match(content);
+            if (!match.Success) continue;
+
+            var numStr = match.Groups[1].Success ? match.Groups[1].Value
+                       : match.Groups[2].Success ? match.Groups[2].Value
+                       : match.Groups[3].Value;
+            if (int.TryParse(numStr, out var n))
+                counts[doc] = n;
+        }
+
+        Assert.True(counts.Count >= 2,
+            $"Expected at least 2 docs with test counts but found {counts.Count}: {string.Join(", ", counts.Keys)}");
+
+        var distinct = counts.Values.Distinct().ToList();
+        Assert.True(distinct.Count == 1,
+            $"Test count drift across docs: {string.Join(", ", counts.Select(kv => $"{kv.Key}={kv.Value}"))}. " +
+            $"All must agree on the same number.");
+    }
+
     private static string FindRepoRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);

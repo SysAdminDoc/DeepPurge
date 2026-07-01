@@ -27,6 +27,7 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 - **Dry-run / Preview mode** - Every destructive pipeline can be previewed: enumerate and size items without touching them *(inspired by BleachBit)*
 - **Secure Delete** - Privacy-grade selected-file wipe (single-pass cryptographic random + opaque rename + delete; no volume free-space fill) *(inspired by BleachBit/PrivaZer)*
 - **Live progress bars** - Every long-running delete reports item / total / bytes-freed / current path in the status bar
+- **Skipped-item details** - Junk and Evidence cleanup summaries expose redacted reasons for missing, denied, unsafe, locked, command-failed, and too-recent items in GUI status, CLI text, CLI JSON, and activity history
 
 ### System Management
 - **Autorun Manager** - Registry Run/RunOnce, startup folders, and service autoruns with **reversible** disable (StartupApproved pattern) and delete
@@ -147,7 +148,7 @@ DeepPurgeCli doctor                         # Environment self-test (16 checks, 
 dotnet test tests/DeepPurge.Tests/DeepPurge.Tests.csproj
 ```
 
-The current suite has 326 tests covering parser routing, shared external-process execution, package-manager command builders and source diagnostics, cleaner schema validation, release validation, privacy retention, SafetyGuard block/allow lists, schedule sanitisation, recovery manifests, versioned settings import/export contracts, and static WPF accessibility/resource-drift checks.
+The current suite has 334 tests covering parser routing, shared external-process execution, package-manager command builders and source diagnostics, cleaner schema validation, cleanup failure reporting, release validation, privacy retention, SafetyGuard block/allow lists, schedule sanitisation, recovery manifests, versioned settings import/export contracts, static WPF accessibility/resource-drift checks, and support-bundle redaction.
 
 ## Packaging
 
