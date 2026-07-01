@@ -1926,6 +1926,20 @@
                                                 Style="{DynamicResource AccentButton}" HorizontalAlignment="Left" Padding="24,10"/>
                                     </StackPanel>
                                 </Border>
+
+                                <Border Background="{DynamicResource Surface0Brush}" BorderBrush="{DynamicResource Surface1Brush}"
+                                        BorderThickness="1" CornerRadius="12" Padding="18">
+                                    <StackPanel>
+                                        <TextBlock Text="Support Bundle" FontSize="15" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
+                                        <TextBlock Text="Export a redacted diagnostic ZIP for bug reports. Contains doctor results, recent activity, logs, package-source health, and trust facts. All user-profile paths are automatically scrubbed."
+                                                   FontSize="12" Foreground="{DynamicResource SubtextBrush}" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                                        <TextBlock Text="{Binding SupportBundleStatus}" FontSize="12"
+                                                   Foreground="{DynamicResource Subtext0Brush}" Margin="0,0,0,12" TextWrapping="Wrap"/>
+                                        <Button Content="Export support bundle" Command="{Binding ExportSupportBundleCommand}"
+                                                Style="{DynamicResource AccentButton}" HorizontalAlignment="Left" Padding="24,10"/>
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
                         </ScrollViewer>
                     </Border>

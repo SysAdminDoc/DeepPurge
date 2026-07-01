@@ -79,6 +79,7 @@ public static class Program
                 "update-winapp2"  => await CmdUpdateWinapp2Async(args, cts.Token),
                 "restore"         => CmdRestore(args),
                 "note"            => CmdNote(args),
+                "support-bundle"  => CmdSupportBundle(args),
                 _ => Fail($"Unknown command: {cmd}. Run 'deeppurgecli --help' for usage."),
             };
         }
@@ -159,6 +160,13 @@ public static class Program
         return 0;
     }
 
+    private sealed record CleanCategoryResult(
+        string Category,
+        long BytesFreed,
+        int ItemsDeleted,
+        int ItemsSkipped,
+        IReadOnlyList<string> SkippedReasons);
+
     private static async Task<int> CmdCleanAsync(ParsedArgs a, CancellationToken ct)
     {
         bool dryRun = a.HasFlag("dry-run");
@@ -175,27 +183,27 @@ public static class Program
 
         var opt = new DeleteOptions(DryRun: dryRun, SecureDelete: secure, UseRecycleBin: !secure, MinAgeDays: minAge);
         long total = 0;
+        int skippedTotal = 0;
+        var results = new List<CleanCategoryResult>();
         foreach (var cat in categories)
         {
             ct.ThrowIfCancellationRequested();
             Console.WriteLine($"[{cat}] scanning...");
-            long freed = 0;
+            DeleteSummary summary;
             switch (cat.ToLowerInvariant())
             {
                 case "junk":
                 {
                     var scan = await Task.Run(() => JunkFilesCleaner.ScanForJunk(), ct);
                     foreach (var c in scan) c.IsSelected = true;
-                    var s = await Task.Run(() => JunkFilesCleaner.DeleteJunkSafe(scan, opt, ProgressSink("junk"), ct), ct);
-                    freed = s.BytesFreed;
+                    summary = await Task.Run(() => JunkFilesCleaner.DeleteJunkSafe(scan, opt, ProgressSink("junk"), ct), ct);
                     break;
                 }
                 case "evidence":
                 {
                     var cats = await Task.Run(() => EvidenceRemover.ScanAllTraces(), ct);
                     foreach (var c in cats) c.IsSelected = true;
-                    var s = await Task.Run(() => EvidenceRemover.CleanTracesSafe(cats, opt, ProgressSink("evidence"), ct), ct);
-                    freed = s.BytesFreed;
+                    summary = await Task.Run(() => EvidenceRemover.CleanTracesSafe(cats, opt, ProgressSink("evidence"), ct), ct);
                     break;
                 }
                 case "dev":
@@ -203,8 +211,7 @@ public static class Program
                     var root = a.GetOption("path") ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
                     var devDirs = await Task.Run(() => DeepPurge.Core.FileSystem.DevDirectoryScanner.Scan(root, ct), ct);
                     foreach (var d in devDirs) Console.WriteLine($"  {d.Type,-16} {FormatBytes(d.SizeBytes),10}  {d.Path}");
-                    var s = await Task.Run(() => DeepPurge.Core.FileSystem.DevDirectoryScanner.Delete(devDirs, opt, ProgressSink("dev"), ct), ct);
-                    freed = s.BytesFreed;
+                    summary = await Task.Run(() => DeepPurge.Core.FileSystem.DevDirectoryScanner.Delete(devDirs, opt, ProgressSink("dev"), ct), ct);
                     break;
                 }
                 default:
@@ -212,19 +219,33 @@ public static class Program
                     return 2;
             }
             Console.WriteLine();
-            Console.WriteLine($"[{cat}] {(dryRun ? "would free" : "freed")} {FormatBytes(freed)}");
-            total += freed;
+            Console.WriteLine($"[{cat}] {(dryRun ? "would free" : "freed")} {FormatBytes(summary.BytesFreed)} ({summary.ItemsDeleted} items, {summary.ItemsSkipped} skipped)");
+            foreach (var reason in summary.SkippedReasons.Take(10))
+                Console.Error.WriteLine($"  skipped: {reason}");
+
+            results.Add(new CleanCategoryResult(
+                cat,
+                summary.BytesFreed,
+                summary.ItemsDeleted,
+                summary.ItemsSkipped,
+                summary.SkippedReasons));
+            total += summary.BytesFreed;
+            skippedTotal += summary.ItemsSkipped;
         }
         if (a.HasFlag("json"))
         {
-            WriteJson(new { total, categories = categories, dryRun });
+            WriteJson(new { total, categories = results, dryRun });
         }
         else
         {
-            Console.WriteLine($"Total: {FormatBytes(total)} {(dryRun ? "(dry-run)" : "")}");
+            Console.WriteLine($"Total: {FormatBytes(total)} {(dryRun ? "(dry-run)" : "")}" + (skippedTotal > 0 ? $" | {skippedTotal} skipped" : ""));
         }
         if (!dryRun && total > 0)
-            DeepPurge.Core.Diagnostics.ActivityLog.Record("CLI Clean", $"{categories.Count} categories", total, categories.Count);
+            DeepPurge.Core.Diagnostics.ActivityLog.Record(
+                "CLI Clean",
+                $"{categories.Count} categories" + (skippedTotal > 0 ? $"; {skippedTotal} skipped" : ""),
+                total,
+                categories.Count);
         return 0;
     }
 
@@ -1063,6 +1084,34 @@ if ($app) {{
         return 0;
     }
 
+    private static int CmdSupportBundle(ParsedArgs a)
+    {
+        var output = a.GetOption("output") ?? a.Positional.FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(output))
+            return Fail("usage: deeppurgecli support-bundle --output <path.zip>");
+
+        if (!output.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+            output += ".zip";
+
+        var validated = ValidateExportPath(output);
+        if (validated == null) return 2;
+
+        Console.Write("Collecting diagnostic data... ");
+        var result = DpDiag.SupportBundleExporter.Export(validated);
+        if (!result.Success)
+        {
+            Console.WriteLine("failed.");
+            Console.Error.WriteLine($"error: {result.ErrorMessage}");
+            return 1;
+        }
+
+        Console.WriteLine("done.");
+        Console.WriteLine($"Bundle: {result.OutputPath}");
+        Console.WriteLine($"Sections: {result.SectionCount}, Size: {FormatBytes(result.ByteCount)}");
+        Console.WriteLine("All user-profile paths have been redacted.");
+        return 0;
+    }
+
     // ═══════════════════════════════════════════════════════
     //  HELPERS
     // ═══════════════════════════════════════════════════════
@@ -1144,6 +1193,7 @@ if ($app) {{
         Console.WriteLine("  update-winapp2 [--check-only]            Download latest winapp2.ini from GitHub");
         Console.WriteLine("  restore [--date YYYY-MM-DD] [--list] [--dry-run]  List or restore from deletion manifests");
         Console.WriteLine("  note <program> [text]                    Set/view per-program notes (--clear to remove)");
+        Console.WriteLine("  support-bundle --output <path.zip>       Export redacted diagnostic bundle for bug reports");
         Console.WriteLine("  check-update                             Check GitHub for a newer release");
         Console.WriteLine("  doctor                                   Run environment self-test + report");
         Console.WriteLine();
@@ -1179,7 +1229,7 @@ public sealed class ParsedArgs
     private static readonly HashSet<string> ValueOptions = new(StringComparer.OrdinalIgnoreCase)
     {
         "name", "freq", "time", "day", "args", "export", "format", "program", "timeout",
-        "keep-cookies", "date", "min-age", "path",
+        "keep-cookies", "date", "min-age", "path", "output",
     };
 
     public bool HasFlag(string name) => Flags.Contains(name);

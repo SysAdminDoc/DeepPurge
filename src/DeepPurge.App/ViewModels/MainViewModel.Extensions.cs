@@ -1019,6 +1019,46 @@ public partial class MainViewModel
     }
 
     // ═══════════════════════════════════════════════════════
+    //  SUPPORT BUNDLE
+    // ═══════════════════════════════════════════════════════
+    [ObservableProperty] public partial string SupportBundleStatus { get; set; } = "";
+
+    [RelayCommand]
+    private async Task ExportSupportBundleAsync()
+    {
+        IsBusy = true;
+        StatusText = "Collecting diagnostic data for support bundle...";
+        try
+        {
+            var outputDir = DataPaths.Logs;
+            var fileName = $"deeppurge-support-{DateTime.UtcNow:yyyyMMdd-HHmmss}.zip";
+            var outputPath = Path.Combine(outputDir, fileName);
+
+            var result = await Task.Run(() => SupportBundleExporter.Export(outputPath));
+            _dispatcher.Invoke(() =>
+            {
+                if (result.Success)
+                {
+                    SupportBundleStatus = $"Bundle saved: {Path.GetFileName(result.OutputPath)} ({FormatBytes(result.ByteCount)}, {result.SectionCount} sections)";
+                    StatusText = SupportBundleStatus;
+                    OpenFolder(Path.GetDirectoryName(result.OutputPath)!);
+                }
+                else
+                {
+                    SupportBundleStatus = $"Bundle export failed: {result.ErrorMessage}";
+                    StatusText = SupportBundleStatus;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            Log.Error("ExportSupportBundleAsync", ex);
+            SupportBundleStatus = $"Bundle export failed: {ex.Message}";
+            StatusText = SupportBundleStatus;
+        }
+        finally { IsBusy = false; }
+    }
+
     //  CLIPBOARD (extension panels)
     // ═══════════════════════════════════════════════════════
 
