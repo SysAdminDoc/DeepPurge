@@ -19,6 +19,3 @@ Explicit "no" list, so anyone proposing these doesn't waste effort:
 - **MSIX distribution** - sandboxes DeepPurge out of the HKLM autorun edits it
   needs to function; actively harmful for this app
 
-## Research-Driven Additions
-
-
