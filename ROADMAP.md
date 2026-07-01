@@ -21,20 +21,6 @@ Explicit "no" list, so anyone proposing these doesn't waste effort:
 
 ## Research-Driven Additions
 
-- [ ] P1 — Surface per-item cleanup failure reasons
-  Why: Cleanup paths can partially skip items without preserving actionable reasons, and comparable cleaner users explicitly ask for easier error access.
-  Evidence: `src/DeepPurge.Core/Privacy/EvidenceRemover.cs`; BleachBit issue `Make the errors easier to access`; Czkawka large-preview feedback issue.
-  Touches: `src/DeepPurge.Core/Privacy/EvidenceRemover.cs`, `src/DeepPurge.Core/FileSystem/JunkFilesCleaner.cs`, `src/DeepPurge.Core/Diagnostics/ActivityLog.cs`, `src/DeepPurge.App/Views/MainWindow.xaml`, `src/DeepPurge.Cli/Program.cs`, related cleanup tests.
-  Acceptance: cleanup summaries include skipped item reasons and redacted paths; GUI and CLI expose failed/skipped details after dry-run and destructive runs; tests cover denied file, missing file, and command failure reporting.
-  Complexity: M
-
-- [ ] P1 — Add redacted support bundle export
-  Why: The bug template asks users to manually paste doctor output and logs even though SelfTest, PrivacyRedactor, package-source health, and release trust facts already exist.
-  Evidence: `.github/ISSUE_TEMPLATE/bug_report.yml`; `src/DeepPurge.Core/Diagnostics/SelfTest.cs`; `src/DeepPurge.Core/Diagnostics/PrivacyMaintenance.cs`; BleachBit error-access issue.
-  Touches: `src/DeepPurge.Core/Diagnostics`, `src/DeepPurge.Cli/Program.cs`, `src/DeepPurge.App/ViewModels/MainViewModel.Extensions.cs`, `src/DeepPurge.App/Views/MainWindow.xaml`, `tests/DeepPurge.Tests`.
-  Acceptance: `deeppurgecli support-bundle --output <zip>` and a GUI action create a ZIP containing doctor results, recent redacted logs/activity, package-source health, app/version/data-path summary, and local signature/SHA256 facts; tests assert redaction removes raw user-profile paths.
-  Complexity: M
-
 - [ ] P2 — Implement domain-level cookie preservation
   Why: The current cookie whitelist preserves all browser cookie databases when any domain is listed, while BleachBit/CCleaner-style behavior preserves selected cookies and removes the rest.
   Evidence: `src/DeepPurge.Core/Privacy/EvidenceRemover.cs`; `src/DeepPurge.Core/App/AppSettings.cs`; CCleaner cookie manager docs; BleachBit cleaner research.
@@ -55,13 +41,6 @@ Explicit "no" list, so anyone proposing these doesn't waste effort:
   Touches: `src/DeepPurge.Core/Updates/UpdateChecker.cs`, `src/DeepPurge.Cli/Program.cs`, `src/DeepPurge.App/ViewModels/MainViewModel.Extensions.cs`, `src/DeepPurge.App/Views/MainWindow.xaml`, `tests/DeepPurge.Tests/UpdateCheckerTests.cs`.
   Acceptance: CLI and About can fetch the latest release checksum asset, compare the running executable hash to the matching asset entry, and show explicit match/mismatch/unavailable states without auto-installing updates.
   Complexity: M
-
-- [ ] P2 — Gate docs against live test count and release truth
-  Why: The test suite currently has 321 passing tests, but docs still contain stale 301/301+ claims.
-  Evidence: `README.md`, `CONTRIBUTING.md`, `ARCHITECTURE.md`, `CHANGELOG.md`; 2026-06-30 release test run.
-  Touches: `Build.ps1`, `tests/DeepPurge.Tests/ReleaseReadinessTests.cs`, `README.md`, `CONTRIBUTING.md`, `ARCHITECTURE.md`, `CHANGELOG.md`.
-  Acceptance: release validation fails when README/CONTRIBUTING/ARCHITECTURE/CHANGELOG test-count or release-flow claims diverge from the local test inventory and current local-build release model; stale counts are corrected.
-  Complexity: S
 
 - [ ] P2 — Add browser extension permission risk labels
   Why: DeepPurge lists and removes browser extensions but does not classify broad host, background, native messaging, or sensitive API permissions.

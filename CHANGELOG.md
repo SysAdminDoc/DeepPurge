@@ -4,9 +4,13 @@ All notable changes to DeepPurge will be documented in this file.
 
 ## [Unreleased]
 
+### Added (P1 diagnostics)
+- **Redacted support bundle export** - `deeppurgecli support-bundle --output <zip>` and a GUI About panel action create a privacy-safe diagnostic ZIP containing doctor results, app summary, package-source health, recent redacted activity/logs, and executable trust facts with a final redaction pass that scrubs all user-profile paths.
+
 ### Added (P1 trust)
 - **Install-manifest replay identity guards** - install-trace manifests now stamp added files with replay identity data and forced-uninstall replay skips missing, changed-size, changed-timestamp, or SHA256-mismatched files instead of deleting by path alone.
 - **Project-level dependency audit gate** - release validation now audits Core, App, CLI, and Tests project files directly for outdated and vulnerable NuGet packages without using the failing solution-level `dotnet list` path.
+- **Per-item cleanup failure reasons** - Junk and Evidence cleanup summaries now preserve redacted skipped-item reasons, surface them in GUI status/activity history, print and serialize them from CLI clean runs, and test missing-file, protected-path, and command-failure reporting.
 
 ### Added (P2 package managers)
 - **Source-native package-manager uninstall** - winget, Scoop, and Chocolatey managed rows now uninstall through strict source-specific command builders before falling back to registry uninstall strings. CLI `uninstall --dry-run` previews the exact native command, package-only synthetic rows can be removed without a registry uninstaller, and injection tests cover unsafe package IDs.
@@ -21,7 +25,7 @@ All notable changes to DeepPurge will be documented in this file.
 - **Static WPF accessibility/resource checks** - WPF contract tests now fail icon-only controls without automation metadata, missing shared focus indicators, missing empty/error/disabled-state copy, resource keys that drift from `Resources.resx`, and new hardcoded navigation labels without an explicit test allowlist.
 
 ### Fixed (P2 docs)
-- **Local-only release documentation** - CONTRIBUTING, ARCHITECTURE, README, and packaging guidance now match xUnit v3, the 301-test suite, current release assets, SHA256 validation, and the absence of GitHub Actions workflows.
+- **Local-only release documentation** - CONTRIBUTING, ARCHITECTURE, README, and packaging guidance now match xUnit v3, the local test suite, current release assets, SHA256 validation, and the absence of GitHub Actions workflows.
 
 ### Fixed (P2 reliability)
 - **Deletion manifest concurrent access** - manifest writes now use shared file access so GUI/CLI readers and tests cannot briefly lock the daily JSONL file and drop a deletion record.
