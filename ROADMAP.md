@@ -35,13 +35,6 @@ Explicit "no" list, so anyone proposing these doesn't waste effort:
   Acceptance: destructive GUI handlers no longer call `MessageBox.Show` for user confirmation; each action shows risk/count preview in its panel, runs through existing dry-run/recovery paths where available, and reports completion or failure by toast/activity log.
   Complexity: M
 
-- [ ] P2 — Add online release checksum verifier
-  Why: About can calculate local SHA256/signature, but users still manually compare against release `SHA256SUMS.txt`.
-  Evidence: `Build.ps1` checksum generation; `src/DeepPurge.Core/Updates/UpdateChecker.cs`; `src/DeepPurge.App/ViewModels/MainViewModel.Extensions.cs`; DriverStoreExplorer release artifact pattern.
-  Touches: `src/DeepPurge.Core/Updates/UpdateChecker.cs`, `src/DeepPurge.Cli/Program.cs`, `src/DeepPurge.App/ViewModels/MainViewModel.Extensions.cs`, `src/DeepPurge.App/Views/MainWindow.xaml`, `tests/DeepPurge.Tests/UpdateCheckerTests.cs`.
-  Acceptance: CLI and About can fetch the latest release checksum asset, compare the running executable hash to the matching asset entry, and show explicit match/mismatch/unavailable states without auto-installing updates.
-  Complexity: M
-
 - [ ] P2 — Add browser extension permission risk labels
   Why: DeepPurge lists and removes browser extensions but does not classify broad host, background, native messaging, or sensitive API permissions.
   Evidence: `src/DeepPurge.Core/Browsers/BrowserExtensionScanner.cs`; Chrome extension permissions reference; IObit browser-extension cleanup positioning.

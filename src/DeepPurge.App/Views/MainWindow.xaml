@@ -1911,7 +1911,13 @@
                                                    TextWrapping="Wrap"/>
 
                                         <TextBlock Text="{Binding ReleaseVerificationText}" FontSize="12"
-                                                   Foreground="{DynamicResource Subtext0Brush}" TextWrapping="Wrap"/>
+                                                   Foreground="{DynamicResource Subtext0Brush}" TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+                                        <TextBlock Text="Online Verification" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                                        <TextBlock Text="{Binding ChecksumVerifyDisplay}" FontSize="12"
+                                                   Foreground="{DynamicResource SubtextBrush}" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                                        <Button Content="Verify against release" Command="{Binding VerifyReleaseChecksumCommand}"
+                                                Style="{DynamicResource AccentButton}" HorizontalAlignment="Left" Padding="24,10"/>
                                     </StackPanel>
                                 </Border>
 
