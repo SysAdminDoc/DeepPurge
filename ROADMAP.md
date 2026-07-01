@@ -35,13 +35,6 @@ Explicit "no" list, so anyone proposing these doesn't waste effort:
   Acceptance: destructive GUI handlers no longer call `MessageBox.Show` for user confirmation; each action shows risk/count preview in its panel, runs through existing dry-run/recovery paths where available, and reports completion or failure by toast/activity log.
   Complexity: M
 
-- [ ] P2 — Add browser extension permission risk labels
-  Why: DeepPurge lists and removes browser extensions but does not classify broad host, background, native messaging, or sensitive API permissions.
-  Evidence: `src/DeepPurge.Core/Browsers/BrowserExtensionScanner.cs`; Chrome extension permissions reference; IObit browser-extension cleanup positioning.
-  Touches: `src/DeepPurge.Core/Browsers/BrowserExtensionScanner.cs`, `src/DeepPurge.App/Views/MainWindow.xaml`, `src/DeepPurge.App/ViewModels/MainViewModel.cs`, `tests/DeepPurge.Tests`.
-  Acceptance: Chromium and Firefox scans extract manifest permissions/host permissions where available, assign risk labels for broad/sensitive access, display those labels in GUI/exports, and tests cover benign, broad host, and native-messaging examples.
-  Complexity: M
-
 - [ ] P3 — Make health results actionable and trend-aware
   Why: HealthScorer already returns category actions, but the app does not turn them into panel-specific next steps or retain lightweight trends comparable to CCleaner/Microsoft PC Manager health surfaces.
   Evidence: `src/DeepPurge.Core/Diagnostics/HealthScorer.cs`; CCleaner Health Check docs; Microsoft PC Manager positioning.

@@ -955,12 +955,14 @@
                             </ContextMenu>
                         </DataGrid.ContextMenu>
                         <DataGrid.Columns>
-                            <DataGridTextColumn Binding="{Binding Name}" Header="EXTENSION" Width="*" MinWidth="220"/>
-                            <DataGridTextColumn Binding="{Binding Browser}" Header="BROWSER" Width="140"/>
-                            <DataGridTextColumn Binding="{Binding ProfileName}" Header="PROFILE" Width="110"/>
-                            <DataGridTextColumn Binding="{Binding Version}" Header="VERSION" Width="105"/>
-                            <DataGridTextColumn Binding="{Binding SizeDisplay}" Header="SIZE" Width="85"/>
-                            <DataGridTextColumn Binding="{Binding IsEnabled}" Header="ON" Width="58"/>
+                            <DataGridTextColumn Binding="{Binding Name}" Header="EXTENSION" Width="*" MinWidth="180"/>
+                            <DataGridTextColumn Binding="{Binding Browser}" Header="BROWSER" Width="120"/>
+                            <DataGridTextColumn Binding="{Binding ProfileName}" Header="PROFILE" Width="90"/>
+                            <DataGridTextColumn Binding="{Binding Version}" Header="VERSION" Width="85"/>
+                            <DataGridTextColumn Binding="{Binding RiskDisplay}" Header="RISK" Width="70"/>
+                            <DataGridTextColumn Binding="{Binding RiskLabelsDisplay}" Header="RISK LABELS" Width="200"/>
+                            <DataGridTextColumn Binding="{Binding SizeDisplay}" Header="SIZE" Width="75"/>
+                            <DataGridTextColumn Binding="{Binding IsEnabled}" Header="ON" Width="48"/>
                         </DataGrid.Columns>
                     </DataGrid>
 
