@@ -511,7 +511,23 @@ public static class Program
             case "list":
                 var jobs = mgr.ListJobs();
                 if (a.HasFlag("json")) { WriteJson(jobs); return 0; }
-                foreach (var j in jobs) Console.WriteLine(j);
+                if (jobs.Count == 0)
+                {
+                    Console.WriteLine("No DeepPurge scheduled jobs found.");
+                    return 0;
+                }
+                Console.WriteLine($"{"NAME",-28} {"SECURITY",-20} {"RUN LEVEL",-18} ACTION");
+                foreach (var job in jobs)
+                {
+                    Console.WriteLine(
+                        $"{Truncate(job.Name, 27),-28} " +
+                        $"{job.SecurityStatus,-20} " +
+                        $"{job.RunLevel,-18} " +
+                        $"{job.ExecutablePath} {job.Arguments}");
+                    Console.WriteLine(
+                        $"  principal={job.Principal}; logon={job.LogonType}; " +
+                        $"task={job.TaskPath}; diagnostic={job.Diagnostic}");
+                }
                 return 0;
 
             case "add":
@@ -531,7 +547,8 @@ public static class Program
                                                                                           ScheduleFrequency.Weekly;
 
                 var tParts = timeStr!.Split(':');
-                if (!int.TryParse(tParts[0], out var hh) ||
+                if (tParts.Length is < 1 or > 2 ||
+                    !int.TryParse(tParts[0], out var hh) ||
                     !int.TryParse(tParts.ElementAtOrDefault(1) ?? "0", out var mm))
                     return Fail($"schedule add: bad time '{timeStr}' (expected HH:MM)");
 
@@ -539,9 +556,11 @@ public static class Program
                 if (!string.IsNullOrEmpty(dayStr) && !Enum.TryParse(dayStr, true, out dow))
                     return Fail($"schedule add: unknown day '{dayStr}'");
 
-                var cliPath = Environment.ProcessPath ?? throw new InvalidOperationException("ProcessPath unavailable");
+                var cliPath = ResolveCurrentCliPath();
                 var ok = mgr.CreateJob(new ScheduleJob(name!, freq, dow, hh, mm, cliArgs), cliPath);
-                Console.WriteLine(ok ? $"Scheduled: {name}" : "Failed to schedule. See log.");
+                Console.WriteLine(ok
+                    ? $"Scheduled protected task: {name}"
+                    : $"Failed to schedule: {mgr.LastError}");
                 return ok ? 0 : 1;
             }
 
@@ -554,9 +573,44 @@ public static class Program
                 return ok ? 0 : 1;
             }
 
+            case "migrate":
+            {
+                var results = mgr.MigrateLegacyJobs(ResolveCurrentCliPath());
+                if (a.HasFlag("json")) { WriteJson(results); }
+                else if (results.Count == 0)
+                {
+                    Console.WriteLine("No legacy DeepPurge wrappers require migration.");
+                }
+                else
+                {
+                    foreach (var result in results)
+                        Console.WriteLine(
+                            $"{(result.Migrated ? "MIGRATED" : "FAILED"),-9} " +
+                            $"{result.Name}: {result.Message}");
+                }
+                return results.All(result => result.Migrated) ? 0 : 1;
+            }
+
             default:
-                return Fail("usage: deeppurgecli schedule <list|add|remove> [--name ...] [--freq ...] [--time HH:MM] [--day Mon] [--args \"...\"]");
+                return Fail("usage: deeppurgecli schedule <list|add|remove|migrate> [--name ...] [--freq ...] [--time HH:MM] [--day Mon] [--args \"...\"]");
         }
+    }
+
+    private static string ResolveCurrentCliPath()
+    {
+        var processPath = Environment.ProcessPath;
+        if (!string.IsNullOrWhiteSpace(processPath) &&
+            Path.GetFileName(processPath).Equals(
+                "DeepPurgeCli.exe",
+                StringComparison.OrdinalIgnoreCase) &&
+            File.Exists(processPath))
+            return Path.GetFullPath(processPath);
+
+        var appHost = Path.Combine(AppContext.BaseDirectory, "DeepPurgeCli.exe");
+        if (File.Exists(appHost)) return Path.GetFullPath(appHost);
+
+        throw new InvalidOperationException(
+            "DeepPurgeCli.exe could not be resolved. Run the published CLI executable before creating or migrating a schedule.");
     }
 
     private static int CmdDetectionScript(ParsedArgs a)
@@ -1215,6 +1269,7 @@ if ($app) {{
         Console.WriteLine("  schedule list");
         Console.WriteLine("  schedule add --name N --time HH:MM [--freq daily|weekly|monthly] [--day Mon] [--args \"...\"]");
         Console.WriteLine("  schedule remove --name N");
+        Console.WriteLine("  schedule migrate                         Replace legacy wrappers with protected dry-run actions");
         Console.WriteLine("  orphans                                  Scan for orphaned services, tasks, firewall rules, PATH entries");
         Console.WriteLine("  orphans --remnants                       Include BAM execution evidence in orphan scan");
         Console.WriteLine("  cleaners list|preview|run [--dry-run]    Manage validated custom JSON cleaner definitions");

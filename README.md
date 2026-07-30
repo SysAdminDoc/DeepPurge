@@ -87,7 +87,7 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 
 ### Automation
 - **DeepPurgeCli.exe** - Full headless surface. Every workflow (uninstall, clean, repair, driver/shortcut/duplicate scans, install-trace, winapp2 run, update check) is scriptable. Exit codes follow BCU convention (0/1/2/13/1223).
-- **Scheduled cleaning** - Registers tasks in `\DeepPurge\` via `schtasks.exe` with highest privileges for the current Windows user. The GUI offers constrained cleanup presets; the CLI supports custom safe arguments.
+- **Scheduled cleaning** - Registers Task Scheduler 2.0 exec actions in `\DeepPurge\` with separate executable/argument fields. Highest-privilege jobs run a content-addressed single-file CLI copy from an administrator-owned `%ProgramData%` store; GUI/CLI diagnostics expose the registered principal, action, and ACL trust. Legacy wrappers migrate to disabled dry-run definitions without being read or executed.
 - **Tray icon** - DeepPurge can minimize to the Windows tray, show scheduled-cleaning status, refresh schedule notifications, and launch a background dry-run clean preview.
 - **Portable mode** - Drop a file named `DeepPurge.portable` next to the exe; every setting / backup / log redirects to `./Data/` beside the binary. USB-stick / field deployment ready. *(BCU pattern)*
 - **Update checker** - Hits GitHub Releases API to flag available upgrades; never blocks startup.
@@ -136,6 +136,7 @@ DeepPurgeCli update-winapp2 --check-only       # Show local/remote database prov
 DeepPurgeCli winapp2 .\winapp2.ini --dry-run   # Run community cleaner database
 DeepPurgeCli schedule add --name Nightly --freq weekly --time 03:00 --day Mon --args "clean junk evidence"
 DeepPurgeCli schedule list
+DeepPurgeCli schedule migrate              # Replace legacy wrappers with disabled protected dry-runs
 DeepPurgeCli schedule remove --name Nightly
 DeepPurgeCli settings prune --dry-run       # Preview expired logs/activity/manifests to remove
 DeepPurgeCli settings import settings.json --preview  # Validate an import without changing local settings
@@ -149,7 +150,7 @@ DeepPurgeCli doctor                         # Environment self-test (16 checks, 
 dotnet test tests/DeepPurge.Tests/DeepPurge.Tests.csproj
 ```
 
-The current suite has 352 tests covering parser routing, shared external-process execution, package-manager command builders and source diagnostics, cleaner schema validation, cleanup failure reporting, release validation, privacy retention, SafetyGuard block/allow lists, schedule sanitisation, recovery manifests, versioned settings import/export contracts, static WPF accessibility/resource-drift checks, and support-bundle redaction.
+The current suite has 387 tests covering parser routing, shared external-process execution, package-manager command builders and source diagnostics, cleaner schema validation, cleanup failure reporting, release validation, privacy retention, SafetyGuard block/allow lists, handle-bound deletion/rollback, protected Task Scheduler registration and migration, versioned settings import/export contracts, static WPF accessibility/resource-drift checks, and support-bundle redaction.
 
 ## Packaging
 

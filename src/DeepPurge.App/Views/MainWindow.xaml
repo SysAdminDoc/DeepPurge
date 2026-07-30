@@ -1783,7 +1783,7 @@
                     </Grid>
 
                     <!-- ═══════════════════════════════════════════════════════ -->
-                    <!-- SCHEDULED CLEANING (schtasks wrappers)                  -->
+                    <!-- SCHEDULED CLEANING (Task Scheduler 2.0 exec actions)    -->
                     <!-- ═══════════════════════════════════════════════════════ -->
                     <Grid x:Name="panelSchedule" Visibility="Collapsed"
                           AutomationProperties.Name="Scheduled Cleaning panel"
@@ -1795,9 +1795,9 @@
                         </Grid.RowDefinitions>
                         <Border Grid.Row="0" Padding="24,16">
                             <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource SubtextBrush}" FontSize="12.5" LineHeight="20">
-                                Scheduled jobs run DeepPurgeCli through Task Scheduler with highest privileges for this Windows user.
-                                Jobs are created in the <Run FontWeight="SemiBold">\DeepPurge\</Run> folder and use constrained presets,
-                                so the GUI never writes free-form shell commands.
+                                Scheduled jobs run a content-addressed DeepPurgeCli copy from an administrator-owned ProgramData folder.
+                                Task definitions in <Run FontWeight="SemiBold">\DeepPurge\</Run> separate executable and arguments, use constrained presets,
+                                and expose their principal, action, and protection status below.
                             </TextBlock>
                         </Border>
                         <GroupBox Grid.Row="1" Header="Create constrained job" Margin="24,0,24,16">
@@ -1874,7 +1874,41 @@
                         </GroupBox>
                         <Grid Grid.Row="2" Margin="24,0,24,16">
                             <ListBox x:Name="lstScheduledJobs" ItemsSource="{Binding ScheduledJobs}" BorderThickness="0"
-                                     Background="{DynamicResource MantleBrush}"/>
+                                     Background="{DynamicResource MantleBrush}"
+                                     AutomationProperties.Name="Registered DeepPurge scheduled jobs">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="10,8" ToolTip="{Binding Diagnostic}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="1.2*"/>
+                                                <ColumnDefinition Width="0.8*"/>
+                                                <ColumnDefinition Width="1.4*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold"
+                                                           Foreground="{DynamicResource TextBrush}"/>
+                                                <TextBlock Text="{Binding SecurityStatus}" FontSize="11"
+                                                           Foreground="{DynamicResource SubtextBrush}"/>
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1">
+                                                <TextBlock Text="{Binding RunLevel}" FontSize="11.5"
+                                                           Foreground="{DynamicResource TextBrush}"/>
+                                                <TextBlock Text="{Binding Principal}" FontSize="10.5"
+                                                           Foreground="{DynamicResource SubtextBrush}"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="2">
+                                                <TextBlock Text="{Binding ExecutablePath}" FontFamily="Consolas"
+                                                           FontSize="10.5" Foreground="{DynamicResource TextBrush}"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                                <TextBlock Text="{Binding Arguments}" FontFamily="Consolas"
+                                                           FontSize="10.5" Foreground="{DynamicResource SubtextBrush}"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
                             <Border Style="{StaticResource EmptyStateCard}"
                                     Visibility="{Binding ScheduledJobs, Converter={StaticResource EmptyCollectionVisConverter}}"
                                     AutomationProperties.Name="No scheduled cleaning jobs">

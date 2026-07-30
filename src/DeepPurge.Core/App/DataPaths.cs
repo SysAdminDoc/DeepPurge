@@ -35,6 +35,14 @@ public static class DataPaths
         Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
         "DeepPurge",
         "RegistryBackups");
+    /// <summary>
+    /// Administrator-owned, read-only-to-the-desktop-user copies of the CLI
+    /// used by highest-privilege scheduled tasks.
+    /// </summary>
+    public static string ScheduledTaskExecutables => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+        "DeepPurge",
+        "ScheduledTasks");
     public static string Snapshots => Ensure(Path.Combine(Root, "Snapshots"));
     public static string Cleaners  => Ensure(Path.Combine(Root, "Cleaners"));
     public static string Config    => Ensure(Path.Combine(Root, "Config"));
