@@ -1188,8 +1188,11 @@
                     <!-- BROWSER EXT -->
                     <DataGrid AutoGenerateColumns="False" x:Name="dgBrowserExt" Visibility="Collapsed" ItemsSource="{Binding BrowserExtensions}">
                         <DataGrid.ContextMenu>
-                            <ContextMenu>
-                                <MenuItem Header="Remove Extension" Tag="&#xE74D;" Click="RemoveBrowserExt_Click" Foreground="{DynamicResource RedBrush}"/>
+                            <ContextMenu DataContext="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource Self}}">
+                                <MenuItem Header="Remove Extension" Tag="&#xE74D;" Click="RemoveBrowserExt_Click"
+                                          Foreground="{DynamicResource RedBrush}"
+                                          IsEnabled="{Binding IsRemovable}"
+                                          ToolTip="{Binding RemovalReason}"/>
                                 <MenuItem Header="Open Extension Folder" Tag="&#xE838;" Click="Ctx_OpenExtFolder_Click"/>
                                 <MenuItem Header="Copy Extension Name" Tag="&#xE8C8;" Click="Ctx_CopyName_Click"/>
                             </ContextMenu>
@@ -1201,6 +1204,7 @@
                             <DataGridTextColumn Binding="{Binding Version}" Header="VERSION" Width="85"/>
                             <DataGridTextColumn Binding="{Binding RiskDisplay}" Header="RISK" Width="70"/>
                             <DataGridTextColumn Binding="{Binding RiskLabelsDisplay}" Header="RISK LABELS" Width="200"/>
+                            <DataGridTextColumn Binding="{Binding RemovalStatus}" Header="REMOVAL" Width="90"/>
                             <DataGridTextColumn Binding="{Binding SizeDisplay}" Header="SIZE" Width="75"/>
                             <DataGridTextColumn Binding="{Binding IsEnabled}" Header="ON" Width="48"/>
                         </DataGrid.Columns>

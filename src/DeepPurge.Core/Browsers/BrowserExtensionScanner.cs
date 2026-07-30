@@ -2,10 +2,12 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using DeepPurge.Core.Diagnostics;
+using DeepPurge.Core.Safety;
 
 namespace DeepPurge.Core.Browsers;
 
 public enum ExtensionRiskLevel { Low, Medium, High, Critical }
+public enum ExtensionPackageKind { Unknown, Directory, Xpi }
 
 public class BrowserExtension : INotifyPropertyChanged
 {
@@ -17,7 +19,14 @@ public class BrowserExtension : INotifyPropertyChanged
     public string Description { get; set; } = "";
     public string Browser { get; set; } = "";
     public string ProfileName { get; set; } = "";
+    public string ProfilePath { get; set; } = "";
+    public string PackageRoot { get; set; } = "";
     public string Path { get; set; } = "";
+    public ExtensionPackageKind PackageKind { get; set; }
+    public bool IsSystemExtension { get; set; }
+    public string InstallLocation { get; set; } = "";
+    public bool IsRemovable { get; set; }
+    public string RemovalReason { get; set; } = "";
     public bool IsEnabled { get; set; } = true;
     public long SizeBytes { get; set; }
 
@@ -27,6 +36,7 @@ public class BrowserExtension : INotifyPropertyChanged
     public List<string> RiskLabels { get; set; } = new();
 
     public string RiskDisplay => RiskLevel.ToString();
+    public string RemovalStatus => IsRemovable ? "Removable" : "Protected";
     public string RiskLabelsDisplay => RiskLabels.Count > 0 ? string.Join(", ", RiskLabels) : "";
     public string PermissionsDisplay => Permissions.Count + HostPermissions.Count > 0
         ? string.Join(", ", Permissions.Concat(HostPermissions).Take(5))
@@ -108,6 +118,13 @@ public static class ExtensionRiskClassifier
     private static ExtensionRiskLevel MaxRisk(ExtensionRiskLevel a, ExtensionRiskLevel b)
         => a > b ? a : b;
 }
+
+internal sealed record ExtensionRemovalResolution(
+    bool IsRemovable,
+    string PackagePath,
+    string PackageRoot,
+    ExtensionPackageKind PackageKind,
+    string Reason);
 
 public static class BrowserExtensionScanner
 {
@@ -193,7 +210,16 @@ public static class BrowserExtensionScanner
                                     Description = GetJsonString(root, "description") ?? "",
                                     Browser = browserName,
                                     ProfileName = profileName,
+                                    ProfilePath = profilePath,
+                                    PackageRoot = extensionsDir,
                                     Path = versionDir,
+                                    PackageKind = ExtensionPackageKind.Directory,
+                                    IsRemovable = IsExactChromiumPackage(
+                                        profilePath,
+                                        extensionsDir,
+                                        extId,
+                                        versionDir),
+                                    RemovalReason = "The package path is not an exact extension version directory.",
                                     IsEnabled = true,
                                     SizeBytes = GetDirectorySize(versionDir),
                                     Permissions = GetJsonStringArray(root, "permissions"),
@@ -202,6 +228,7 @@ public static class BrowserExtensionScanner
 
                                 if (ext.Description.StartsWith("__MSG_"))
                                     ext.Description = "";
+                                if (ext.IsRemovable) ext.RemovalReason = "";
 
                                 if (ext.HostPermissions.Count == 0 && root.TryGetProperty("permissions", out var permsEl))
                                 {
@@ -259,65 +286,440 @@ public static class BrowserExtensionScanner
         {
             foreach (var profileDir in Directory.GetDirectories(firefoxPath))
             {
-                var profileName = Path.GetFileName(profileDir);
-                var addonsFile = Path.Combine(profileDir, "addons.json");
-                if (!File.Exists(addonsFile)) continue;
-
-                try
-                {
-                    var json = File.ReadAllText(addonsFile);
-                    using var doc = JsonDocument.Parse(json);
-
-                    if (!doc.RootElement.TryGetProperty("addons", out var addons)) continue;
-
-                    foreach (var addon in addons.EnumerateArray())
-                    {
-                        var id = GetJsonString(addon, "id") ?? "";
-                        var name = GetJsonString(addon, "name") ?? id;
-                        var type = GetJsonString(addon, "type") ?? "";
-
-                        // Only include actual extensions, not themes or plugins
-                        if (type != "extension") continue;
-
-                        var extPath = Path.Combine(profileDir, "extensions", id);
-                        var xpiPath = extPath + ".xpi";
-
-                        var ffExt = new BrowserExtension
-                        {
-                            Id = id,
-                            Name = name,
-                            Version = GetJsonString(addon, "version") ?? "",
-                            Description = GetJsonString(addon, "description") ?? "",
-                            Browser = "Mozilla Firefox",
-                            ProfileName = profileName,
-                            Path = Directory.Exists(extPath) ? extPath : (File.Exists(xpiPath) ? xpiPath : profileDir),
-                            IsEnabled = addon.TryGetProperty("active", out var active) && active.GetBoolean(),
-                            SizeBytes = Directory.Exists(extPath) ? GetDirectorySize(extPath) :
-                                       File.Exists(xpiPath) ? new FileInfo(xpiPath).Length : 0,
-                            Permissions = GetJsonStringArray(addon, "userPermissions", "permissions"),
-                            HostPermissions = GetJsonStringArray(addon, "userPermissions", "origins"),
-                        };
-                        ExtensionRiskClassifier.Classify(ffExt);
-                        extensions.Add(ffExt);
-                    }
-                }
-                catch (Exception ex) { Log.Warn($"Parsing Firefox addons.json in {profileDir}: {ex.Message}"); }
+                extensions.AddRange(ScanFirefoxProfile(profileDir));
             }
         }
         catch (Exception ex) { Log.Warn($"Enumerating Firefox profile directories: {ex.Message}"); }
     }
 
+    internal static IReadOnlyList<BrowserExtension> ScanFirefoxProfile(string profileDir)
+    {
+        var extensions = new List<BrowserExtension>();
+        var addonsFile = Path.Combine(profileDir, "addons.json");
+        if (!File.Exists(addonsFile)) return extensions;
+
+        try
+        {
+            var json = File.ReadAllText(addonsFile);
+            using var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("addons", out var addons) ||
+                addons.ValueKind != JsonValueKind.Array)
+                return extensions;
+
+            foreach (var addon in addons.EnumerateArray())
+            {
+                var id = GetJsonString(addon, "id") ?? "";
+                var name = GetJsonString(addon, "name") ?? id;
+                var type = GetJsonString(addon, "type") ?? "";
+
+                // Only include actual extensions, not themes or plugins.
+                if (!type.Equals("extension", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var location = GetJsonString(addon, "location") ?? "";
+                var isSystem =
+                    GetJsonBool(addon, "isSystem") ||
+                    GetJsonBool(addon, "isBuiltin") ||
+                    GetJsonBool(addon, "temporarilyInstalled");
+                var resolution = ResolveFirefoxPackage(
+                    profileDir,
+                    id,
+                    isSystem,
+                    location);
+
+                var ffExt = new BrowserExtension
+                {
+                    Id = id,
+                    Name = name,
+                    Version = GetJsonString(addon, "version") ?? "",
+                    Description = GetJsonString(addon, "description") ?? "",
+                    Browser = "Mozilla Firefox",
+                    ProfileName = Path.GetFileName(profileDir),
+                    ProfilePath = profileDir,
+                    PackageRoot = resolution.PackageRoot,
+                    Path = resolution.PackagePath,
+                    PackageKind = resolution.PackageKind,
+                    IsSystemExtension = isSystem,
+                    InstallLocation = location,
+                    IsRemovable = resolution.IsRemovable,
+                    RemovalReason = resolution.Reason,
+                    IsEnabled = GetJsonBool(addon, "active"),
+                    SizeBytes = GetPackageSize(
+                        resolution.PackagePath,
+                        resolution.PackageKind),
+                    Permissions = GetJsonStringArray(
+                        addon,
+                        "userPermissions",
+                        "permissions"),
+                    HostPermissions = GetJsonStringArray(
+                        addon,
+                        "userPermissions",
+                        "origins"),
+                };
+                ExtensionRiskClassifier.Classify(ffExt);
+                extensions.Add(ffExt);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Parsing Firefox addons.json in {profileDir}: {ex.Message}");
+        }
+
+        return extensions;
+    }
+
     public static bool RemoveExtension(BrowserExtension ext)
+        => TryRemoveExtension(ext, out _);
+
+    public static bool TryRemoveExtension(BrowserExtension ext, out string reason)
     {
         try
         {
-            if (Directory.Exists(ext.Path))
-                return Safety.SafetyGuard.SafeDeleteDirectory(ext.Path);
-            if (File.Exists(ext.Path))
-                return Safety.SafetyGuard.SafeDeleteFile(ext.Path);
+            if (ext == null)
+            {
+                reason = "No extension was selected.";
+                return false;
+            }
+            if (!ext.IsRemovable)
+            {
+                reason = string.IsNullOrWhiteSpace(ext.RemovalReason)
+                    ? "This extension is not removable from its recorded source."
+                    : ext.RemovalReason;
+                return false;
+            }
+
+            string packagePath;
+            ExtensionPackageKind packageKind;
+            if (ext.Browser.Equals("Mozilla Firefox", StringComparison.OrdinalIgnoreCase))
+            {
+                var resolution = ResolveFirefoxPackage(
+                    ext.ProfilePath,
+                    ext.Id,
+                    ext.IsSystemExtension,
+                    ext.InstallLocation);
+                if (!resolution.IsRemovable)
+                {
+                    reason = resolution.Reason;
+                    return false;
+                }
+                if (!PathsEqual(ext.PackageRoot, resolution.PackageRoot) ||
+                    !PathsEqual(ext.Path, resolution.PackagePath) ||
+                    ext.PackageKind != resolution.PackageKind)
+                {
+                    reason = "The Firefox package changed since it was scanned.";
+                    return false;
+                }
+
+                packagePath = resolution.PackagePath;
+                packageKind = resolution.PackageKind;
+            }
+            else
+            {
+                if (!TryResolveChromiumPackage(ext, out packagePath, out reason))
+                    return false;
+                packageKind = ExtensionPackageKind.Directory;
+            }
+
+            var removed = packageKind switch
+            {
+                ExtensionPackageKind.Directory =>
+                    SafetyGuard.SafeDeleteDirectory(packagePath),
+                ExtensionPackageKind.Xpi =>
+                    SafetyGuard.SafeDeleteFile(packagePath),
+                _ => false,
+            };
+            reason = removed
+                ? ""
+                : "The exact extension package could not be deleted; rescan after closing the browser.";
+            return removed;
         }
-        catch (Exception ex) { Log.Warn($"Removing extension '{ext.Name}' at {ext.Path}: {ex.Message}"); }
-        return false;
+        catch (Exception ex)
+        {
+            reason = ex.Message;
+            Log.Warn($"Removing extension '{ext?.Name}' at {ext?.Path}: {ex.Message}");
+            return false;
+        }
+    }
+
+    internal static ExtensionRemovalResolution ResolveFirefoxPackage(
+        string profilePath,
+        string extensionId,
+        bool isSystemExtension,
+        string installLocation)
+    {
+        if (!IsValidExtensionId(extensionId))
+        {
+            return new(
+                false,
+                "",
+                "",
+                ExtensionPackageKind.Unknown,
+                "The Firefox add-on ID is rooted, traversing, or not a single filename.");
+        }
+
+        if (isSystemExtension || IsFirefoxManagedLocation(installLocation))
+        {
+            return new(
+                false,
+                "",
+                "",
+                ExtensionPackageKind.Unknown,
+                "Firefox manages this built-in, system, or temporary extension.");
+        }
+
+        string profile;
+        string packageRoot;
+        string directoryPackage;
+        string xpiPackage;
+        try
+        {
+            profile = SafetyGuard.NormalizePath(profilePath);
+            packageRoot = SafetyGuard.NormalizePath(
+                Path.Combine(profile, "extensions"));
+            directoryPackage = SafetyGuard.NormalizePath(
+                Path.Combine(packageRoot, extensionId));
+            xpiPackage = SafetyGuard.NormalizePath(directoryPackage + ".xpi");
+        }
+        catch
+        {
+            return new(
+                false,
+                "",
+                "",
+                ExtensionPackageKind.Unknown,
+                "The Firefox profile path is invalid.");
+        }
+
+        if (!string.Equals(
+                Path.GetDirectoryName(packageRoot),
+                profile,
+                StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(
+                Path.GetDirectoryName(directoryPackage),
+                packageRoot,
+                StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(
+                Path.GetDirectoryName(xpiPackage),
+                packageRoot,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return new(
+                false,
+                "",
+                packageRoot,
+                ExtensionPackageKind.Unknown,
+                "The Firefox package escaped the profile extension root.");
+        }
+
+        if (!Directory.Exists(packageRoot))
+        {
+            return new(
+                false,
+                "",
+                packageRoot,
+                ExtensionPackageKind.Unknown,
+                "The Firefox profile extension root is missing.");
+        }
+
+        var hasDirectory = Directory.Exists(directoryPackage);
+        var hasXpi = File.Exists(xpiPackage);
+        if (hasDirectory == hasXpi)
+        {
+            return new(
+                false,
+                "",
+                packageRoot,
+                ExtensionPackageKind.Unknown,
+                hasDirectory
+                    ? "Both directory and XPI packages exist for this add-on ID."
+                    : "The add-on package is stale, missing, or managed outside this profile.");
+        }
+
+        var packagePath = hasDirectory ? directoryPackage : xpiPackage;
+        var packageKind = hasDirectory
+            ? ExtensionPackageKind.Directory
+            : ExtensionPackageKind.Xpi;
+        if (!TryValidateCanonicalPackage(
+                packageRoot,
+                packagePath,
+                hasDirectory,
+                out var reason))
+        {
+            return new(
+                false,
+                "",
+                packageRoot,
+                ExtensionPackageKind.Unknown,
+                reason);
+        }
+
+        return new(true, packagePath, packageRoot, packageKind, "");
+    }
+
+    private static bool TryResolveChromiumPackage(
+        BrowserExtension extension,
+        out string packagePath,
+        out string reason)
+    {
+        packagePath = "";
+        if (extension.PackageKind != ExtensionPackageKind.Directory ||
+            !IsExactChromiumPackage(
+                extension.ProfilePath,
+                extension.PackageRoot,
+                extension.Id,
+                extension.Path))
+        {
+            reason = "The Chromium package is not an exact extension version directory.";
+            return false;
+        }
+
+        packagePath = SafetyGuard.NormalizePath(extension.Path);
+        reason = "";
+        return true;
+    }
+
+    private static bool IsExactChromiumPackage(
+        string profilePath,
+        string packageRoot,
+        string extensionId,
+        string packagePath)
+    {
+        if (!IsValidExtensionId(extensionId)) return false;
+
+        try
+        {
+            var profile = SafetyGuard.NormalizePath(profilePath);
+            var root = SafetyGuard.NormalizePath(packageRoot);
+            var expectedRoot = SafetyGuard.NormalizePath(
+                Path.Combine(profile, "Extensions"));
+            if (!PathsEqual(root, expectedRoot)) return false;
+
+            var idRoot = SafetyGuard.NormalizePath(
+                Path.Combine(root, extensionId));
+            var package = SafetyGuard.NormalizePath(packagePath);
+            if (!string.Equals(
+                    Path.GetDirectoryName(idRoot),
+                    root,
+                    StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(
+                    Path.GetDirectoryName(package),
+                    idRoot,
+                    StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            return TryValidateCanonicalPackage(
+                root,
+                package,
+                expectedDirectory: true,
+                out _);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool TryValidateCanonicalPackage(
+        string packageRoot,
+        string packagePath,
+        bool expectedDirectory,
+        out string reason)
+    {
+        try
+        {
+            var rootScope = FileOperationScope.Exact(packageRoot);
+            if (!HandleBoundFileOperations.TryOpenValidated(
+                    packageRoot,
+                    expectedDirectory: true,
+                    rootScope,
+                    HandleBoundFileOperations.ReadAttributes,
+                    FileShare.Read | FileShare.Write | FileShare.Delete,
+                    out var root,
+                    out reason,
+                    out _))
+                return false;
+            root!.Dispose();
+
+            var packageScope = FileOperationScope.Tree(packageRoot);
+            if (!HandleBoundFileOperations.TryOpenValidated(
+                    packagePath,
+                    expectedDirectory,
+                    packageScope,
+                    HandleBoundFileOperations.ReadAttributes,
+                    FileShare.Read | FileShare.Write | FileShare.Delete,
+                    out var package,
+                    out reason,
+                    out _))
+                return false;
+            package!.Dispose();
+
+            reason = "";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            reason = ex.Message;
+            return false;
+        }
+    }
+
+    private static bool IsValidExtensionId(string extensionId)
+    {
+        if (string.IsNullOrWhiteSpace(extensionId) ||
+            extensionId is "." or ".." ||
+            Path.IsPathRooted(extensionId) ||
+            extensionId.IndexOfAny(
+                new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }) >= 0 ||
+            extensionId.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
+            extensionId.Any(char.IsControl) ||
+            extensionId.TrimEnd(' ', '.') != extensionId)
+            return false;
+
+        return Path.GetFileName(extensionId)
+            .Equals(extensionId, StringComparison.Ordinal);
+    }
+
+    private static bool IsFirefoxManagedLocation(string installLocation)
+    {
+        if (string.IsNullOrWhiteSpace(installLocation)) return false;
+        return !installLocation.Equals(
+            "app-profile",
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool PathsEqual(string left, string right)
+    {
+        try
+        {
+            return SafetyGuard.NormalizePath(left)
+                .Equals(
+                    SafetyGuard.NormalizePath(right),
+                    StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static long GetPackageSize(
+        string packagePath,
+        ExtensionPackageKind packageKind)
+    {
+        if (string.IsNullOrWhiteSpace(packagePath)) return 0;
+        try
+        {
+            return packageKind switch
+            {
+                ExtensionPackageKind.Directory => GetDirectorySize(packagePath),
+                ExtensionPackageKind.Xpi => new FileInfo(packagePath).Length,
+                _ => 0,
+            };
+        }
+        catch
+        {
+            return 0;
+        }
     }
 
     private static string? GetJsonString(JsonElement element, string property)
@@ -325,6 +727,10 @@ public static class BrowserExtensionScanner
         return element.TryGetProperty(property, out var val) && val.ValueKind == JsonValueKind.String
             ? val.GetString() : null;
     }
+
+    private static bool GetJsonBool(JsonElement element, string property)
+        => element.TryGetProperty(property, out var value) &&
+           value.ValueKind is JsonValueKind.True;
 
     private static List<string> GetJsonStringArray(JsonElement element, string property)
     {
