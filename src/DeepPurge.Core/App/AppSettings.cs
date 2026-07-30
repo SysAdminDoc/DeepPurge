@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using DeepPurge.Core.Diagnostics;
+using DeepPurge.Core.Safety;
 
 namespace DeepPurge.Core.App;
 
@@ -339,7 +340,12 @@ public class AppSettings
             }
             else if (!hadExisting && File.Exists(targetSettingsFile))
             {
-                File.Delete(targetSettingsFile);
+                var parent = Path.GetDirectoryName(targetSettingsFile)!;
+                if (!HandleBoundFileOperations.DeleteFileWithinScope(
+                        targetSettingsFile,
+                        parent,
+                        out var reason))
+                    throw new IOException(reason);
             }
         }
         catch (Exception ex)

@@ -1,3 +1,5 @@
+using DeepPurge.Core.Safety;
+
 namespace DeepPurge.Core.Diagnostics;
 
 /// <summary>
@@ -27,7 +29,15 @@ public static class Log
                 {
                     // Rotate: rename → .1. Keep at most one previous log.
                     var rotated = path + ".1";
-                    try { if (File.Exists(rotated)) File.Delete(rotated); } catch { /* log rotation is best-effort */ }
+                    try
+                    {
+                        if (File.Exists(rotated))
+                            HandleBoundFileOperations.DeleteFileWithinScope(
+                                rotated,
+                                App.DataPaths.Logs,
+                                out _);
+                    }
+                    catch { /* log rotation is best-effort */ }
                     try { File.Move(path, rotated); } catch { /* log rotation is best-effort */ }
                 }
                 using var sw = new StreamWriter(path, append: true, encoding: System.Text.Encoding.UTF8);

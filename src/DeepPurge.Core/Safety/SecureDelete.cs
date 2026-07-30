@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using DeepPurge.Core.Diagnostics;
 
 namespace DeepPurge.Core.Safety;
@@ -15,60 +14,17 @@ namespace DeepPurge.Core.Safety;
 /// </summary>
 public static class SecureDelete
 {
-    private const int BufferSize = 64 * 1024;
-
     /// <summary>Securely wipes a single file. Returns false on failure.</summary>
     public static bool Wipe(string path)
     {
-        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return false;
-
-        try
-        {
-            // Step 1: remove read-only / hidden so we can open write-shared.
-            var attrs = File.GetAttributes(path);
-            if ((attrs & FileAttributes.ReadOnly) == FileAttributes.ReadOnly)
-                File.SetAttributes(path, attrs & ~FileAttributes.ReadOnly);
-
-            // Step 2: single-pass cryptographic random overwrite.
-            long size = new FileInfo(path).Length;
-            if (size > 0)
-            {
-                using var fs = new FileStream(
-                    path,
-                    FileMode.Open,
-                    FileAccess.Write,
-                    FileShare.None,
-                    BufferSize,
-                    FileOptions.WriteThrough);
-
-                var buffer = new byte[BufferSize];
-                long remaining = size;
-                while (remaining > 0)
-                {
-                    RandomNumberGenerator.Fill(buffer);
-                    int toWrite = (int)Math.Min(remaining, buffer.Length);
-                    fs.Write(buffer, 0, toWrite);
-                    remaining -= toWrite;
-                }
-                fs.Flush(flushToDisk: true);
-            }
-
-            // Step 3: rename to an opaque name so the MFT entry doesn't leak the
-            // original filename after deletion.
-            var randomName = Path.Combine(
-                Path.GetDirectoryName(path) ?? "",
-                Convert.ToHexString(RandomNumberGenerator.GetBytes(12)) + ".tmp");
-            File.Move(path, randomName);
-
-            // Step 4: delete.
-            File.Delete(randomName);
+        if (string.IsNullOrWhiteSpace(path)) return false;
+        if (HandleBoundFileOperations.SecureDeleteFile(path, out var reason))
             return true;
-        }
-        catch (Exception ex)
+        if (!string.IsNullOrWhiteSpace(reason))
         {
-            Log.Warn($"SecureDelete.Wipe failed for '{path}': {ex.Message}");
-            return false;
+            Log.Warn($"SecureDelete.Wipe failed for '{path}': {reason}");
         }
+        return false;
     }
 
     /// <summary>
@@ -77,27 +33,14 @@ public static class SecureDelete
     /// </summary>
     public static bool WipeDirectory(string path)
     {
-        if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path)) return false;
-
-        try
+        if (string.IsNullOrWhiteSpace(path)) return false;
+        if (HandleBoundFileOperations.SecureDeleteDirectoryTree(path, out var reason))
+            return true;
+        if (!string.IsNullOrWhiteSpace(reason))
         {
-            foreach (var file in SafetyGuard.SafeEnumerateFiles(path))
-                Wipe(file);
-
-            foreach (var d in SafetyGuard.SafeEnumerateDirectories(path))
-            {
-                try { if (Directory.Exists(d)) Directory.Delete(d, recursive: false); }
-                catch (Exception ex) { Log.Warn($"Failed to remove subdirectory '{d}': {ex.Message}"); }
-            }
-
-            try { Directory.Delete(path, recursive: false); }
-            catch (Exception ex) { Log.Warn($"Failed to remove root directory '{path}': {ex.Message}"); }
-            return !Directory.Exists(path);
+            Log.Warn($"SecureDelete.WipeDirectory failed for '{path}': {reason}");
         }
-        catch
-        {
-            return false;
-        }
+        return false;
     }
 
 }

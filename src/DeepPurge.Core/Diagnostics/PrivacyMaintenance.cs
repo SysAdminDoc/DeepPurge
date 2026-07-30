@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using DeepPurge.Core.App;
+using DeepPurge.Core.Safety;
 
 namespace DeepPurge.Core.Diagnostics;
 
@@ -224,7 +225,14 @@ public static class PrivacyMaintenance
 
     private static void TryDelete(string file)
     {
-        try { File.Delete(file); }
+        try
+        {
+            if (!HandleBoundFileOperations.DeleteFileWithinScope(
+                    file,
+                    Path.GetDirectoryName(file)!,
+                    out var reason))
+                Log.Warn($"Privacy retention delete failed for '{file}': {reason}");
+        }
         catch (Exception ex) { Log.Warn($"Privacy retention delete failed for '{file}': {ex.Message}"); }
     }
 }

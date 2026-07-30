@@ -1,6 +1,7 @@
 using DeepPurge.Core.App;
 using DeepPurge.Core.Diagnostics;
 using DeepPurge.Core.Execution;
+using DeepPurge.Core.Safety;
 
 namespace DeepPurge.Core.Schedule;
 
@@ -93,7 +94,12 @@ public class ScheduleManager
         try
         {
             var wrapper = WrapperPath(safeName);
-            if (File.Exists(wrapper)) File.Delete(wrapper);
+            if (File.Exists(wrapper) &&
+                !HandleBoundFileOperations.DeleteFileWithinScope(
+                    wrapper,
+                    Path.GetDirectoryName(wrapper)!,
+                    out var reason))
+                Log.Warn($"Failed to delete wrapper script: {reason}");
         }
         catch (Exception ex) { Log.Warn($"Failed to delete wrapper script: {ex.Message}"); }
 

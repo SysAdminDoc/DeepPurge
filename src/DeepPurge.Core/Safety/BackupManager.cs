@@ -91,7 +91,14 @@ public class BackupManager
             var cutoff = DateTime.Now.AddDays(-keepDays);
             foreach (var file in Directory.GetFiles(BackupRoot, "*.reg"))
             {
-                try { if (File.GetCreationTime(file) < cutoff) File.Delete(file); }
+                try
+                {
+                    if (File.GetCreationTime(file) < cutoff)
+                        HandleBoundFileOperations.DeleteFileWithinScope(
+                            file,
+                            BackupRoot,
+                            out _);
+                }
                 catch { /* best-effort */ }
             }
         }
