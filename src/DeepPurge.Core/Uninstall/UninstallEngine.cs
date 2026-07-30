@@ -553,7 +553,11 @@ public class UninstallEngine
     /// Handles:
     ///   - Quoted paths: `"C:\foo\unins.exe" /S`
     ///   - MsiExec special-case (/I→/X rewrite happens in GetSilentUninstallCommand)
-    ///   - Unquoted paths with spaces: routed through `cmd /c` for shell parsing
+    ///   - Unquoted absolute paths with spaces: split at an existing executable
+    ///
+    /// Relative paths and shell command lines are rejected. The elevated
+    /// process must never ask cmd.exe or the Windows search order to decide
+    /// which registered uninstaller executable was intended.
     /// </summary>
     internal static ProcessStartInfo BuildUninstallerStartInfo(string uninstallCommand, bool silent = false)
     {
@@ -577,7 +581,11 @@ public class UninstallEngine
         {
             var args = System.Text.RegularExpressions.Regex.Replace(
                 trimmed, @"(?i)msiexec(\.exe)?\s*", "", System.Text.RegularExpressions.RegexOptions.None).Trim();
-            return Tune(new ProcessStartInfo { FileName = "msiexec.exe", Arguments = args });
+            return Tune(new ProcessStartInfo
+            {
+                FileName = WindowsExecutableResolver.ResolveSystemHelper("msiexec.exe"),
+                Arguments = args,
+            });
         }
 
         // Quoted path: `"C:\foo\unins.exe" /S`
@@ -587,17 +595,76 @@ public class UninstallEngine
             if (end > 0)
             {
                 var exe = trimmed[1..end];
+                if (!Path.IsPathFullyQualified(exe))
+                    throw new InvalidOperationException(
+                        "Registered uninstaller paths must be absolute.");
                 var args = trimmed[(end + 1)..].Trim();
-                return Tune(new ProcessStartInfo { FileName = exe, Arguments = args });
+                return Tune(new ProcessStartInfo
+                {
+                    FileName = Path.GetFullPath(exe),
+                    Arguments = args,
+                });
             }
         }
 
         // Unquoted, no spaces — run directly.
         if (!trimmed.Contains(' '))
-            return Tune(new ProcessStartInfo { FileName = trimmed });
+        {
+            if (!Path.IsPathFullyQualified(trimmed))
+                throw new InvalidOperationException(
+                    "Registered uninstaller paths must be absolute.");
+            return Tune(new ProcessStartInfo { FileName = Path.GetFullPath(trimmed) });
+        }
 
-        // Unquoted with spaces — let cmd.exe parse. /c closes cmd after exit.
-        return Tune(new ProcessStartInfo { FileName = "cmd.exe", Arguments = $"/c \"{trimmed}\"" });
+        // Some legacy registry entries omit quotes around an absolute Program
+        // Files path. Resolve the longest existing executable prefix without
+        // invoking a command interpreter.
+        if (TrySplitUnquotedExecutable(trimmed, out var executable, out var arguments))
+        {
+            return Tune(new ProcessStartInfo
+            {
+                FileName = executable,
+                Arguments = arguments,
+            });
+        }
+
+        throw new InvalidOperationException(
+            "Registered uninstaller command is ambiguous or does not name an absolute executable.");
+    }
+
+    private static bool TrySplitUnquotedExecutable(
+        string command,
+        out string executable,
+        out string arguments)
+    {
+        executable = "";
+        arguments = "";
+        var searchFrom = 0;
+        while (searchFrom < command.Length)
+        {
+            var extensionIndex = command.IndexOf(
+                ".exe",
+                searchFrom,
+                StringComparison.OrdinalIgnoreCase);
+            if (extensionIndex < 0) return false;
+
+            var end = extensionIndex + 4;
+            var candidate = command[..end].Trim();
+            if (Path.IsPathFullyQualified(candidate))
+            {
+                candidate = Path.GetFullPath(candidate);
+                if (File.Exists(candidate))
+                {
+                    executable = candidate;
+                    arguments = command[end..].Trim();
+                    return true;
+                }
+            }
+
+            searchFrom = end;
+        }
+
+        return false;
     }
 
     // ═══════════════════════════════════════════════════════

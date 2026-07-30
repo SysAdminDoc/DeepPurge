@@ -6,12 +6,27 @@ namespace DeepPurge.Core.App;
 public static class UserIdentity
 {
     private static readonly Lazy<string> _realUserSid = new(ResolveRealUserSid);
+    private static readonly Lazy<string> _realProfilePath = new(ResolveRealProfilePath);
     private static readonly Lazy<string> _realLocalAppData = new(ResolveRealLocalAppData);
     private static readonly Lazy<bool> _isSmaaElevated = new(DetectSmaaElevation);
+    private static readonly Lazy<bool> _isProcessElevated = new(DetectProcessElevation);
 
     public static string RealUserSid => _realUserSid.Value;
+    public static string RealProfilePath => _realProfilePath.Value;
     public static string RealLocalAppData => _realLocalAppData.Value;
     public static bool IsSmaaElevated => _isSmaaElevated.Value;
+    public static bool IsProcessElevated => _isProcessElevated.Value;
+
+    private static bool DetectProcessElevation()
+    {
+        try
+        {
+            using var identity = WindowsIdentity.GetCurrent();
+            return new WindowsPrincipal(identity)
+                .IsInRole(WindowsBuiltInRole.Administrator);
+        }
+        catch { return false; }
+    }
 
     private static bool DetectSmaaElevation()
     {
@@ -45,8 +60,19 @@ public static class UserIdentity
     private static string ResolveRealLocalAppData()
     {
         var fallback = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        if (!IsSmaaElevated) return fallback;
+        var profilePath = RealProfilePath;
+        if (!string.IsNullOrWhiteSpace(profilePath))
+        {
+            var localAppData = Path.Combine(profilePath, "AppData", "Local");
+            if (Directory.Exists(localAppData)) return localAppData;
+        }
 
+        return fallback;
+    }
+
+    private static string ResolveRealProfilePath()
+    {
+        var fallback = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         try
         {
             var sid = RealUserSid;
@@ -55,13 +81,13 @@ public static class UserIdentity
             using var profileKey = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
                 $@"SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\{sid}");
             var profilePath = profileKey?.GetValue("ProfileImagePath") as string;
-            if (!string.IsNullOrEmpty(profilePath) && Directory.Exists(profilePath))
+            if (!string.IsNullOrEmpty(profilePath))
             {
-                var localAppData = Path.Combine(profilePath, "AppData", "Local");
-                if (Directory.Exists(localAppData)) return localAppData;
+                profilePath = Environment.ExpandEnvironmentVariables(profilePath);
+                if (Directory.Exists(profilePath)) return profilePath;
             }
         }
-        catch (Exception ex) { Log.Warn($"SMAA LocalAppData resolution failed: {ex.Message}"); }
+        catch (Exception ex) { Log.Warn($"Console profile resolution failed: {ex.Message}"); }
 
         return fallback;
     }
@@ -72,11 +98,14 @@ public static class UserIdentity
         {
             var explorerProcesses = System.Diagnostics.Process.GetProcessesByName("explorer");
             if (explorerProcesses.Length == 0) return null;
+            using var currentProcess = System.Diagnostics.Process.GetCurrentProcess();
+            var currentSession = currentProcess.SessionId;
 
             foreach (var explorer in explorerProcesses)
             {
                 try
                 {
+                    if (explorer.SessionId != currentSession) continue;
                     var handle = explorer.Handle;
                     if (!OpenProcessToken(handle, TOKEN_QUERY, out var tokenHandle)) continue;
                     try

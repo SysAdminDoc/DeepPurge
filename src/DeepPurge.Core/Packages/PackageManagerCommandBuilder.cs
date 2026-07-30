@@ -20,30 +20,25 @@ public static class PackageManagerCommandBuilder
     public static bool IsSupportedNativeUninstallManager(string? packageManager)
         => NormalizeManager(packageManager) is "winget" or "scoop" or "chocolatey";
 
-    public static ProcessStartInfo CreateWingetUpgradeStartInfo(string packageId)
+    public static ExternalProcessCommand CreateWingetUpgradeCommand(string packageId)
     {
         if (!IsSafePackageId(packageId))
             throw new ArgumentException("Invalid winget package id.", nameof(packageId));
 
-        var psi = new ProcessStartInfo
-        {
-            FileName = "winget.exe",
-            UseShellExecute = true,
-        };
-        psi.ArgumentList.Add("upgrade");
-        psi.ArgumentList.Add("--id");
-        psi.ArgumentList.Add(packageId);
-        psi.ArgumentList.Add("--exact");
-        psi.ArgumentList.Add("--accept-source-agreements");
-        psi.ArgumentList.Add("--accept-package-agreements");
-        return psi;
+        return PackageManagerExecutableResolver.CreateCommand(
+            "winget",
+            new[]
+            {
+                "upgrade",
+                "--id",
+                packageId,
+                "--exact",
+                "--accept-source-agreements",
+                "--accept-package-agreements",
+            },
+            timeout: TimeSpan.FromHours(2),
+            createNoWindow: false);
     }
-
-    public static ProcessStartInfo CreateNativeUninstallStartInfo(
-        string packageManager,
-        string packageId,
-        bool silent = false)
-        => CreateNativeUninstallCommand(packageManager, packageId, silent).ToStartInfo();
 
     public static ExternalProcessCommand CreateNativeUninstallCommand(
         string packageManager,
@@ -68,7 +63,10 @@ public static class PackageManagerCommandBuilder
         bool silent = false)
     {
         var command = CreateNativeUninstallCommand(packageManager, packageId, silent);
-        return command.ToRedactedCommandLine();
+        var manager = NormalizeManager(packageManager);
+        var launcherArgumentCount =
+            PackageManagerExecutableResolver.Resolve(manager).LauncherArguments.Count;
+        return $"{manager} {string.Join(" ", command.Arguments.Skip(launcherArgumentCount))}";
     }
 
     private static ExternalProcessCommand CreateWingetUninstallCommand(string packageId, bool silent)
@@ -83,23 +81,22 @@ public static class PackageManagerCommandBuilder
             "--accept-source-agreements",
         };
         if (silent) args.Add("--silent");
-        return new ExternalProcessCommand("winget.exe") { Arguments = args };
+        return PackageManagerExecutableResolver.CreateCommand(
+            "winget",
+            args,
+            timeout: TimeSpan.FromHours(2));
     }
 
     private static ExternalProcessCommand CreateScoopUninstallCommand(string packageId)
-    {
-        // Scoop is normally a shim/cmd wrapper on PATH. Invoke it through cmd.exe,
-        // but only after strict package-id validation keeps shell metacharacters out.
-        return new ExternalProcessCommand("cmd.exe")
-        {
-            Arguments = new[] { "/d", "/c", "scoop", "uninstall", packageId },
-        };
-    }
+        => PackageManagerExecutableResolver.CreateCommand(
+            "scoop",
+            new[] { "uninstall", packageId },
+            timeout: TimeSpan.FromHours(2));
 
     private static ExternalProcessCommand CreateChocolateyUninstallCommand(string packageId)
-        => new("choco.exe")
-        {
-            Arguments = new[]
+        => PackageManagerExecutableResolver.CreateCommand(
+            "chocolatey",
+            new[]
             {
                 "uninstall",
                 packageId,
@@ -108,7 +105,7 @@ public static class PackageManagerCommandBuilder
                 "--no-color",
                 "--limit-output",
             },
-        };
+            timeout: TimeSpan.FromHours(2));
 
     private static string NormalizeManager(string? packageManager)
         => (packageManager ?? "").Trim().ToLowerInvariant();

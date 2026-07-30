@@ -11,6 +11,12 @@ public enum ExternalProcessStatus
     StartFailed,
 }
 
+public enum ExternalProcessExecutionContext
+{
+    CurrentProcess,
+    OriginalInteractiveUser,
+}
+
 public sealed record ExternalProcessCommand(string FileName)
 {
     public IReadOnlyList<string> Arguments { get; init; } = Array.Empty<string>();
@@ -23,6 +29,8 @@ public sealed record ExternalProcessCommand(string FileName)
     public Encoding? StandardErrorEncoding { get; init; }
     public ISet<int> RedactedArgumentIndexes { get; init; } = new HashSet<int>();
     public bool RedactAbsolutePaths { get; init; }
+    public ExternalProcessExecutionContext ExecutionContext { get; init; } =
+        ExternalProcessExecutionContext.CurrentProcess;
 
     public ProcessStartInfo ToStartInfo()
     {
@@ -114,6 +122,36 @@ public static class ExternalProcessRunner
         IProgress<string>? outputProgress = null,
         CancellationToken ct = default)
     {
+        try
+        {
+            command = command with
+            {
+                FileName = WindowsExecutableResolver.ResolveForLaunch(command.FileName),
+            };
+        }
+        catch (Exception ex)
+        {
+            return new(
+                command,
+                -1,
+                "",
+                "",
+                Started: false,
+                TimedOut: false,
+                Canceled: false,
+                StartError: ex.Message);
+        }
+
+        if (command.ExecutionContext == ExternalProcessExecutionContext.OriginalInteractiveUser &&
+            OriginalUserProcessLauncher.RequiresTokenBroker)
+        {
+            return await OriginalUserProcessLauncher.RunAsync(
+                    command,
+                    outputProgress,
+                    ct)
+                .ConfigureAwait(false);
+        }
+
         using var timeoutCts = command.Timeout > TimeSpan.Zero
             ? new CancellationTokenSource(command.Timeout)
             : new CancellationTokenSource();

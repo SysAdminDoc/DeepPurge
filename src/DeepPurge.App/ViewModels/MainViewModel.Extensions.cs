@@ -7,6 +7,7 @@ using DeepPurge.Core.App;
 using DeepPurge.Core.Cleaning;
 using DeepPurge.Core.Diagnostics;
 using DeepPurge.Core.Drivers;
+using DeepPurge.Core.Execution;
 using DeepPurge.Core.FileSystem;
 using DeepPurge.Core.InstallMonitor;
 using DeepPurge.Core.Repair;
@@ -725,7 +726,7 @@ public partial class MainViewModel
         {
             Process.Start(new ProcessStartInfo
             {
-                FileName = "explorer.exe",
+                FileName = WindowsExecutableResolver.ResolveSystemHelper("explorer.exe"),
                 Arguments = path,
                 UseShellExecute = true,
             });

@@ -204,25 +204,27 @@ public static class SelfTest
         => PackageManagerScanner.GetSourceHealth().Select(h => new SelfTestResult(
             $"Package source: {h.Source}",
             h.Status,
-            string.IsNullOrWhiteSpace(h.Version)
+            (string.IsNullOrWhiteSpace(h.Version)
                 ? $"{h.Detail}; {h.LastScannerStatus}"
-                : $"{h.Detail}; version {h.Version}; {h.LastScannerStatus}",
+                : $"{h.Detail}; version {h.Version}; {h.LastScannerStatus}") +
+            (string.IsNullOrWhiteSpace(h.Root) ? "" : $"; resolved {h.Root}"),
             h.Hint));
-
-    private static SelfTestResult CheckWinget()
-    {
-        return ProbeExe("winget.exe", "--version")
-            ? new("winget", SelfTestStatus.Ok,   "Installed")
-            : new("winget", SelfTestStatus.Warn, "Not on PATH (optional — required for per-app 'winget repair')",
-                  Hint: "winget install Microsoft.AppInstaller  (or install from the Microsoft Store)");
-    }
 
     private static SelfTestResult CheckSchtasks()
     {
-        return ProbeExe("schtasks.exe", "/?")
-            ? new("schtasks", SelfTestStatus.Ok,   "Available")
-            : new("schtasks", SelfTestStatus.Fail, "schtasks.exe missing — schedule feature broken",
-                Hint: "Restore %SystemRoot%\\System32\\schtasks.exe and verify the Task Scheduler service is enabled.");
+        try
+        {
+            var path = WindowsExecutableResolver.ResolveSystemHelper("schtasks.exe");
+            return ProbeExe(path, "/?")
+                ? new("schtasks", SelfTestStatus.Ok, $"Available at {path}")
+                : new("schtasks", SelfTestStatus.Fail, "Protected schtasks.exe could not be started",
+                    Hint: "Repair Windows system files and verify the Task Scheduler service is enabled.");
+        }
+        catch (Exception ex)
+        {
+            return new("schtasks", SelfTestStatus.Fail, ex.Message,
+                Hint: "Restore %SystemRoot%\\System32\\schtasks.exe with DISM and SFC.");
+        }
     }
 
     private static SelfTestResult CheckDriverStoreRepo()

@@ -12,6 +12,7 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 - **winget integration** - Programs tracked by winget are tagged with their package ID; upgrade-available badge + right-click → "Upgrade via winget"; uninstall uses `winget uninstall --id ... --exact` before registry fallbacks, and `doctor` reports source health when package-manager enrichment degrades *(inspired by BCU source-adapter pattern)*
 - **Scoop integration** - Scoop apps that skip the Windows installer DB are auto-discovered, merged into the list, and removed through `scoop uninstall`
 - **Chocolatey integration** - `choco list --local-only --limit-output` entries are merged into the installed programs list and removed through non-interactive `choco uninstall`
+- **Privilege-contained package managers** - winget, Scoop, and Chocolatey resolve from known absolute install roots and run as the original non-elevated desktop user, never with the GUI's administrator token or a current-directory/PATH-selected shim
 - **Silent-switch database** - Curated per-installer-family silent flags (`/S`, `/qn`, `/VERYSILENT`, `/quiet`, Squirrel `--uninstall --silent`) with vendor fingerprint overrides *(inspired by PatchMyPC)*
 - **Forced Uninstall** - Scan for remnants of already-removed or partially uninstalled programs
 - **Windows Apps** - Remove UWP/MSIX apps including system bloatware
@@ -84,6 +85,7 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 - Recycle Bin for file deletions (with permanent-delete and secure-delete fallbacks)
 - Confidence-based leftover classification (Safe / Moderate / Risky)
 - Centralized `SafetyGuard` blocks every destructive call against Windows, Program Files, System32, and protected registry hives
+- Windows-owned helpers resolve only from protected absolute system paths; unknown relative executables and ambiguous registered-uninstaller command lines fail closed
 
 ### Automation
 - **DeepPurgeCli.exe** - Full headless surface. Every workflow (uninstall, clean, repair, driver/shortcut/duplicate scans, install-trace, winapp2 run, update check) is scriptable. Exit codes follow BCU convention (0/1/2/13/1223).
@@ -150,7 +152,7 @@ DeepPurgeCli doctor                         # Environment self-test (16 checks, 
 dotnet test tests/DeepPurge.Tests/DeepPurge.Tests.csproj
 ```
 
-The current suite has 387 tests covering parser routing, shared external-process execution, package-manager command builders and source diagnostics, cleaner schema validation, cleanup failure reporting, release validation, privacy retention, SafetyGuard block/allow lists, handle-bound deletion/rollback, protected Task Scheduler registration and migration, versioned settings import/export contracts, static WPF accessibility/resource-drift checks, and support-bundle redaction.
+The current suite has 400 tests covering parser routing, protected helper resolution, original-user process brokering, package-manager command builders and source diagnostics, cleaner schema validation, cleanup failure reporting, release validation, privacy retention, SafetyGuard block/allow lists, handle-bound deletion/rollback, protected Task Scheduler registration and migration, versioned settings import/export contracts, static WPF accessibility/resource-drift checks, and support-bundle redaction.
 
 ## Packaging
 
