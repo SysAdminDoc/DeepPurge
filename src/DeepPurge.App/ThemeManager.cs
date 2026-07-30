@@ -13,9 +13,11 @@ public static class ThemeManager
 {
     public record ThemeInfo(string Name, string FileName, string Category);
 
-    // Five themes, dark-first (dark-first default).
+    // Dark-first themes. DeepPurge Slate is the product default; the named
+    // community palettes remain available for users who prefer them.
     private static readonly ThemeInfo[] Themes =
     {
+        new("DeepPurge Slate",   "DeepPurgeSlate.xaml",   "Dark"),
         new("Catppuccin Mocha", "CatppuccinMocha.xaml", "Dark"),
         new("OLED Black",       "OledBlack.xaml",       "Dark"),
         new("Dracula",          "Dracula.xaml",         "Dark"),
@@ -48,7 +50,7 @@ public static class ThemeManager
     public static void ApplySavedOrDefault()
     {
         var saved = TryReadSavedTheme();
-        var idx = saved >= 0 ? saved : 0; // 0 = Catppuccin Mocha (dark default)
+        var idx = saved >= 0 ? saved : 0; // 0 = DeepPurge Slate (dark default)
         ApplyTheme(idx, persist: false);
     }
 

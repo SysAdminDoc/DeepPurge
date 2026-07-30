@@ -6,7 +6,7 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <!-- Index 0: active color theme (swapped at runtime by ThemeManager) -->
-                <ResourceDictionary Source="/Themes/Colors/CatppuccinMocha.xaml"/>
+                <ResourceDictionary Source="/Themes/Colors/DeepPurgeSlate.xaml"/>
                 <!-- Index 1: base control styles (DynamicResource references always follow colors) -->
                 <ResourceDictionary Source="/Themes/BaseStyles.xaml"/>
             </ResourceDictionary.MergedDictionaries>

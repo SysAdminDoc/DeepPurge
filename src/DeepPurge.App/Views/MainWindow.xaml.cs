@@ -30,6 +30,38 @@ public partial class MainWindow : Window
     private TrayIconService? _trayIcon;
     private bool _exitRequested;
 
+    private static readonly IReadOnlyDictionary<string, string> PanelDescriptions =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Forced"] = "Locate remnants for software that no longer has a working uninstaller.",
+            ["WindowsApps"] = "Review installed AppX and MSIX packages before removing selected entries.",
+            ["Junk"] = "Preview temporary files and caches, then clean only the categories you select.",
+            ["Evidence"] = "Review local activity traces and privacy data before removal.",
+            ["EmptyFolders"] = "Find empty directory trees without following junctions or symbolic links.",
+            ["Disk"] = "Inspect storage pressure and large files on the Windows system drive.",
+            ["Autorun"] = "Audit startup entries, signatures, and reversible disable options.",
+            ["BrowserExt"] = "Review browser add-ons by profile, permissions, and risk.",
+            ["ContextMenu"] = "Find shell menu entries whose registered targets are missing.",
+            ["Services"] = "Inspect Windows services and identify orphaned executable targets.",
+            ["Tasks"] = "Review Task Scheduler entries and their executable targets.",
+            ["Restore"] = "Create and inspect Windows restore points before high-impact work.",
+            ["DeletionRecovery"] = "Inspect operation manifests and available rollback evidence.",
+            ["Hunter"] = "Search registry keys, names, and values with explicit scope limits.",
+            ["Orphans"] = "Cross-check services, tasks, firewall rules, and PATH entries.",
+            ["Backups"] = "Open and inspect registry exports created before deletion.",
+            ["Drivers"] = "Review third-party driver packages and older family versions.",
+            ["StartupImpact"] = "Compare startup entries using Windows boot-trace impact data.",
+            ["Shortcuts"] = "Find shortcuts with missing targets and recycle selected entries.",
+            ["Duplicates"] = "Hash candidate files in stages before reviewing duplicate groups.",
+            ["Winapp2"] = "Validate and preview applicable community cleaner definitions.",
+            ["Repair"] = "Run Windows servicing and cache-repair commands with live output.",
+            ["Schedule"] = "Create constrained recurring cleanup jobs and inspect active tasks.",
+            ["InstallMonitor"] = "Capture and review installer changes before considering a later replay.",
+            ["History"] = "Review local cleanup and maintenance activity recorded on this device.",
+            ["Settings"] = "Control privacy retention, exclusions, cookies, and local data lifecycle.",
+            ["About"] = "Verify the running executable, release checksum, and diagnostic posture.",
+        };
+
     public MainWindow()
     {
         InitializeComponent();
@@ -80,10 +112,7 @@ public partial class MainWindow : Window
             {
                 txtForcedName.Text = Path.GetFileNameWithoutExtension(target);
                 txtForcedPath.Text = Path.GetDirectoryName(target) ?? "";
-                foreach (var p in AllPanels) p.Visibility = Visibility.Collapsed;
-                panelForced.Visibility = Visibility.Visible;
-                _currentPanel = "Forced";
-                _vm.CurrentPanel = "Forced";
+                navForced.IsChecked = true;
                 ShowToast($"Target: {Path.GetFileName(target)}");
             }
             else
@@ -204,6 +233,9 @@ public partial class MainWindow : Window
         toolbarMain.Visibility = isProgramPanel ? Visibility.Visible : Visibility.Collapsed;
         toolbarGeneric.Visibility = isProgramPanel ? Visibility.Collapsed : Visibility.Visible;
         genericButtons.Children.Clear();
+        txtPanelSubtitle.Text = PanelDescriptions.TryGetValue(tag, out var description)
+            ? description
+            : "Review this workspace before applying changes.";
 
         switch (tag)
         {
@@ -574,7 +606,7 @@ public partial class MainWindow : Window
         var btn = new Button
         {
             Content = text,
-            Margin = new Thickness(4, 0, 0, 0),
+            Margin = new Thickness(6, 0, 0, 6),
             Padding = new Thickness(14, 6, 14, 6),
             MinHeight = 34,
             ToolTip = BuildToolbarHelpText(text),
@@ -1156,7 +1188,13 @@ public partial class MainWindow : Window
     }
 
     private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
-        => _vm.SearchFilter = txtSearch.Text;
+    {
+        _vm.SearchFilter = txtSearch.Text;
+        if (txtSearchHint != null)
+            txtSearchHint.Visibility = string.IsNullOrEmpty(txtSearch.Text)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+    }
 
     private async void Refresh_Click(object sender, RoutedEventArgs e) => await _vm.RefreshAsync();
 

@@ -93,8 +93,9 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 - **Update checker** - Hits GitHub Releases API to flag available upgrades; never blocks startup.
 
 ### Themes
-Nine built-in themes with runtime switching and persistence between sessions:
-- **Catppuccin Mocha** (dark, default)
+Ten built-in themes with runtime switching and persistence between sessions:
+- **DeepPurge Slate** (graphite/cyan, default)
+- **Catppuccin Mocha** (dark)
 - **OLED Black** (pure black, blue accent)
 - **Dracula** (classic purple)
 - **Nord Polar** (frost tones)

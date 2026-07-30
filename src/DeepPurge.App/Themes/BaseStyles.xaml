@@ -5,6 +5,10 @@
     <FontFamily x:Key="UIFont">Segoe UI Variable Display, Segoe UI, sans-serif</FontFamily>
     <FontFamily x:Key="MonoFont">Cascadia Code, Consolas, monospace</FontFamily>
     <FontFamily x:Key="IconFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+    <!-- Action labels use an invariant ink color so bright semantic fills keep
+         readable contrast in every bundled palette. -->
+    <SolidColorBrush x:Key="ActionForegroundBrush" Color="#07111A"/>
+    <SolidColorBrush x:Key="DangerForegroundBrush" Color="#07111A"/>
 
     <!-- ═══════════ CONVERTERS ═══════════ -->
     <BooleanToVisibilityConverter x:Key="BoolToVis"/>
@@ -38,6 +42,7 @@
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="BorderBrush" Value="{DynamicResource Surface1Brush}"/>
         <Setter Property="Padding" Value="18,8"/>
+        <Setter Property="MinHeight" Value="36"/>
         <Setter Property="FontSize" Value="12"/>
         <Setter Property="FontWeight" Value="Medium"/>
         <Setter Property="Cursor" Value="Hand"/>
@@ -46,7 +51,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="8"
+                    <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="7"
                             Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True"
                             BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -71,23 +76,24 @@
     <!-- ═══════════ BUTTON — Accent ═══════════ -->
     <Style x:Key="AccentButton" TargetType="Button">
         <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
-        <Setter Property="Foreground" Value="{DynamicResource CrustBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource ActionForegroundBrush}"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="Padding" Value="20,8"/>
+        <Setter Property="MinHeight" Value="36"/>
         <Setter Property="FontSize" Value="12"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="FocusVisualStyle" Value="{DynamicResource DeepPurgeFocusVisual}"/>
         <Setter Property="FontFamily" Value="{StaticResource UIFont}"/>
         <Setter Property="Effect">
             <Setter.Value>
-                <DropShadowEffect Color="{DynamicResource AccentColor}" BlurRadius="18" ShadowDepth="0" Opacity="0.28"/>
+                <DropShadowEffect Color="{DynamicResource AccentColor}" BlurRadius="10" ShadowDepth="0" Opacity="0.12"/>
             </Setter.Value>
         </Setter>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="8"
+                    <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="7"
                             Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
@@ -110,23 +116,24 @@
     <!-- ═══════════ BUTTON — Danger ═══════════ -->
     <Style x:Key="DangerButton" TargetType="Button">
         <Setter Property="Background" Value="{DynamicResource RedBrush}"/>
-        <Setter Property="Foreground" Value="#FFFFFF"/>
+        <Setter Property="Foreground" Value="{StaticResource DangerForegroundBrush}"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="Padding" Value="20,8"/>
+        <Setter Property="MinHeight" Value="36"/>
         <Setter Property="FontSize" Value="12"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="FocusVisualStyle" Value="{DynamicResource DeepPurgeFocusVisual}"/>
         <Setter Property="FontFamily" Value="{StaticResource UIFont}"/>
         <Setter Property="Effect">
             <Setter.Value>
-                <DropShadowEffect Color="{DynamicResource RedColor}" BlurRadius="14" ShadowDepth="0" Opacity="0.22"/>
+                <DropShadowEffect Color="{DynamicResource RedColor}" BlurRadius="10" ShadowDepth="0" Opacity="0.12"/>
             </Setter.Value>
         </Setter>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="8"
+                    <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="7"
                             Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
@@ -150,6 +157,7 @@
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="BorderBrush" Value="{DynamicResource Surface1Brush}"/>
         <Setter Property="Padding" Value="16,8"/>
+        <Setter Property="MinHeight" Value="36"/>
         <Setter Property="FontSize" Value="12"/>
         <Setter Property="FontWeight" Value="Medium"/>
         <Setter Property="Cursor" Value="Hand"/>
@@ -158,7 +166,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="8"
+                    <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="7"
                             Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True"
                             BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -192,7 +200,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="TextBox">
-                    <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="8"
+                    <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="7"
                             BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
                             SnapsToDevicePixels="True">
                         <ScrollViewer x:Name="PART_ContentHost" Margin="0"/>
@@ -496,7 +504,7 @@
         <Setter Property="CanUserReorderColumns" Value="False"/>
         <Setter Property="CanUserResizeRows" Value="False"/>
         <Setter Property="IsReadOnly" Value="False"/>
-        <Setter Property="RowHeight" Value="44"/>
+        <Setter Property="RowHeight" Value="48"/>
         <Setter Property="FontSize" Value="12.5"/>
         <Setter Property="FontFamily" Value="{StaticResource UIFont}"/>
         <Setter Property="FocusVisualStyle" Value="{DynamicResource DeepPurgeFocusVisual}"/>
@@ -510,7 +518,7 @@
         <Setter Property="FontSize" Value="10"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="FontFamily" Value="{StaticResource UIFont}"/>
-        <Setter Property="Padding" Value="14,14"/>
+        <Setter Property="Padding" Value="14,12"/>
         <Setter Property="BorderBrush" Value="Transparent"/>
         <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="Template">

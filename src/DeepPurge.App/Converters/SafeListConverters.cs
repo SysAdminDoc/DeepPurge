@@ -116,6 +116,8 @@ public class PanelEmptyStateVisibilityConverter : IMultiValueConverter
         {
             null => false,
             string s => !string.IsNullOrWhiteSpace(s),
+            int count => count > 0,
+            long count => count > 0,
             ICollection c => c.Count > 0,
             IEnumerable e => HasAny(e),
             _ => true,

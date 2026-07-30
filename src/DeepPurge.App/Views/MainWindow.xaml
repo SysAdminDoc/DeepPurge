@@ -4,7 +4,7 @@
         xmlns:vm="clr-namespace:DeepPurge.App.ViewModels"
         xmlns:conv="clr-namespace:DeepPurge.App.Converters"
         xmlns:props="clr-namespace:DeepPurge.App.Properties"
-        Title="DeepPurge v0.9.0" Width="1380" Height="900"
+        Title="DeepPurge v0.9.0" Width="1440" Height="900"
         MinWidth="1060" MinHeight="700" WindowStartupLocation="CenterScreen"
         Style="{DynamicResource MainWindowStyle}">
 
@@ -25,22 +25,26 @@
             <Setter Property="Foreground" Value="{DynamicResource Subtext0Brush}"/>
             <Setter Property="FontSize" Value="12.5"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Margin" Value="6,1,10,1"/>
+            <Setter Property="Margin" Value="8,1,10,1"/>
             <Setter Property="FocusVisualStyle" Value="{DynamicResource DeepPurgeFocusVisual}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
                         <Grid>
-                            <Border x:Name="indicator" Width="3" HorizontalAlignment="Left" CornerRadius="0,2,2,0"
-                                    Background="{DynamicResource AccentBrush}" Opacity="0" Margin="-6,6,0,6"/>
-                            <Border x:Name="bg" Padding="12,9,14,9" CornerRadius="8" Background="Transparent"
+                            <Border x:Name="indicator" Width="2" HorizontalAlignment="Left" CornerRadius="0,2,2,0"
+                                    Background="{DynamicResource AccentBrush}" Opacity="0" Margin="-8,7,0,7"/>
+                            <Border x:Name="bg" Padding="11,8,12,8" CornerRadius="6" Background="Transparent"
                                     BorderBrush="Transparent" BorderThickness="2">
                                 <ContentPresenter VerticalAlignment="Center"/>
                             </Border>
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="bg" Property="Background" Value="{DynamicResource Surface0Brush}"/>
+                                <Setter TargetName="bg" Property="Background">
+                                    <Setter.Value>
+                                        <SolidColorBrush Color="{DynamicResource AccentColor}" Opacity="0.16"/>
+                                    </Setter.Value>
+                                </Setter>
                                 <Setter TargetName="indicator" Property="Opacity" Value="1"/>
                                 <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
                             </Trigger>
@@ -70,8 +74,8 @@
             <Setter Property="FontSize" Value="10"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Foreground" Value="{DynamicResource Subtext0Brush}"/>
-            <Setter Property="Margin" Value="18,18,0,6"/>
-            <Setter Property="Opacity" Value="0.6"/>
+            <Setter Property="Margin" Value="18,16,0,6"/>
+            <Setter Property="Opacity" Value="0.72"/>
         </Style>
 
         <Style x:Key="NavIcon" TargetType="TextBlock">
@@ -87,8 +91,8 @@
         <!-- Badge pill for nav items -->
         <Style x:Key="NavBadge" TargetType="Border">
             <Setter Property="Background" Value="{DynamicResource Surface1Brush}"/>
-            <Setter Property="CornerRadius" Value="8"/>
-            <Setter Property="Padding" Value="7,2"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Padding" Value="6,1"/>
             <Setter Property="Margin" Value="8,0,0,0"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
@@ -121,6 +125,105 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+        </Style>
+
+        <!-- Compact segmented selector used for scan risk. -->
+        <Style x:Key="ScanModeRadio" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{DynamicResource SubtextBrush}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="FontWeight" Value="Medium"/>
+            <Setter Property="Padding" Value="14,8"/>
+            <Setter Property="MinWidth" Value="76"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="FocusVisualStyle" Value="{DynamicResource DeepPurgeFocusVisual}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="modeBg" Background="{TemplateBinding Background}"
+                                BorderBrush="Transparent" BorderThickness="1" CornerRadius="5"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="modeBg" Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                <Setter Property="Foreground" Value="{StaticResource ActionForegroundBrush}"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="modeBg" Property="BorderBrush" Value="{DynamicResource Surface2Brush}"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="modeBg" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                <Setter TargetName="modeBg" Property="BorderThickness" Value="2"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="MetricCard" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource MantleBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Surface1Brush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="16,12"/>
+        </Style>
+
+        <Style x:Key="MetricEyebrow" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Subtext0Brush}"/>
+            <Setter Property="FontSize" Value="9.5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Opacity" Value="0.8"/>
+        </Style>
+
+        <Style x:Key="MetricValue" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+            <Setter Property="FontSize" Value="17"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,3,0,0"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        </Style>
+
+        <Style x:Key="TableBadge" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource Surface0Brush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Surface1Brush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Padding" Value="7,3"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <Style x:Key="SignatureTone" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource GreenBrush}"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding SignatureDisplay}" Value="Unsigned">
+                    <Setter Property="Foreground" Value="{DynamicResource YellowBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding SignatureDisplay}" Value="Missing">
+                    <Setter Property="Foreground" Value="{DynamicResource Subtext0Brush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding SignatureDisplay}" Value="Invalid">
+                    <Setter Property="Foreground" Value="{DynamicResource RedBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding SignatureDisplay}" Value="Untrusted">
+                    <Setter Property="Foreground" Value="{DynamicResource RedBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding SignatureDisplay}" Value="Revoked">
+                    <Setter Property="Foreground" Value="{DynamicResource RedBrush}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="PanelSubtitle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Subtext0Brush}"/>
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="Margin" Value="0,4,0,0"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
         </Style>
 
         <!-- Master Checkbox Header Template -->
@@ -225,14 +328,15 @@
     <!-- ════════════════════════════════════════════════════════════════ -->
     <Grid Background="{DynamicResource CrustBrush}">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="252"/>
+            <ColumnDefinition Width="228"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
         <!-- ═══════════════════════════════════════════════════════ -->
         <!-- SIDEBAR -->
         <!-- ═══════════════════════════════════════════════════════ -->
-        <Border Grid.Column="0" Background="{DynamicResource MantleBrush}">
+        <Border Grid.Column="0" Background="{DynamicResource MantleBrush}"
+                BorderBrush="{DynamicResource Surface0Brush}" BorderThickness="0,0,1,0">
             <Border>
                 <Border.Background>
                     <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
@@ -243,18 +347,19 @@
                 </Border.Background>
                 <DockPanel>
                     <!-- BRAND -->
-                    <Border DockPanel.Dock="Top" Padding="20,22,20,18">
+                    <Border DockPanel.Dock="Top" Padding="18,20,14,17">
                         <DockPanel>
                             <!-- Theme Toggle (Sun/Moon) -->
                             <Button x:Name="btnThemeToggle" DockPanel.Dock="Right" Click="ThemeToggle_Click"
                                     VerticalAlignment="Center" Cursor="Hand" ToolTip="Toggle Light/Dark"
                                     AutomationProperties.Name="Toggle light or dark theme"
                                     AutomationProperties.HelpText="Switch between the light Arctic theme and the default dark theme."
-                                    Width="34" Height="34">
+                                    Width="32" Height="32">
                                 <Button.Template>
                                     <ControlTemplate TargetType="Button">
                                         <Border x:Name="toggleBg" Background="{DynamicResource Surface0Brush}"
-                                                CornerRadius="8" Width="34" Height="34">
+                                                BorderBrush="{DynamicResource Surface1Brush}" BorderThickness="1"
+                                                CornerRadius="6" Width="32" Height="32">
                                             <TextBlock x:Name="toggleIcon" Text="&#xE706;" FontFamily="{StaticResource Ico}" FontSize="15"
                                                        Foreground="{DynamicResource SubtextBrush}"
                                                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -269,23 +374,21 @@
                                 </Button.Template>
                             </Button>
                             <StackPanel Orientation="Horizontal">
-                                <Border Width="38" Height="38" CornerRadius="10" Margin="0,0,14,0">
+                                <Border Width="36" Height="36" CornerRadius="8" Margin="0,0,12,0">
                                     <Border.Background>
                                         <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
                                             <GradientStop Color="{DynamicResource AccentColor}" Offset="0"/>
-                                            <GradientStop Color="{DynamicResource MauveColor}" Offset="1"/>
+                                            <GradientStop Color="{DynamicResource TealColor}" Offset="1"/>
                                         </LinearGradientBrush>
                                     </Border.Background>
-                                    <Border.Effect>
-                                        <DropShadowEffect Color="{DynamicResource AccentColor}" BlurRadius="14" ShadowDepth="0" Opacity="0.3"/>
-                                    </Border.Effect>
                                     <TextBlock Text="&#xE74D;" FontFamily="{StaticResource Ico}" FontSize="17"
-                                               Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                               Foreground="{StaticResource ActionForegroundBrush}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
                                 <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="DeepPurge" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource TextBrush}"/>
-                                    <TextBlock FontSize="10.5" Foreground="{DynamicResource Subtext0Brush}" Margin="0,1,0,0"
-                                               Text="{Binding AppVersionDisplay, StringFormat=v{0}}"/>
+                                    <TextBlock Text="DeepPurge" FontSize="17" FontWeight="Bold" Foreground="{DynamicResource TextBrush}"/>
+                                    <TextBlock Text="LOCAL SYSTEM CARE" FontSize="8.5" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource Subtext0Brush}" Margin="0,2,0,0" Opacity="0.75"/>
                                 </StackPanel>
                             </StackPanel>
                         </DockPanel>
@@ -297,9 +400,14 @@
                     <Border DockPanel.Dock="Bottom" Padding="16,12,16,16">
                         <StackPanel>
                             <Border Height="1" Background="{DynamicResource Surface0Brush}" Opacity="0.6" Margin="0,0,0,12"/>
-                            <TextBlock Text="THEME" FontSize="9.5" FontWeight="SemiBold"
+                            <DockPanel Margin="4,0,0,6">
+                                <TextBlock DockPanel.Dock="Right" FontSize="9.5" Foreground="{DynamicResource Subtext0Brush}"
+                                           Opacity="0.55" Text="{Binding AppVersionDisplay, StringFormat=v{0}}"/>
+                                <TextBlock Text="THEME" FontSize="9.5" FontWeight="SemiBold"
                                        Foreground="{DynamicResource Subtext0Brush}" Margin="4,0,0,6" Opacity="0.5"/>
-                            <ComboBox x:Name="cmbTheme" SelectionChanged="Theme_SelectionChanged" FontSize="11.5"/>
+                            </DockPanel>
+                            <ComboBox x:Name="cmbTheme" SelectionChanged="Theme_SelectionChanged" FontSize="11.5"
+                                      AutomationProperties.Name="Application theme"/>
                             <Border Background="{DynamicResource Surface0Brush}" CornerRadius="8"
                                     Padding="12,7" Margin="0,10,0,0" HorizontalAlignment="Left">
                                 <StackPanel Orientation="Horizontal">
@@ -333,7 +441,8 @@
                             </RadioButton>
                             <ProgressBar Value="{Binding ProgramsScanProgress}" Style="{StaticResource NavProgressBar}"/>
 
-                            <RadioButton GroupName="nav" Tag="Forced" Checked="NavButton_Checked" Style="{StaticResource NavRadioButton}">
+                            <RadioButton x:Name="navForced" GroupName="nav" Tag="Forced"
+                                         Checked="NavButton_Checked" Style="{StaticResource NavRadioButton}">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="&#xE71C;" Style="{StaticResource NavIcon}"/>
                                     <TextBlock Text="Forced Uninstall" VerticalAlignment="Center"/>
@@ -607,16 +716,6 @@
             </Border>
         </Border>
 
-        <!-- Sidebar edge shadow -->
-        <Border Grid.Column="1" HorizontalAlignment="Left" Width="16" IsHitTestVisible="False">
-            <Border.Background>
-                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                    <GradientStop Color="#18000000" Offset="0"/>
-                    <GradientStop Color="#00000000" Offset="1"/>
-                </LinearGradientBrush>
-            </Border.Background>
-        </Border>
-
         <!-- ═══════════════════════════════════════════════════════ -->
         <!-- MAIN CONTENT -->
         <!-- ═══════════════════════════════════════════════════════ -->
@@ -628,71 +727,122 @@
             </Grid.RowDefinitions>
 
             <!-- ── TOOLBAR: PROGRAMS ── -->
-            <Border Grid.Row="0" x:Name="toolbarMain" Padding="20,14,20,14">
-                <DockPanel>
-                    <Border DockPanel.Dock="Left" Background="{DynamicResource BaseBrush}"
-                            CornerRadius="10" Width="300"
-                            BorderBrush="{DynamicResource Surface0Brush}" BorderThickness="1">
-                        <Grid>
-                            <TextBlock Text="&#xE721;" FontFamily="{StaticResource Ico}" FontSize="13"
-                                       Foreground="{DynamicResource Subtext0Brush}" Opacity="0.5"
-                                       HorizontalAlignment="Left" VerticalAlignment="Center" Margin="12,0,0,0"
-                                       IsHitTestVisible="False"/>
-                            <TextBox x:Name="txtSearch" Background="Transparent" BorderThickness="0"
-                                     Padding="34,9,12,9" TextChanged="SearchBox_TextChanged" FontSize="12.5"/>
-                        </Grid>
-                    </Border>
-                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
-                        <Border Background="{DynamicResource BaseBrush}" CornerRadius="10" Padding="14,0"
-                                Margin="0,0,10,0" VerticalAlignment="Center" Height="36"
-                                BorderBrush="{DynamicResource Surface0Brush}" BorderThickness="1">
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <TextBlock Text="&#xE7B8;" FontFamily="{StaticResource Ico}" FontSize="12"
-                                           Foreground="{DynamicResource Subtext0Brush}" Margin="0,0,8,0"
-                                           VerticalAlignment="Center" Opacity="0.6"/>
-                                <RadioButton x:Name="rbSafe" Content="Safe" GroupName="scanMode"
-                                             Foreground="{DynamicResource GreenBrush}" Margin="0,0,8,0"
-                                             VerticalAlignment="Center" FontSize="11"/>
-                                <RadioButton x:Name="rbModerate" Content="Moderate" GroupName="scanMode" IsChecked="True"
-                                             Foreground="{DynamicResource YellowBrush}" Margin="0,0,8,0"
-                                             VerticalAlignment="Center" FontSize="11"/>
-                                <RadioButton x:Name="rbAdvanced" Content="Advanced" GroupName="scanMode"
-                                             Foreground="{DynamicResource PeachBrush}"
-                                             VerticalAlignment="Center" FontSize="11"/>
+            <Border Grid.Row="0" x:Name="toolbarMain" Padding="28,22,28,16">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="18"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Installed programs" FontSize="25" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextBrush}"/>
+                            <TextBlock Text="Review software, source trust, and recovery impact before removal."
+                                       Style="{StaticResource PanelSubtitle}"/>
+                        </StackPanel>
+                        <Border Grid.Column="1" Background="{DynamicResource MantleBrush}"
+                                BorderBrush="{DynamicResource GreenBrush}" BorderThickness="1"
+                                CornerRadius="6" Padding="12,8" VerticalAlignment="Center"
+                                AutomationProperties.Name="Local-only readiness status">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE73E;" FontFamily="{StaticResource Ico}" FontSize="12"
+                                           Foreground="{DynamicResource GreenBrush}" Margin="0,0,8,0"/>
+                                <TextBlock Text="LOCAL · ON-DEVICE" FontSize="10" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource GreenBrush}"/>
                             </StackPanel>
                         </Border>
-                        <Button x:Name="btnExport" Content="Export" Click="Export_Click" Style="{DynamicResource GhostButton}" Margin="0,0,5,0"/>
-                        <Button x:Name="btnRefresh" Content="Refresh" Click="Refresh_Click" Style="{DynamicResource GhostButton}" Margin="0,0,5,0"/>
-                        <Button x:Name="btnScanLeftovers" Content="Scan Leftovers" Click="ScanLeftovers_Click" Margin="0,0,5,0"/>
-                        <Button x:Name="btnUninstall" Content="Uninstall" Click="Uninstall_Click" Style="{DynamicResource AccentButton}" Margin="0,0,5,0"/>
-                        <Button x:Name="btnBulkUninstall" Content="Uninstall Selected" Click="BulkUninstall_Click"
-                                Style="{DynamicResource DangerButton}" Margin="0,0,5,0"
-                                ToolTip="Uninstall every program with a checkbox. Silent flags applied automatically."/>
-                        <Button x:Name="btnDeleteLeftovers" Content="Delete Selected" Click="DeleteLeftovers_Click"
-                                Style="{DynamicResource DangerButton}" IsEnabled="False"/>
-                    </StackPanel>
-                </DockPanel>
+                    </Grid>
+
+                    <Grid Grid.Row="2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="280"/>
+                            <ColumnDefinition Width="14"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Background="{DynamicResource BaseBrush}"
+                                CornerRadius="7" Height="38"
+                                BorderBrush="{DynamicResource Surface1Brush}" BorderThickness="1">
+                            <Grid>
+                                <TextBlock Text="&#xE721;" FontFamily="{StaticResource Ico}" FontSize="14"
+                                           Foreground="{DynamicResource Subtext0Brush}"
+                                           HorizontalAlignment="Left" VerticalAlignment="Center" Margin="12,0,0,0"
+                                           IsHitTestVisible="False"/>
+                                <TextBlock x:Name="txtSearchHint" Text="Search apps, publishers, or sources"
+                                           Foreground="{DynamicResource Subtext0Brush}" FontSize="12"
+                                           HorizontalAlignment="Left" VerticalAlignment="Center" Margin="36,0,10,0"
+                                           IsHitTestVisible="False" Opacity="0.7"/>
+                                <TextBox x:Name="txtSearch" Background="Transparent" BorderThickness="0"
+                                         Padding="36,9,12,9" TextChanged="SearchBox_TextChanged" FontSize="12.5"
+                                         AutomationProperties.Name="Search installed programs"
+                                         AutomationProperties.HelpText="Filter by application name, publisher, source, or package ID."/>
+                            </Grid>
+                        </Border>
+
+                        <WrapPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Top">
+                            <Border Background="{DynamicResource BaseBrush}" CornerRadius="7" Padding="3"
+                                    Margin="0,0,8,8" BorderBrush="{DynamicResource Surface1Brush}" BorderThickness="1">
+                                <StackPanel Orientation="Horizontal">
+                                    <RadioButton x:Name="rbSafe" Content="Safe" GroupName="scanMode"
+                                                 Style="{StaticResource ScanModeRadio}"/>
+                                    <RadioButton x:Name="rbModerate" Content="Moderate" GroupName="scanMode"
+                                                 IsChecked="True" Style="{StaticResource ScanModeRadio}"/>
+                                    <RadioButton x:Name="rbAdvanced" Content="Advanced" GroupName="scanMode"
+                                                 Style="{StaticResource ScanModeRadio}"/>
+                                </StackPanel>
+                            </Border>
+                            <Button x:Name="btnExport" Content="Export" Click="Export_Click"
+                                    Style="{DynamicResource GhostButton}" Margin="0,0,6,8"/>
+                            <Button x:Name="btnRefresh" Content="Refresh" Click="Refresh_Click"
+                                    Style="{DynamicResource GhostButton}" Margin="0,0,6,8"/>
+                            <Button x:Name="btnScanLeftovers" Content="Scan leftovers" Click="ScanLeftovers_Click"
+                                    Margin="0,0,6,8"/>
+                            <Button x:Name="btnUninstall" Content="Uninstall" Click="Uninstall_Click"
+                                    Style="{DynamicResource AccentButton}" Margin="0,0,6,8"/>
+                            <Button x:Name="btnBulkUninstall" Content="Uninstall selected" Click="BulkUninstall_Click"
+                                    Style="{DynamicResource DangerButton}" Margin="0,0,6,8"
+                                    ToolTip="Uninstall every program with a checkbox. Silent flags applied automatically."/>
+                            <Button x:Name="btnDeleteLeftovers" Content="Delete selected" Click="DeleteLeftovers_Click"
+                                    Style="{DynamicResource DangerButton}" IsEnabled="False" Margin="0,0,0,8"
+                                    Visibility="{Binding IsEnabled, RelativeSource={RelativeSource Self}, Converter={StaticResource BoolToVis}}"/>
+                        </WrapPanel>
+                    </Grid>
+                </Grid>
             </Border>
 
             <!-- ── TOOLBAR: GENERIC ── -->
-            <Border Grid.Row="0" x:Name="toolbarGeneric" Padding="24,14,20,14" Visibility="Collapsed">
-                <DockPanel>
-                    <TextBlock x:Name="txtPanelTitle" FontSize="20" FontWeight="SemiBold"
-                               VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>
-                    <StackPanel x:Name="genericButtons" DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right"
-                                AutomationProperties.Name="Panel actions"/>
-                </DockPanel>
+            <Border Grid.Row="0" x:Name="toolbarGeneric" Padding="28,22,28,16" Visibility="Collapsed">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="12"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock x:Name="txtPanelTitle" FontSize="25" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextBrush}"/>
+                        <TextBlock x:Name="txtPanelSubtitle" Style="{StaticResource PanelSubtitle}"/>
+                    </StackPanel>
+                    <WrapPanel x:Name="genericButtons" Grid.Row="2" HorizontalAlignment="Right"
+                               VerticalAlignment="Center" AutomationProperties.Name="Panel actions"/>
+                </Grid>
             </Border>
 
             <!-- ── CONTENT CARD ── -->
-            <Border Grid.Row="1" Margin="16,2,16,0" CornerRadius="14,14,0,0" ClipToBounds="True"
-                    Background="{DynamicResource BaseBrush}">
+            <Border Grid.Row="1" Margin="20,2,20,0" CornerRadius="10,10,0,0" ClipToBounds="True"
+                    Background="{DynamicResource BaseBrush}"
+                    BorderBrush="{DynamicResource Surface0Brush}" BorderThickness="1,1,1,0">
                 <Border.Effect>
-                    <DropShadowEffect BlurRadius="30" ShadowDepth="4" Opacity="0.2" Color="#000000" Direction="270"/>
+                    <DropShadowEffect BlurRadius="18" ShadowDepth="3" Opacity="0.14" Color="#000000" Direction="270"/>
                 </Border.Effect>
                 <Grid>
                     <!-- Subtle top gradient -->
-                    <Border Height="60" VerticalAlignment="Top" IsHitTestVisible="False" CornerRadius="14,14,0,0">
+                    <Border Height="48" VerticalAlignment="Top" IsHitTestVisible="False" CornerRadius="10,10,0,0">
                         <Border.Background>
                             <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
                                 <GradientStop Color="#08FFFFFF" Offset="0"/>
@@ -702,10 +852,79 @@
                     </Border>
 
                     <!-- PROGRAMS -->
+                    <Grid Height="84" Margin="14,12,14,0" VerticalAlignment="Top" Panel.ZIndex="2"
+                          Visibility="{Binding ElementName=dgPrograms, Path=Visibility}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="10"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="10"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Style="{StaticResource MetricCard}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="38"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Width="32" Height="32" CornerRadius="6" VerticalAlignment="Center"
+                                        Background="{DynamicResource Surface0Brush}">
+                                    <TextBlock Text="&#xE71D;" FontFamily="{StaticResource Ico}" FontSize="14"
+                                               Foreground="{DynamicResource AccentBrush}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="INVENTORY" Style="{StaticResource MetricEyebrow}"/>
+                                    <TextBlock Text="{Binding ProgramCountText}" Style="{StaticResource MetricValue}"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Column="2" Style="{StaticResource MetricCard}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="38"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Width="32" Height="32" CornerRadius="6" VerticalAlignment="Center"
+                                        Background="{DynamicResource Surface0Brush}">
+                                    <TextBlock Text="&#xE74D;" FontFamily="{StaticResource Ico}" FontSize="14"
+                                               Foreground="{DynamicResource PeachBrush}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="POTENTIAL CLEANUP" Style="{StaticResource MetricEyebrow}"/>
+                                    <TextBlock Text="{Binding TotalJunkDisplay}" Style="{StaticResource MetricValue}"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Column="4" Style="{StaticResource MetricCard}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="38"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Width="32" Height="32" CornerRadius="6" VerticalAlignment="Center"
+                                        Background="{DynamicResource Surface0Brush}">
+                                    <TextBlock Text="&#xE72E;" FontFamily="{StaticResource Ico}" FontSize="14"
+                                               Foreground="{DynamicResource GreenBrush}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="DATA POSTURE" Style="{StaticResource MetricEyebrow}"/>
+                                    <TextBlock Text="Local only" Style="{StaticResource MetricValue}"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </Grid>
+
                     <DataGrid AutoGenerateColumns="False" x:Name="dgPrograms"
-                              ItemsSource="{Binding FilteredPrograms}"
-                              SelectionChanged="Programs_SelectionChanged"
-                              MouseDoubleClick="Programs_DoubleClick">
+                               ItemsSource="{Binding FilteredPrograms}"
+                               SelectionChanged="Programs_SelectionChanged"
+                               MouseDoubleClick="Programs_DoubleClick"
+                               Margin="0,96,0,0">
                         <DataGrid.RowStyle>
                             <Style TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
                                 <Style.Triggers>
@@ -737,23 +956,44 @@
                         <DataGrid.Columns>
                             <DataGridCheckBoxColumn Binding="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" Width="44"
                                                     HeaderTemplate="{StaticResource MasterCheckboxHeader}"/>
-                            <DataGridTemplateColumn Header="PROGRAM" Width="*" MinWidth="260"
+                            <DataGridTemplateColumn Header="PROGRAM" Width="*" MinWidth="220"
                                                     CellTemplate="{StaticResource IconNameCell}" SortMemberPath="DisplayName"/>
-                            <DataGridTextColumn Binding="{Binding Publisher}" Header="PUBLISHER" Width="180"/>
-                            <DataGridTextColumn Binding="{Binding DisplayVersion}" Header="VERSION" Width="105"/>
+                            <DataGridTextColumn Binding="{Binding Publisher}" Header="PUBLISHER" Width="145"/>
+                            <DataGridTextColumn Binding="{Binding DisplayVersion}" Header="VERSION" Width="96"/>
                             <DataGridTextColumn Binding="{Binding EstimatedSizeDisplay}" Header="SIZE" Width="90"/>
-                            <DataGridTextColumn Binding="{Binding InstallDateDisplay}" Header="INSTALLED" Width="105"/>
-                            <DataGridTextColumn Binding="{Binding SourceDisplay}" Header="SOURCE" Width="80"/>
-                            <DataGridTextColumn Binding="{Binding FlagsDisplay}" Header="FLAGS" Width="110"/>
-                            <DataGridTextColumn Binding="{Binding SignatureDisplay}" Header="SIGNATURE" Width="130"/>
+                            <DataGridTemplateColumn Header="SOURCE" Width="100" SortMemberPath="SourceDisplay">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Border Style="{StaticResource TableBadge}">
+                                            <TextBlock Text="{Binding SourceDisplay}" FontSize="10.5"
+                                                       Foreground="{DynamicResource SubtextBrush}"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </Border>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="TRUST" Width="138" SortMemberPath="SignatureDisplay">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
+                                                    Visibility="{Binding SignatureDisplay, Converter={StaticResource BadgeVisConverter}}">
+                                            <TextBlock Text="&#xEA18;" FontFamily="{StaticResource Ico}" FontSize="12"
+                                                       Style="{StaticResource SignatureTone}" Margin="0,0,6,0"/>
+                                            <TextBlock Text="{Binding SignatureDisplay}" FontSize="10.5"
+                                                       Style="{StaticResource SignatureTone}"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
                         </DataGrid.Columns>
                     </DataGrid>
-                    <Border Style="{StaticResource EmptyStateCard}" Panel.ZIndex="5"
+                    <Border Style="{StaticResource EmptyStateCard}" Panel.ZIndex="5" Margin="0,96,0,0"
                             AutomationProperties.Name="No installed programs shown">
                         <Border.Visibility>
                             <MultiBinding Converter="{StaticResource PanelEmptyStateVisConverter}" ConverterParameter="Programs">
                                 <Binding Path="CurrentPanel"/>
-                                <Binding Path="FilteredPrograms"/>
+                                <Binding Path="FilteredPrograms.Count"/>
                             </MultiBinding>
                         </Border.Visibility>
                         <StackPanel>
@@ -1314,7 +1554,7 @@
                         <Border.Visibility>
                             <MultiBinding Converter="{StaticResource PanelEmptyStateVisConverter}" ConverterParameter="Drivers">
                                 <Binding Path="CurrentPanel"/>
-                                <Binding Path="DriverPackages"/>
+                                <Binding Path="DriverPackages.Count"/>
                             </MultiBinding>
                         </Border.Visibility>
                         <StackPanel>
@@ -1350,7 +1590,7 @@
                         <Border.Visibility>
                             <MultiBinding Converter="{StaticResource PanelEmptyStateVisConverter}" ConverterParameter="StartupImpact">
                                 <Binding Path="CurrentPanel"/>
-                                <Binding Path="StartupImpacts"/>
+                                <Binding Path="StartupImpacts.Count"/>
                             </MultiBinding>
                         </Border.Visibility>
                         <StackPanel>
@@ -1379,7 +1619,7 @@
                         <Border.Visibility>
                             <MultiBinding Converter="{StaticResource PanelEmptyStateVisConverter}" ConverterParameter="Shortcuts">
                                 <Binding Path="CurrentPanel"/>
-                                <Binding Path="BrokenShortcuts"/>
+                                <Binding Path="BrokenShortcuts.Count"/>
                             </MultiBinding>
                         </Border.Visibility>
                         <StackPanel>
@@ -1418,7 +1658,7 @@
                         <Border.Visibility>
                             <MultiBinding Converter="{StaticResource PanelEmptyStateVisConverter}" ConverterParameter="Duplicates">
                                 <Binding Path="CurrentPanel"/>
-                                <Binding Path="DuplicateGroups"/>
+                                <Binding Path="DuplicateGroups.Count"/>
                             </MultiBinding>
                         </Border.Visibility>
                         <StackPanel>
@@ -1725,7 +1965,7 @@
                         <Border.Visibility>
                             <MultiBinding Converter="{StaticResource PanelEmptyStateVisConverter}" ConverterParameter="History">
                                 <Binding Path="CurrentPanel"/>
-                                <Binding Path="HistoryEntries"/>
+                                <Binding Path="HistoryEntries.Count"/>
                             </MultiBinding>
                         </Border.Visibility>
                         <StackPanel>
@@ -2022,15 +2262,15 @@
             <!-- ═══════════════════════════════════════════════════════ -->
             <!-- STATUS BAR -->
             <!-- ═══════════════════════════════════════════════════════ -->
-            <Border Grid.Row="2" Padding="22,7,22,9"
-                    BorderBrush="{DynamicResource Surface0Brush}" BorderThickness="0,0.5,0,0">
+            <Border Grid.Row="2" Padding="20,9,20,10" Background="{DynamicResource MantleBrush}"
+                    BorderBrush="{DynamicResource Surface0Brush}" BorderThickness="0,1,0,0">
                 <DockPanel>
-                    <ProgressBar x:Name="progressBar" Width="160" Height="3" DockPanel.Dock="Right"
-                                 Margin="16,0,0,0" VerticalAlignment="Center"
-                                 Value="{Binding OperationProgress}"
-                                 Visibility="{Binding OperationProgressVisible, Converter={StaticResource BoolToVis}}"/>
-                    <ProgressBar x:Name="busyBar" Width="160" Height="3" DockPanel.Dock="Right"
-                                 Margin="16,0,0,0" VerticalAlignment="Center" IsIndeterminate="True">
+                    <ProgressBar x:Name="progressBar" Width="140" Height="4" DockPanel.Dock="Right"
+                                  Margin="16,0,0,0" VerticalAlignment="Center"
+                                  Value="{Binding OperationProgress}"
+                                  Visibility="{Binding OperationProgressVisible, Converter={StaticResource BoolToVis}}"/>
+                    <ProgressBar x:Name="busyBar" Width="140" Height="4" DockPanel.Dock="Right"
+                                  Margin="16,0,0,0" VerticalAlignment="Center" IsIndeterminate="True">
                         <ProgressBar.Style>
                             <Style TargetType="ProgressBar" BasedOn="{StaticResource {x:Type ProgressBar}}">
                                 <Setter Property="Visibility" Value="Collapsed"/>
@@ -2047,52 +2287,67 @@
                         </ProgressBar.Style>
                     </ProgressBar>
 
-                    <!-- Dry-run + secure-delete toggles (BleachBit/PrivaZer pattern) -->
-                    <Border DockPanel.Dock="Right" CornerRadius="6" Padding="10,4" Margin="12,0,0,0"
-                            VerticalAlignment="Center" Background="{DynamicResource Surface0Brush}">
-                        <StackPanel Orientation="Horizontal">
-                            <CheckBox x:Name="chkDryRun" IsChecked="{Binding DryRunEnabled}"
-                                      VerticalAlignment="Center" ToolTip="Preview: enumerate and size items without deleting">
-                                <TextBlock Text="Dry Run" FontSize="10.5" FontWeight="Medium"
-                                           Foreground="{DynamicResource YellowBrush}" VerticalAlignment="Center"
-                                           Margin="6,0,0,0"/>
-                            </CheckBox>
-                            <CheckBox x:Name="chkSecure" IsChecked="{Binding SecureDeleteEnabled}"
-                                      VerticalAlignment="Center" Margin="14,0,0,0"
-                                      ToolTip="Overwrite file contents before unlink. Slower; no recycle-bin recovery.">
-                                <TextBlock Text="Secure Delete" FontSize="10.5" FontWeight="Medium"
-                                           Foreground="{DynamicResource RedBrush}" VerticalAlignment="Center"
-                                           Margin="6,0,0,0"/>
-                            </CheckBox>
-                        </StackPanel>
+                    <Border DockPanel.Dock="Right" CornerRadius="5" Padding="9,4" Margin="10,0,0,0"
+                            VerticalAlignment="Center" Background="{DynamicResource BaseBrush}"
+                            BorderBrush="{DynamicResource Surface1Brush}" BorderThickness="1">
+                        <CheckBox x:Name="chkSecure" IsChecked="{Binding SecureDeleteEnabled}"
+                                  VerticalAlignment="Center"
+                                  AutomationProperties.Name="Secure delete mode"
+                                  ToolTip="Overwrite file contents before unlink. Slower; no recycle-bin recovery.">
+                            <TextBlock Text="Secure delete" FontSize="10.5" FontWeight="Medium"
+                                       Foreground="{DynamicResource RedBrush}" VerticalAlignment="Center"
+                                       Margin="6,0,0,0"/>
+                        </CheckBox>
+                    </Border>
+
+                    <Border DockPanel.Dock="Right" CornerRadius="5" Padding="9,4" Margin="10,0,0,0"
+                            VerticalAlignment="Center" Background="{DynamicResource BaseBrush}"
+                            BorderBrush="{DynamicResource Surface1Brush}" BorderThickness="1">
+                        <CheckBox x:Name="chkDryRun" IsChecked="{Binding DryRunEnabled}"
+                                  VerticalAlignment="Center"
+                                  AutomationProperties.Name="Preview mode"
+                                  ToolTip="Preview: enumerate and size items without deleting">
+                            <TextBlock Text="Preview mode" FontSize="10.5" FontWeight="Medium"
+                                       Foreground="{DynamicResource YellowBrush}" VerticalAlignment="Center"
+                                       Margin="6,0,0,0"/>
+                        </CheckBox>
                     </Border>
 
                     <!-- Live progress text when an operation is running -->
-                    <Border DockPanel.Dock="Right" CornerRadius="6" Padding="10,4" Margin="12,0,0,0"
-                            VerticalAlignment="Center" Background="{DynamicResource Surface0Brush}"
+                    <Border DockPanel.Dock="Right" CornerRadius="5" Padding="9,4" Margin="10,0,0,0"
+                            VerticalAlignment="Center" Background="{DynamicResource BaseBrush}"
+                            BorderBrush="{DynamicResource Surface1Brush}" BorderThickness="1"
                             Visibility="{Binding OperationProgressVisible, Converter={StaticResource BoolToVis}}">
                         <TextBlock Text="{Binding OperationProgressText}" FontSize="10.5" FontWeight="Medium"
                                    Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center"
-                                   TextTrimming="CharacterEllipsis" MaxWidth="380"/>
+                                   TextTrimming="CharacterEllipsis" MaxWidth="300"/>
                     </Border>
 
                     <!-- Junk total badge -->
-                    <Border DockPanel.Dock="Right" CornerRadius="6" Padding="10,4" Margin="12,0,0,0"
-                            VerticalAlignment="Center" Background="{DynamicResource Surface0Brush}">
+                    <Border DockPanel.Dock="Right" CornerRadius="5" Padding="9,4" Margin="10,0,0,0"
+                            VerticalAlignment="Center" Background="{DynamicResource BaseBrush}"
+                            BorderBrush="{DynamicResource Surface1Brush}" BorderThickness="1">
                         <TextBlock Text="{Binding TotalJunkDisplay}" FontSize="10.5" FontWeight="Medium"
                                    Foreground="{DynamicResource PeachBrush}" VerticalAlignment="Center"/>
                     </Border>
 
                     <!-- Selected count badge -->
-                    <Border DockPanel.Dock="Right" CornerRadius="6" Padding="10,4" Margin="12,0,0,0"
-                            VerticalAlignment="Center" Background="{DynamicResource Surface0Brush}"
+                    <Border DockPanel.Dock="Right" CornerRadius="5" Padding="9,4" Margin="10,0,0,0"
+                            VerticalAlignment="Center" Background="{DynamicResource BaseBrush}"
+                            BorderBrush="{DynamicResource Surface1Brush}" BorderThickness="1"
                             Visibility="{Binding SelectedCountBadge, Converter={StaticResource BadgeVisConverter}}">
                         <TextBlock Text="{Binding SelectedCountBadge}" FontSize="10.5" FontWeight="Medium"
                                    Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center"/>
                     </Border>
 
-                    <TextBlock x:Name="txtStatus" Text="{Binding StatusText}" Foreground="{DynamicResource Subtext0Brush}"
-                               FontSize="11" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Opacity="0.7"/>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="&#xE73E;" FontFamily="{StaticResource Ico}" FontSize="12"
+                                   Foreground="{DynamicResource GreenBrush}" Margin="0,0,8,0"
+                                   VerticalAlignment="Center"/>
+                        <TextBlock x:Name="txtStatus" Text="{Binding StatusText}" Foreground="{DynamicResource SubtextBrush}"
+                                   FontSize="11" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                   AutomationProperties.LiveSetting="Polite"/>
+                    </StackPanel>
                 </DockPanel>
             </Border>
 
@@ -2100,10 +2355,12 @@
             <!-- TOAST NOTIFICATION -->
             <!-- ═══════════════════════════════════════════════════════ -->
             <Border x:Name="toastPanel" Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Top"
-                    Margin="0,16,24,0" Padding="16,10,20,10" CornerRadius="10" Opacity="0"
+                    Margin="0,16,24,0" Padding="16,10,20,10" CornerRadius="7" Opacity="0"
                     IsHitTestVisible="False" Panel.ZIndex="999"
                     Background="{DynamicResource MantleBrush}"
-                    BorderBrush="{DynamicResource Surface1Brush}" BorderThickness="1">
+                    BorderBrush="{DynamicResource Surface1Brush}" BorderThickness="1"
+                    AutomationProperties.Name="DeepPurge notification"
+                    AutomationProperties.LiveSetting="Polite">
                 <Border.Effect>
                     <DropShadowEffect BlurRadius="24" ShadowDepth="4" Opacity="0.35" Color="#000000"/>
                 </Border.Effect>
@@ -2137,27 +2394,30 @@
 
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                     <!-- Logo icon with glow -->
-                    <Border Width="72" Height="72" CornerRadius="20" HorizontalAlignment="Center" Margin="0,0,0,32">
+                    <Border Width="68" Height="68" CornerRadius="16" HorizontalAlignment="Center" Margin="0,0,0,28">
                         <Border.Background>
                             <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
                                 <GradientStop Color="{DynamicResource AccentColor}" Offset="0"/>
-                                <GradientStop Color="{DynamicResource MauveColor}" Offset="1"/>
+                                <GradientStop Color="{DynamicResource TealColor}" Offset="1"/>
                             </LinearGradientBrush>
                         </Border.Background>
                         <Border.Effect>
-                            <DropShadowEffect Color="{DynamicResource AccentColor}" BlurRadius="40" ShadowDepth="0" Opacity="0.35"/>
+                            <DropShadowEffect Color="{DynamicResource AccentColor}" BlurRadius="24" ShadowDepth="0" Opacity="0.22"/>
                         </Border.Effect>
-                        <TextBlock Text="&#xE74D;" FontFamily="{StaticResource Ico}" FontSize="30" Foreground="#FFFFFF"
+                        <TextBlock Text="&#xE74D;" FontFamily="{StaticResource Ico}" FontSize="28"
+                                   Foreground="{StaticResource ActionForegroundBrush}"
                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
 
                     <!-- App name -->
-                    <TextBlock Text="DeepPurge" FontSize="28" FontWeight="Bold"
+                    <TextBlock Text="DeepPurge" FontSize="27" FontWeight="Bold"
                                Foreground="{DynamicResource TextBrush}" HorizontalAlignment="Center" Margin="0,0,0,6"/>
-                    <TextBlock FontSize="11" FontWeight="Medium"
-                               Foreground="{DynamicResource Subtext0Brush}" HorizontalAlignment="Center" Margin="0,0,0,28"
-                               Opacity="0.5"
-                               Text="{Binding AppVersionDisplay, StringFormat=v{0}}"/>
+                    <TextBlock Text="LOCAL SYSTEM CARE" FontSize="9.5" FontWeight="SemiBold"
+                               Foreground="{DynamicResource Subtext0Brush}" HorizontalAlignment="Center"
+                               Margin="0,0,0,4" Opacity="0.72"/>
+                    <TextBlock FontSize="10.5" FontWeight="Medium"
+                               Foreground="{DynamicResource Subtext0Brush}" HorizontalAlignment="Center" Margin="0,0,0,26"
+                               Opacity="0.5" Text="{Binding AppVersionDisplay, StringFormat=v{0}}"/>
 
                     <!-- Status text -->
                     <TextBlock Text="{Binding ScanOverlayText}" FontSize="14" FontWeight="Medium"
