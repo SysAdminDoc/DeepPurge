@@ -264,6 +264,62 @@ public class WpfPolishContractTests
             "Replace with inline risk preview via status text and dry-run affordances.");
     }
 
+    [Fact]
+    public void Operations_console_shell_keeps_the_reimagined_visual_contract()
+    {
+        var root = FindRepoRoot();
+        var app = File.ReadAllText(Path.Combine(root, "src", "DeepPurge.App", "App.xaml"));
+        var themeManager = File.ReadAllText(Path.Combine(root, "src", "DeepPurge.App", "ThemeManager.cs"));
+        var baseStyles = File.ReadAllText(Path.Combine(root, "src", "DeepPurge.App", "Themes", "BaseStyles.xaml"));
+        var xaml = File.ReadAllText(Path.Combine(root, "src", "DeepPurge.App", "Views", "MainWindow.xaml"));
+        var codeBehind = File.ReadAllText(Path.Combine(root, "src", "DeepPurge.App", "Views", "MainWindow.xaml.cs"));
+
+        Assert.Contains("DeepPurgeSlate.xaml", app);
+        Assert.Contains("DeepPurge Slate", themeManager);
+        Assert.Contains("LOCAL SYSTEM CARE", xaml);
+        Assert.Contains("Search apps, publishers, or sources", xaml);
+        Assert.Contains("x:Key=\"MetricCard\"", xaml);
+        Assert.Contains("x:Name=\"txtPanelSubtitle\"", xaml);
+        Assert.Contains("POTENTIAL CLEANUP", xaml);
+        Assert.Contains("Uninstall selected", xaml);
+        Assert.Contains("Path=\"FilteredPrograms.Count\"", xaml);
+        Assert.Contains("Visibility=\"{Binding IsEnabled, RelativeSource={RelativeSource Self}, Converter={StaticResource BoolToVis}}\"", xaml);
+        Assert.Contains("int count => count > 0", File.ReadAllText(
+            Path.Combine(root, "src", "DeepPurge.App", "Converters", "SafeListConverters.cs")));
+        Assert.Contains("x:Name=\"navForced\"", xaml);
+        Assert.Contains("navForced.IsChecked = true;", codeBehind);
+        Assert.Contains("AutomationProperties.LiveSetting=\"Polite\"", xaml);
+        Assert.Contains("PanelDescriptions", codeBehind);
+        Assert.Contains("ActionForegroundBrush", baseStyles);
+        Assert.Contains("DangerForegroundBrush", baseStyles);
+    }
+
+    [Fact]
+    public void Filled_action_buttons_keep_wcag_normal_text_contrast_in_every_theme()
+    {
+        var root = FindRepoRoot();
+        var baseStyles = LoadXml(Path.Combine(root, "src", "DeepPurge.App", "Themes", "BaseStyles.xaml"));
+        var colorsDirectory = Path.Combine(root, "src", "DeepPurge.App", "Themes", "Colors");
+
+        var actionInk = ParseRgb(ResourceValue(baseStyles, "ActionForegroundBrush"));
+        var dangerInk = ParseRgb(ResourceValue(baseStyles, "DangerForegroundBrush"));
+        var failures = new List<string>();
+
+        foreach (var themePath in Directory.EnumerateFiles(colorsDirectory, "*.xaml"))
+        {
+            var theme = LoadXml(themePath);
+            var accentRatio = ContrastRatio(actionInk, ParseRgb(ResourceValue(theme, "AccentColor")));
+            var dangerRatio = ContrastRatio(dangerInk, ParseRgb(ResourceValue(theme, "RedColor")));
+
+            if (accentRatio < 4.5)
+                failures.Add($"{Path.GetFileName(themePath)} accent contrast is {accentRatio:F2}:1");
+            if (dangerRatio < 4.5)
+                failures.Add($"{Path.GetFileName(themePath)} danger contrast is {dangerRatio:F2}:1");
+        }
+
+        Assert.Empty(failures);
+    }
+
     private static string FindRepoRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
@@ -278,6 +334,48 @@ public class WpfPolishContractTests
     }
 
     private static XDocument LoadXml(string path) => XDocument.Parse(File.ReadAllText(path), LoadOptions.PreserveWhitespace);
+
+    private static string ResourceValue(XDocument document, string key)
+    {
+        var resource = document.Descendants()
+            .Single(e => AttributeValue(e, "Key") == key);
+        return resource.Name.LocalName == "SolidColorBrush"
+            ? AttributeValue(resource, "Color")
+            : resource.Value.Trim();
+    }
+
+    private static (double R, double G, double B) ParseRgb(string hex)
+    {
+        var value = hex.TrimStart('#');
+        if (value.Length == 8)
+            value = value[2..];
+
+        return (
+            Convert.ToInt32(value[0..2], 16) / 255d,
+            Convert.ToInt32(value[2..4], 16) / 255d,
+            Convert.ToInt32(value[4..6], 16) / 255d);
+    }
+
+    private static double ContrastRatio(
+        (double R, double G, double B) first,
+        (double R, double G, double B) second)
+    {
+        var lighter = Math.Max(RelativeLuminance(first), RelativeLuminance(second));
+        var darker = Math.Min(RelativeLuminance(first), RelativeLuminance(second));
+        return (lighter + 0.05) / (darker + 0.05);
+    }
+
+    private static double RelativeLuminance((double R, double G, double B) color)
+    {
+        static double Linearize(double channel)
+            => channel <= 0.04045
+                ? channel / 12.92
+                : Math.Pow((channel + 0.055) / 1.055, 2.4);
+
+        return (0.2126 * Linearize(color.R)) +
+               (0.7152 * Linearize(color.G)) +
+               (0.0722 * Linearize(color.B));
+    }
 
     private static string AttributeValue(XElement element, string name)
         => element.Attributes().FirstOrDefault(a => a.Name.LocalName == name)?.Value ?? "";
