@@ -98,30 +98,51 @@ public static class JunkFilesCleaner
 
         long freed = 0;
         int cleaned = 0, skipped = 0;
+        var skippedReasons = new List<string>();
 
         for (int i = 0; i < all.Count; i++)
         {
             ct.ThrowIfCancellationRequested();
             var file = all[i];
 
-            if (!SafetyGuard.IsJunkPathSafeToDelete(file.Path))
+            void Skip(string reason)
             {
                 skipped++;
+                skippedReasons.Add(FormatSkippedReason(reason, file.Path));
                 progress?.Report(new DeleteProgress(
                     i + 1, all.Count, freed, file.Path, Skipped: true));
+            }
+
+            if (!SafetyGuard.IsJunkPathSafeToDelete(file.Path))
+            {
+                Skip("Unsafe path");
                 continue;
             }
 
             if (options.MinAgeDays > 0 && IsTooRecent(file.Path, options.MinAgeDays))
             {
-                skipped++;
-                progress?.Report(new DeleteProgress(
-                    i + 1, all.Count, freed, file.Path, Skipped: true));
+                Skip("Too recent");
+                continue;
+            }
+
+            if (file.IsDirectory && Directory.Exists(file.Path) &&
+                Safety.SafetyGuard.IsReparsePoint(file.Path))
+            {
+                Skip("Reparse point");
                 continue;
             }
 
             if (options.DryRun)
             {
+                var exists = file.IsDirectory
+                    ? Directory.Exists(file.Path)
+                    : File.Exists(file.Path);
+                if (!exists)
+                {
+                    Skip("Missing");
+                    continue;
+                }
+
                 freed += file.Size;
                 cleaned++;
                 progress?.Report(new DeleteProgress(
@@ -131,29 +152,57 @@ public static class JunkFilesCleaner
 
             try
             {
-                if (file.IsDirectory && Directory.Exists(file.Path))
+                if (file.IsDirectory)
                 {
-                    if (Safety.SafetyGuard.IsReparsePoint(file.Path)) { skipped++; continue; }
-                    if (options.SecureDelete) SecureDelete.WipeDirectory(file.Path);
-                    else Safety.SafetyGuard.SafeDeleteDirectory(file.Path);
+                    if (!Directory.Exists(file.Path))
+                    {
+                        Skip("Missing");
+                        continue;
+                    }
+                    var deleted = options.SecureDelete
+                        ? SecureDelete.WipeDirectory(file.Path)
+                        : Safety.SafetyGuard.SafeDeleteDirectory(file.Path);
+                    if (!deleted)
+                    {
+                        Skip("Delete failed");
+                        continue;
+                    }
+
                     freed += file.Size;
                     cleaned++;
                 }
-                else if (File.Exists(file.Path))
+                else
                 {
-                    if (options.SecureDelete) SecureDelete.Wipe(file.Path);
-                    else Safety.SafetyGuard.SafeDeleteFile(file.Path);
+                    if (!File.Exists(file.Path))
+                    {
+                        Skip("Missing");
+                        continue;
+                    }
+
+                    var deleted = options.SecureDelete
+                        ? SecureDelete.Wipe(file.Path)
+                        : Safety.SafetyGuard.SafeDeleteFile(file.Path);
+                    if (!deleted)
+                    {
+                        Skip("Delete failed");
+                        continue;
+                    }
+
                     freed += file.Size;
                     cleaned++;
                 }
             }
-            catch { skipped++; }
+            catch (Exception ex)
+            {
+                Skip($"Error: {ex.Message}");
+                continue;
+            }
 
             progress?.Report(new DeleteProgress(
                 i + 1, all.Count, freed, file.Path, Skipped: false));
         }
 
-        return new DeleteSummary(cleaned, skipped, freed, options.DryRun);
+        return new DeleteSummary(cleaned, skipped, freed, options.DryRun, skippedReasons);
     }
 
     // ─── SYSTEM TEMP ───
@@ -763,4 +812,7 @@ public static class JunkFilesCleaner
         }
         catch { return false; }
     }
+
+    private static string FormatSkippedReason(string reason, string path)
+        => PrivacyRedactor.RedactPaths($"{reason}: {path}");
 }

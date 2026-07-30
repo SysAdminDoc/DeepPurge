@@ -44,11 +44,27 @@ public readonly record struct DeleteProgress(
 /// Aggregate result of a deletion pipeline. Carries <see cref="DryRun"/> so
 /// the UI can tell the user "would have freed X" vs "freed X".
 /// </summary>
-public readonly record struct DeleteSummary(
-    int ItemsDeleted,
-    int ItemsSkipped,
-    long BytesFreed,
-    bool DryRun)
+public readonly record struct DeleteSummary
 {
+    public int ItemsDeleted { get; init; }
+    public int ItemsSkipped { get; init; }
+    public long BytesFreed { get; init; }
+    public bool DryRun { get; init; }
+    public IReadOnlyList<string> SkippedReasons { get; init; }
+
+    public DeleteSummary(
+        int itemsDeleted,
+        int itemsSkipped,
+        long bytesFreed,
+        bool dryRun,
+        IReadOnlyList<string>? skippedReasons = null)
+    {
+        ItemsDeleted = itemsDeleted;
+        ItemsSkipped = itemsSkipped;
+        BytesFreed = bytesFreed;
+        DryRun = dryRun;
+        SkippedReasons = skippedReasons ?? Array.Empty<string>();
+    }
+
     public static DeleteSummary Empty => new(0, 0, 0, false);
 }

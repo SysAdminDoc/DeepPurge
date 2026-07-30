@@ -540,9 +540,10 @@ public partial class MainViewModel : ObservableObject
                 JunkFilesCleaner.DeleteJunkSafe(list, options, progress, ct), ct);
 
             var verb = summary.DryRun ? "Would free" : "Freed";
-            var skip = summary.ItemsSkipped > 0 ? $", {summary.ItemsSkipped} skipped" : "";
-            StatusText = $"{verb} {FormatSize(summary.BytesFreed)} of disk space ({summary.ItemsDeleted} items{skip})";
+            var finalStatus = $"{verb} {FormatSize(summary.BytesFreed)} of disk space ({summary.ItemsDeleted} items{BuildSkippedSuffix(summary)})";
             if (!summary.DryRun) await ScanJunkAsync();
+            StatusText = finalStatus;
+            RecordCleanupSkippedReasons("junk", summary);
         }
         finally
         {
@@ -580,8 +581,10 @@ public partial class MainViewModel : ObservableObject
                 EvidenceRemover.CleanTracesSafe(list, options, progress, ct), ct);
 
             var verb = summary.DryRun ? "Would clean" : "Cleaned";
-            StatusText = $"{verb} {summary.ItemsDeleted} trace items, {FormatSize(summary.BytesFreed)}";
+            var finalStatus = $"{verb} {summary.ItemsDeleted} trace items, {FormatSize(summary.BytesFreed)}{BuildSkippedSuffix(summary)}";
             if (!summary.DryRun) await ScanEvidenceAsync();
+            StatusText = finalStatus;
+            RecordCleanupSkippedReasons("evidence", summary);
         }
         finally
         {
@@ -1169,6 +1172,35 @@ public partial class MainViewModel : ObservableObject
                 : p.CurrentItem.Length > 60 ? "…" + p.CurrentItem[^60..] : p.CurrentItem;
             OperationProgressText = $"{verb} {p.ItemsProcessed}/{p.ItemsTotal} · {short_}";
         });
+    }
+
+    private static string BuildSkippedSuffix(DeleteSummary summary)
+    {
+        if (summary.ItemsSkipped <= 0) return "";
+
+        var first = summary.SkippedReasons.FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(first))
+            return $", {summary.ItemsSkipped} skipped";
+
+        return $", {summary.ItemsSkipped} skipped; first: {TrimStatusDetail(first)}";
+    }
+
+    private static string TrimStatusDetail(string value)
+        => value.Length <= 140 ? value : value[..137] + "...";
+
+    private static void RecordCleanupSkippedReasons(string operation, DeleteSummary summary)
+    {
+        if (summary.ItemsSkipped <= 0) return;
+
+        var detail = summary.SkippedReasons.Count > 0
+            ? string.Join(" | ", summary.SkippedReasons.Take(5))
+            : "No reason captured";
+        ActivityLog.Record(
+            operation,
+            $"{summary.ItemsSkipped} skipped; {detail}",
+            summary.BytesFreed,
+            summary.ItemsSkipped,
+            summary.DryRun);
     }
 
     /// <summary>
