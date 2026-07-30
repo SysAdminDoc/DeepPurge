@@ -1,5 +1,6 @@
 using DeepPurge.Core.Diagnostics;
 using DeepPurge.Core.Execution;
+using DeepPurge.Core.Packages;
 using DeepPurge.Core.Safety;
 
 namespace DeepPurge.Core.Repair;
@@ -91,13 +92,16 @@ public class WindowsRepairEngine
         RepairOperation.DismComponentCleanup => LongRepairCommand("DISM.exe", "/Online", "/Cleanup-Image", "/StartComponentCleanup"),
         RepairOperation.DismResetBase => LongRepairCommand("DISM.exe", "/Online", "/Cleanup-Image", "/StartComponentCleanup", "/ResetBase"),
         RepairOperation.ChkDsk => LongRepairCommand("chkdsk.exe", Path.GetPathRoot(Environment.SystemDirectory)?.TrimEnd('\\') ?? "C:", "/scan"),
-        RepairOperation.WingetRepair => LongRepairCommand("winget.exe", "repair", SanitizeToken(extra), "--silent"),
+        RepairOperation.WingetRepair => PackageManagerExecutableResolver.CreateCommand(
+            "winget",
+            new[] { "repair", SanitizeToken(extra), "--silent" },
+            TimeSpan.FromHours(2)),
         RepairOperation.MsiRepair => LongRepairCommand("msiexec.exe", "/fa", SanitizeProductCode(extra), "/qn"),
         _ => throw new ArgumentOutOfRangeException(nameof(op)),
     };
 
     private static ExternalProcessCommand LongRepairCommand(string fileName, params string[] args)
-        => new(fileName)
+        => new(WindowsExecutableResolver.ResolveSystemHelper(fileName))
         {
             Arguments = args,
             Timeout = TimeSpan.FromHours(2),
@@ -188,7 +192,14 @@ public class WindowsRepairEngine
         }
 
         log.Report($"Removed {removed} cache file(s). Restarting Explorer...");
-        try { Process.Start(new ProcessStartInfo("explorer.exe") { UseShellExecute = true }); }
+        try
+        {
+            Process.Start(new ProcessStartInfo(
+                WindowsExecutableResolver.ResolveSystemHelper("explorer.exe"))
+            {
+                UseShellExecute = true,
+            });
+        }
         catch (Exception ex)
         {
             log.Report($"restart explorer: {ex.Message}");

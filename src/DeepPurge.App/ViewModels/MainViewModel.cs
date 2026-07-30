@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using DeepPurge.Core.App;
 using DeepPurge.Core.Browsers;
 using DeepPurge.Core.Export;
+using DeepPurge.Core.Execution;
 using DeepPurge.Core.FileSystem;
 using DeepPurge.Core.Diagnostics;
 using DeepPurge.App.Icons;
@@ -1230,9 +1231,7 @@ public partial class MainViewModel : ObservableObject
         {
             Process.Start(new ProcessStartInfo
             {
-                FileName = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.Windows),
-                    "explorer.exe"),
+                FileName = WindowsExecutableResolver.ResolveSystemHelper("explorer.exe"),
                 Arguments = dir,
                 UseShellExecute = true,
             });

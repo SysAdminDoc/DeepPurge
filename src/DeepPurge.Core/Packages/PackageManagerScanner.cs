@@ -1,4 +1,5 @@
 using System.Text;
+using DeepPurge.Core.App;
 using DeepPurge.Core.Diagnostics;
 using DeepPurge.Core.Execution;
 using DeepPurge.Core.Models;
@@ -141,7 +142,7 @@ public static class PackageManagerScanner
     {
         try
         {
-            var jsonOutput = RunProcess("winget.exe",
+            var jsonOutput = RunPackageManager("winget",
                 new[] { "list", "--disable-interactivity", "--accept-source-agreements", "--output", "json" }, ct);
             if (!string.IsNullOrWhiteSpace(jsonOutput) && jsonOutput.TrimStart().StartsWith('['))
                 return ParseWingetJson(jsonOutput);
@@ -150,7 +151,7 @@ public static class PackageManagerScanner
 
         try
         {
-            var tableOutput = RunProcess("winget.exe",
+            var tableOutput = RunPackageManager("winget",
                 new[] { "list", "--disable-interactivity", "--accept-source-agreements" }, ct);
             if (!string.IsNullOrWhiteSpace(tableOutput)) return ParseWingetTable(tableOutput);
         }
@@ -263,7 +264,7 @@ public static class PackageManagerScanner
         // CLI is on PATH. Prefer the filesystem — it's faster, doesn't spawn
         // a process, and works even when the scoop shim is broken.
         var scoopRoot = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            UserIdentity.RealProfilePath,
             "scoop", "apps");
 
         if (!Directory.Exists(scoopRoot)) return result;
@@ -323,7 +324,7 @@ public static class PackageManagerScanner
     {
         try
         {
-            var output = RunProcess("choco.exe",
+            var output = RunPackageManager("chocolatey",
                 new[] { "list", "--local-only", "--limit-output", "--no-color" }, ct);
             if (!string.IsNullOrWhiteSpace(output))
                 return ParseChocolateyLimitOutput(output);
@@ -359,42 +360,68 @@ public static class PackageManagerScanner
 
     private static PackageSourceHealth CheckWingetHealth(CancellationToken ct)
     {
-        var version = RunProcessDetailed("winget.exe", new[] { "--version" }, ct, timeoutMs: 5_000);
-        if (!version.Started)
-            return new("winget", SelfTestStatus.Warn, "Not on PATH", "", "", 0, version.Error,
-                "Install Microsoft App Installer or run winget from an account where it is on PATH.");
+        var location = PackageManagerExecutableResolver.Resolve("winget");
+        if (!location.Exists)
+            return new(
+                "winget",
+                SelfTestStatus.Warn,
+                "Not found at the original user's App Execution Alias",
+                "",
+                location.ExecutablePath,
+                0,
+                "resolved alias missing",
+                "Install Microsoft App Installer for the desktop user, then verify its winget App Execution Alias is enabled.");
+
+        var version = RunPackageManagerDetailed("winget", new[] { "--version" }, ct, timeoutMs: 5_000);
+        if (!version.Started || version.ExitCode != 0)
+            return new("winget", SelfTestStatus.Warn, "Not found at the original user's App Execution Alias", "", location.ExecutablePath, 0, version.Error,
+                "Install Microsoft App Installer for the desktop user, then verify its winget App Execution Alias is enabled.");
 
         var versionText = FirstLine(version.OutputAndError);
-        var json = RunProcessDetailed("winget.exe",
+        var json = RunPackageManagerDetailed("winget",
             new[] { "list", "--disable-interactivity", "--accept-source-agreements", "--output", "json" }, ct, timeoutMs: 10_000);
         if (!string.IsNullOrWhiteSpace(json.Output) && json.Output.TrimStart().StartsWith('['))
         {
             var entries = ParseWingetJson(json.Output);
-            return new("winget", SelfTestStatus.Ok, $"{entries.Count} package(s) via JSON list", versionText, "", entries.Count, "JSON list parsed");
+            return new("winget", SelfTestStatus.Ok, $"{entries.Count} package(s) via JSON list; {location.ExecutionContext}", versionText, location.ExecutablePath, entries.Count, "JSON list parsed");
         }
 
-        var table = RunProcessDetailed("winget.exe",
+        var table = RunPackageManagerDetailed("winget",
             new[] { "list", "--disable-interactivity", "--accept-source-agreements" }, ct, timeoutMs: 10_000);
         if (!string.IsNullOrWhiteSpace(table.Output))
         {
             var entries = ParseWingetTable(table.Output);
             if (entries.Count > 0 || table.Output.Contains("Name", StringComparison.OrdinalIgnoreCase))
-                return new("winget", SelfTestStatus.Ok, $"{entries.Count} package(s) via table list", versionText, "", entries.Count, "table list parsed");
+                return new("winget", SelfTestStatus.Ok, $"{entries.Count} package(s) via table list; {location.ExecutionContext}", versionText, location.ExecutablePath, entries.Count, "table list parsed");
         }
 
         var detail = Shorten(json.OutputAndError.Length > 0 ? json.OutputAndError : table.OutputAndError);
-        return new("winget", SelfTestStatus.Warn, "Installed, but list output could not be parsed", versionText, "", 0, detail,
+        return new("winget", SelfTestStatus.Warn, $"Installed, but list output could not be parsed; {location.ExecutionContext}", versionText, location.ExecutablePath, 0, detail,
             "Run `winget source update`, then retry `winget list --disable-interactivity --accept-source-agreements`.");
     }
 
     private static PackageSourceHealth CheckScoopHealth(CancellationToken ct)
     {
+        var location = PackageManagerExecutableResolver.Resolve("scoop");
         var root = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            UserIdentity.RealProfilePath,
             "scoop", "apps");
-        var version = RunProcessDetailed("cmd.exe", new[] { "/d", "/c", "scoop", "--version" }, ct, timeoutMs: 5_000);
-        var versionText = version.Started ? FirstLine(version.OutputAndError) : "";
-        return InspectScoopRoot(root, versionText);
+        var version = location.Exists
+            ? RunPackageManagerDetailed("scoop", new[] { "--version" }, ct, timeoutMs: 5_000)
+            : new ProcessProbeResult(
+                Started: false,
+                ExitCode: -1,
+                Output: "",
+                Error: "Scoop command script not found.",
+                TimedOut: false);
+        var versionText = location.Exists && version.ExitCode == 0
+            ? FirstLine(version.OutputAndError)
+            : "";
+        var health = InspectScoopRoot(root, versionText);
+        return health with
+        {
+            Detail = $"{health.Detail}; command {location.ExecutablePath}; {location.ExecutionContext}",
+        };
     }
 
     public static PackageSourceHealth InspectScoopRoot(string scoopAppsRoot, string version = "")
@@ -421,21 +448,33 @@ public static class PackageManagerScanner
 
     private static PackageSourceHealth CheckChocolateyHealth(CancellationToken ct)
     {
-        var version = RunProcessDetailed("choco.exe", new[] { "--version" }, ct, timeoutMs: 5_000);
-        if (!version.Started)
-            return new("chocolatey", SelfTestStatus.Warn, "Not on PATH", "", "", 0, version.Error,
-                "Install Chocolatey or verify choco.exe is on PATH.");
+        var location = PackageManagerExecutableResolver.Resolve("chocolatey");
+        if (!location.Exists)
+            return new(
+                "chocolatey",
+                SelfTestStatus.Warn,
+                "Not found in a known Chocolatey installation root",
+                "",
+                location.ExecutablePath,
+                0,
+                "resolved executable missing",
+                "Install Chocolatey for the desktop user or set ChocolateyInstall to its absolute installation root.");
 
-        var output = RunProcessDetailed("choco.exe",
+        var version = RunPackageManagerDetailed("chocolatey", new[] { "--version" }, ct, timeoutMs: 5_000);
+        if (!version.Started || version.ExitCode != 0)
+            return new("chocolatey", SelfTestStatus.Warn, "Not found in a known Chocolatey installation root", "", location.ExecutablePath, 0, version.Error,
+                "Install Chocolatey for the desktop user or set ChocolateyInstall to its absolute installation root.");
+
+        var output = RunPackageManagerDetailed("chocolatey",
             new[] { "list", "--local-only", "--limit-output", "--no-color" }, ct, timeoutMs: 10_000);
         if (output.ExitCode == 0 && !string.IsNullOrWhiteSpace(output.Output))
         {
             var entries = ParseChocolateyLimitOutput(output.Output);
-            return new("chocolatey", SelfTestStatus.Ok, $"{entries.Count} package(s) via choco list", FirstLine(version.OutputAndError), "", entries.Count, "limit-output parsed");
+            return new("chocolatey", SelfTestStatus.Ok, $"{entries.Count} package(s) via choco list; {location.ExecutionContext}", FirstLine(version.OutputAndError), location.ExecutablePath, entries.Count, "limit-output parsed");
         }
 
-        return new("chocolatey", SelfTestStatus.Warn, "Installed, but local package list failed", FirstLine(version.OutputAndError), "", 0, Shorten(output.OutputAndError),
-            "Run `choco list --local-only --limit-output --no-color` in an elevated shell and inspect the error.");
+        return new("chocolatey", SelfTestStatus.Warn, $"Installed, but local package list failed; {location.ExecutionContext}", FirstLine(version.OutputAndError), location.ExecutablePath, 0, Shorten(output.OutputAndError),
+            "Run `choco list --local-only --limit-output --no-color` as the affected desktop user and inspect the error.");
     }
 
     private static Dictionary<string, InstalledProgram> BuildNameLookup(IList<InstalledProgram> programs)
@@ -490,19 +529,17 @@ public static class PackageManagerScanner
         return value.Length <= max ? value : value[..max] + "...";
     }
 
-    private static ProcessProbeResult RunProcessDetailed(
-        string exe,
+    private static ProcessProbeResult RunPackageManagerDetailed(
+        string packageManager,
         IReadOnlyList<string> args,
         CancellationToken ct,
         int timeoutMs)
     {
-        var result = ExternalProcessRunner.Run(new ExternalProcessCommand(exe)
-        {
-            Arguments = args,
-            Timeout = TimeSpan.FromMilliseconds(timeoutMs),
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
-        }, ct: ct);
+        var command = PackageManagerExecutableResolver.CreateCommand(
+            packageManager,
+            args,
+            TimeSpan.FromMilliseconds(timeoutMs));
+        var result = ExternalProcessRunner.Run(command, ct: ct);
 
         return new(
             result.Started,
@@ -512,20 +549,21 @@ public static class PackageManagerScanner
             result.TimedOut);
     }
 
-    private static string RunProcess(string exe, IReadOnlyList<string> args, CancellationToken ct)
+    private static string RunPackageManager(
+        string packageManager,
+        IReadOnlyList<string> args,
+        CancellationToken ct)
     {
-        var result = ExternalProcessRunner.Run(new ExternalProcessCommand(exe)
-        {
-            Arguments = args,
-            Timeout = TimeSpan.FromMilliseconds(ProcessTimeoutMs),
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
-        }, ct: ct);
+        var command = PackageManagerExecutableResolver.CreateCommand(
+            packageManager,
+            args,
+            TimeSpan.FromMilliseconds(ProcessTimeoutMs));
+        var result = ExternalProcessRunner.Run(command, ct: ct);
         ct.ThrowIfCancellationRequested();
         if (result.TimedOut)
-            Log.Warn($"{exe} timed out after {ProcessTimeoutMs} ms");
+            Log.Warn($"{packageManager} timed out after {ProcessTimeoutMs} ms");
         if (!result.Started && result.StartError is not null)
-            Log.Warn($"{exe} failed to start: {result.StartError}");
+            Log.Warn($"{packageManager} failed to start: {result.StartError}");
         return result.Output;
     }
 }

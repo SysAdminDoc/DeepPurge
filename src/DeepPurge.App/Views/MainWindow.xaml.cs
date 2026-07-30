@@ -9,6 +9,7 @@ using System.Windows.Threading;
 using DeepPurge.App.Tray;
 using DeepPurge.App.ViewModels;
 using DeepPurge.Core.Browsers;
+using DeepPurge.Core.Execution;
 using DeepPurge.Core.Export;
 using DeepPurge.Core.FileSystem;
 using DeepPurge.Core.Models;
@@ -1206,7 +1207,7 @@ public partial class MainWindow : Window
         {
             var psi = new ProcessStartInfo
             {
-                FileName = fileName,
+                FileName = WindowsExecutableResolver.ResolveShellTarget(fileName),
                 Arguments = args ?? "",
                 UseShellExecute = true,
             };
@@ -1369,7 +1370,7 @@ public partial class MainWindow : Window
     /// Only meaningful when <see cref="InstalledProgram.UpgradeAvailable"/> is populated
     /// by <c>PackageManagerScanner</c>; otherwise we offer to run a search anyway.
     /// </summary>
-    private void Ctx_WingetUpgrade_Click(object sender, RoutedEventArgs e)
+    private async void Ctx_WingetUpgrade_Click(object sender, RoutedEventArgs e)
     {
         if (dgPrograms.SelectedItem is not InstalledProgram p) return;
 
@@ -1381,9 +1382,15 @@ public partial class MainWindow : Window
 
         try
         {
-            var psi = PackageManagerCommandBuilder.CreateWingetUpgradeStartInfo(p.PackageId);
-            Process.Start(psi);
-            ShowToast($"Launching winget upgrade for {p.DisplayName}");
+            var command = PackageManagerCommandBuilder.CreateWingetUpgradeCommand(p.PackageId);
+            ShowToast($"Running winget as the desktop user for {p.DisplayName}");
+            var result = await ExternalProcessRunner.RunAsync(command);
+            if (result.Success)
+                ShowToast($"winget upgrade completed for {p.DisplayName}");
+            else
+                ShowToast(
+                    $"winget upgrade failed: {result.StartError ?? result.Status.ToString()}",
+                    isError: true);
         }
         catch (ArgumentException)
         {

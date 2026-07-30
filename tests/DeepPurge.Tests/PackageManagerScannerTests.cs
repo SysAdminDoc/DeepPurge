@@ -107,11 +107,18 @@ public class PackageManagerScannerTests
     [InlineData("Some-Publisher.App_2")]
     public void Winget_upgrade_builder_accepts_normal_ids(string packageId)
     {
-        var psi = PackageManagerCommandBuilder.CreateWingetUpgradeStartInfo(packageId);
+        var command = PackageManagerCommandBuilder.CreateWingetUpgradeCommand(packageId);
+        var psi = command.ToStartInfo();
 
-        Assert.Equal("winget.exe", psi.FileName);
-        Assert.True(psi.UseShellExecute);
-        Assert.DoesNotContain("cmd", psi.FileName, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(
+            PackageManagerExecutableResolver.Resolve("winget").ExecutablePath,
+            psi.FileName);
+        Assert.True(Path.IsPathFullyQualified(psi.FileName));
+        Assert.False(psi.UseShellExecute);
+        Assert.Equal(
+            DeepPurge.Core.Execution.ExternalProcessExecutionContext.OriginalInteractiveUser,
+            command.ExecutionContext);
+        Assert.Equal(Environment.SystemDirectory, command.WorkingDirectory);
         Assert.Equal(new[]
         {
             "upgrade",
@@ -127,14 +134,20 @@ public class PackageManagerScannerTests
     [Fact]
     public void Native_uninstall_builder_uses_winget_id_exact()
     {
-        var psi = PackageManagerCommandBuilder.CreateNativeUninstallStartInfo(
+        var command = PackageManagerCommandBuilder.CreateNativeUninstallCommand(
             "winget",
             "Microsoft.PowerToys",
             silent: true);
+        var psi = command.ToStartInfo();
 
-        Assert.Equal("winget.exe", psi.FileName);
+        Assert.Equal(
+            PackageManagerExecutableResolver.Resolve("winget").ExecutablePath,
+            psi.FileName);
         Assert.False(psi.UseShellExecute);
-        Assert.DoesNotContain("cmd", psi.FileName, StringComparison.OrdinalIgnoreCase);
+        Assert.True(Path.IsPathFullyQualified(psi.FileName));
+        Assert.Equal(
+            DeepPurge.Core.Execution.ExternalProcessExecutionContext.OriginalInteractiveUser,
+            command.ExecutionContext);
         Assert.Equal(new[]
         {
             "uninstall",
@@ -149,28 +162,52 @@ public class PackageManagerScannerTests
     }
 
     [Fact]
-    public void Native_uninstall_builder_uses_scoop_command_wrapper()
+    public void Native_uninstall_builder_uses_absolute_scoop_script()
     {
-        var psi = PackageManagerCommandBuilder.CreateNativeUninstallStartInfo(
+        var command = PackageManagerCommandBuilder.CreateNativeUninstallCommand(
             "scoop",
             "git",
             silent: false);
+        var psi = command.ToStartInfo();
+        var location = PackageManagerExecutableResolver.Resolve("scoop");
 
-        Assert.Equal("cmd.exe", psi.FileName);
+        Assert.Equal(
+            DeepPurge.Core.Execution.WindowsExecutableResolver.ResolveSystemHelper("powershell.exe"),
+            psi.FileName);
         Assert.False(psi.UseShellExecute);
-        Assert.Equal(new[] { "/d", "/c", "scoop", "uninstall", "git" }, psi.ArgumentList);
+        Assert.True(Path.IsPathFullyQualified(location.ExecutablePath));
+        Assert.Equal(
+            new[]
+            {
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                location.ExecutablePath,
+                "uninstall",
+                "git",
+            },
+            psi.ArgumentList);
         Assert.Equal("", psi.Arguments);
+        Assert.Equal(
+            DeepPurge.Core.Execution.ExternalProcessExecutionContext.OriginalInteractiveUser,
+            command.ExecutionContext);
     }
 
     [Fact]
     public void Native_uninstall_builder_uses_chocolatey_noninteractive_flags()
     {
-        var psi = PackageManagerCommandBuilder.CreateNativeUninstallStartInfo(
+        var command = PackageManagerCommandBuilder.CreateNativeUninstallCommand(
             "chocolatey",
             "7zip",
             silent: false);
+        var psi = command.ToStartInfo();
 
-        Assert.Equal("choco.exe", psi.FileName);
+        Assert.Equal(
+            PackageManagerExecutableResolver.Resolve("chocolatey").ExecutablePath,
+            psi.FileName);
         Assert.False(psi.UseShellExecute);
         Assert.Equal(new[]
         {
@@ -182,6 +219,28 @@ public class PackageManagerScannerTests
             "--limit-output",
         }, psi.ArgumentList);
         Assert.Equal("", psi.Arguments);
+        Assert.Equal(
+            DeepPurge.Core.Execution.ExternalProcessExecutionContext.OriginalInteractiveUser,
+            command.ExecutionContext);
+    }
+
+    [Fact]
+    public async Task Resolved_winget_runs_in_original_user_context_when_installed()
+    {
+        var location = PackageManagerExecutableResolver.Resolve("winget");
+        if (!location.Exists) return;
+
+        var command = PackageManagerExecutableResolver.CreateCommand(
+            "winget",
+            new[] { "--version" },
+            TimeSpan.FromSeconds(10));
+        var result = await DeepPurge.Core.Execution.ExternalProcessRunner.RunAsync(
+            command,
+            ct: TestContext.Current.CancellationToken);
+
+        Assert.True(result.Success, result.StartError ?? result.CombinedOutput);
+        Assert.Equal(location.ExecutablePath, result.Command.FileName);
+        Assert.StartsWith("v", result.Output.Trim(), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -193,7 +252,7 @@ public class PackageManagerScannerTests
             silent: false);
 
         Assert.Equal(
-            "winget.exe uninstall --id Microsoft.PowerToys --exact --disable-interactivity --accept-source-agreements",
+            "winget uninstall --id Microsoft.PowerToys --exact --disable-interactivity --accept-source-agreements",
             command);
     }
 
@@ -212,13 +271,13 @@ public class PackageManagerScannerTests
     {
         Assert.False(PackageManagerCommandBuilder.IsSafeWingetPackageId(packageId));
         Assert.Throws<ArgumentException>(() =>
-            PackageManagerCommandBuilder.CreateWingetUpgradeStartInfo(packageId));
+            PackageManagerCommandBuilder.CreateWingetUpgradeCommand(packageId));
         Assert.Throws<ArgumentException>(() =>
-            PackageManagerCommandBuilder.CreateNativeUninstallStartInfo("winget", packageId));
+            PackageManagerCommandBuilder.CreateNativeUninstallCommand("winget", packageId));
         Assert.Throws<ArgumentException>(() =>
-            PackageManagerCommandBuilder.CreateNativeUninstallStartInfo("scoop", packageId));
+            PackageManagerCommandBuilder.CreateNativeUninstallCommand("scoop", packageId));
         Assert.Throws<ArgumentException>(() =>
-            PackageManagerCommandBuilder.CreateNativeUninstallStartInfo("chocolatey", packageId));
+            PackageManagerCommandBuilder.CreateNativeUninstallCommand("chocolatey", packageId));
     }
 
     [Fact]
@@ -226,7 +285,7 @@ public class PackageManagerScannerTests
     {
         Assert.False(PackageManagerCommandBuilder.IsSupportedNativeUninstallManager("steam"));
         Assert.Throws<NotSupportedException>(() =>
-            PackageManagerCommandBuilder.CreateNativeUninstallStartInfo("steam", "12345"));
+            PackageManagerCommandBuilder.CreateNativeUninstallCommand("steam", "12345"));
     }
 
     [Fact]
@@ -249,6 +308,6 @@ public class PackageManagerScannerTests
 
         Assert.True(result.Success);
         Assert.True(result.UninstallerSkipped);
-        Assert.Contains("cmd.exe /d /c scoop uninstall git", result.Output);
+        Assert.Contains("scoop uninstall git", result.Output);
     }
 }

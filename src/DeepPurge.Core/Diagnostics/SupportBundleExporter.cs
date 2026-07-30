@@ -154,6 +154,8 @@ public static class SupportBundleExporter
                 };
                 var ver = string.IsNullOrWhiteSpace(h.Version) ? "" : $" v{h.Version}";
                 lines.Add($"{tag} {h.Source,-12}{ver} — {h.Detail}; {h.LastScannerStatus}");
+                if (!string.IsNullOrWhiteSpace(h.Root))
+                    lines.Add($"       resolved: {Redact(h.Root)}");
                 if (!string.IsNullOrWhiteSpace(h.Hint))
                     lines.Add($"       -> {Redact(h.Hint)}");
             }
