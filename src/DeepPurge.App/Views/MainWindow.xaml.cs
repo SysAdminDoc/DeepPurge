@@ -275,7 +275,17 @@ public partial class MainWindow : Window
                 break;
             case "BrowserExt":
                 dgBrowserExt.Visibility = Visibility.Visible; txtPanelTitle.Text = "Browser Extensions";
-                AppendToolbarButton("Remove Selected", RemoveBrowserExt_Click, "DangerButton");
+                var removeExtension = AppendToolbarButton(
+                    "Remove Selected",
+                    RemoveBrowserExt_Click,
+                    "DangerButton");
+                removeExtension.SetBinding(
+                    IsEnabledProperty,
+                    new System.Windows.Data.Binding("SelectedItem.IsRemovable")
+                    {
+                        Source = dgBrowserExt,
+                        FallbackValue = false,
+                    });
                 break;
             case "ContextMenu":
                 dgContextMenu.Visibility = Visibility.Visible; txtPanelTitle.Text = "Context Menu Cleaner";
@@ -601,7 +611,7 @@ public partial class MainWindow : Window
     /// Add a button to the generic toolbar in the order you call this method.
     /// (The old code inserted at index 0, which reversed the intended order.)
     /// </summary>
-    private void AppendToolbarButton(string text, RoutedEventHandler handler, string? style = null)
+    private Button AppendToolbarButton(string text, RoutedEventHandler handler, string? style = null)
     {
         var btn = new Button
         {
@@ -616,6 +626,7 @@ public partial class MainWindow : Window
         if (style != null) btn.Style = (Style)FindResource(style);
         btn.Click += handler;
         genericButtons.Children.Add(btn);
+        return btn;
     }
 
     private static string BuildToolbarHelpText(string text)
@@ -942,10 +953,19 @@ public partial class MainWindow : Window
     {
         if (dgBrowserExt.SelectedItem is not BrowserExtension ext)
         { WarnStatus("Select a browser extension first."); return; }
+        if (!ext.IsRemovable)
+        {
+            ShowToast(
+                string.IsNullOrWhiteSpace(ext.RemovalReason)
+                    ? "This extension is protected or no longer has an exact package."
+                    : ext.RemovalReason,
+                isWarning: true);
+            return;
+        }
 
-        var ok = BrowserExtensionScanner.RemoveExtension(ext);
+        var ok = BrowserExtensionScanner.TryRemoveExtension(ext, out var reason);
         if (ok) { _vm.BrowserExtensions.Remove(ext); ShowToast($"Removed {ext.Name}. Restart {ext.Browser}."); }
-        else ShowToast($"Failed. Is {ext.Browser} still running?", isError: true);
+        else ShowToast(reason, isError: true);
     }
 
     // =============================================================

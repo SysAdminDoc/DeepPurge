@@ -33,7 +33,7 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 - **Autorun Manager** - Registry Run/RunOnce, startup folders, and service autoruns with **reversible** disable (StartupApproved pattern) and delete
 - **Startup Impact ratings** - High / Medium / Low per autorun process, parsed from the Windows Diagnostic Infrastructure boot traces in `System32\wdi\LogFiles\StartupInfo\*.xml`. Same metric Task Manager uses — no undocumented APIs.
 - **Digital signature badges** - Every autorun entry and service shows its WinVerifyTrust result (signer CN / Unsigned / Untrusted / Revoked) *(inspired by Sysinternals Autoruns)*
-- **Browser Extensions** - Scan and remove extensions across Chrome, Edge, Brave, Firefox, Vivaldi, Opera
+- **Browser Extensions** - Scan extensions across Chrome, Edge, Brave, Firefox, Vivaldi, and Opera; remove only exact profile packages while protecting system and stale entries
 - **Driver Store cleanup** - Enumerate third-party driver packages via `pnputil /enum-drivers`, group by `.inf` family, flag old versions for removal. Recovers 2-10 GB on OEM laptops. *(inspired by RAPR / DriverStoreExplorer)*
 - **Context Menu Cleaner** - Find and remove orphaned shell context menu entries with broken executables or CLSIDs
 - **Shortcut repair** - Enumerate `.lnk` files on Desktop / Start Menu via IShellLinkW COM; flag and delete broken-target shortcuts
