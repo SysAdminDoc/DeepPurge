@@ -133,48 +133,81 @@ public static class SafetyGuard
     {
         if (string.IsNullOrWhiteSpace(path)) return false;
 
-        if (path.Contains("..")) return false;
+        if (path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            .Any(segment => segment == ".."))
+            return false;
 
-        var normalized = Path.GetFullPath(path).TrimEnd('\\');
+        string normalized;
+        try { normalized = NormalizePath(path); }
+        catch { return false; }
 
         // User-defined exclusion list (global whitelist of protected paths)
         var excluded = App.AppSettings.Current.ExcludedPaths;
         if (excluded.Count > 0 && excluded.Any(ex =>
         {
-            try { return normalized.StartsWith(Path.GetFullPath(ex).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase); }
+            try { return IsSamePathOrDescendant(normalized, NormalizePath(ex)); }
             catch { return false; }
         }))
             return false;
 
         // Never delete protected files
-        if (ProtectedFiles.Contains(normalized)) return false;
+        if (ProtectedFiles.Any(file =>
+                normalized.Equals(NormalizePath(file), StringComparison.OrdinalIgnoreCase)))
+            return false;
 
-        // Never delete anything directly IN a protected directory (the directory itself)
-        if (ProtectedDirectories.Contains(normalized)) return false;
-
-        // Never delete if path IS a drive root
-        if (normalized.Length <= 3) return false; // "C:\" or "C:"
-
-        // Never delete the Users folder itself or any user profile root
-        if (normalized.Equals(UsersDir, StringComparison.OrdinalIgnoreCase)) return false;
-
-        // Don't delete if a parent is a strict protected directory
-        foreach (var protectedDir in ProtectedDirectories)
+        // Windows itself and ProgramData\Microsoft\Windows are exact protected
+        // roots because known cleanup targets live beneath them. Every other
+        // protected directory is an immutable subtree.
+        var programDataWindows = Path.Combine(ProgramData, "Microsoft", "Windows");
+        foreach (var protectedDirValue in ProtectedDirectories)
         {
+            var protectedDir = NormalizePath(protectedDirValue);
             if (normalized.Equals(protectedDir, StringComparison.OrdinalIgnoreCase))
                 return false;
-        }
 
-        // Never delete Windows system files (exe, dll, sys in System32)
-        if (normalized.StartsWith(Sys32 + @"\", StringComparison.OrdinalIgnoreCase) ||
-            normalized.StartsWith(SysWow64 + @"\", StringComparison.OrdinalIgnoreCase))
-        {
-            var ext = Path.GetExtension(normalized).ToLowerInvariant();
-            if (ext is ".exe" or ".dll" or ".sys" or ".drv" or ".ocx" or ".cpl" or ".msc")
+            var exactOnly =
+                protectedDir.Equals(NormalizePath(WinDir), StringComparison.OrdinalIgnoreCase) ||
+                protectedDir.Equals(NormalizePath(programDataWindows), StringComparison.OrdinalIgnoreCase);
+            if (!exactOnly && IsSamePathOrDescendant(normalized, protectedDir))
                 return false;
         }
 
+        // Never delete if path IS a drive root.
+        var root = Path.GetPathRoot(normalized);
+        if (!string.IsNullOrEmpty(root) &&
+            normalized.Equals(NormalizePath(root), StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        // Never delete the Users folder itself or an immediate user profile root.
+        var normalizedUsers = NormalizePath(UsersDir);
+        if (normalized.Equals(normalizedUsers, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(
+                Path.GetDirectoryName(normalized),
+                normalizedUsers,
+                StringComparison.OrdinalIgnoreCase))
+            return false;
+
         return true;
+    }
+
+    internal static string NormalizePath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path))
+            throw new ArgumentException("A fully-qualified filesystem path is required.", nameof(path));
+        return Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+    }
+
+    internal static bool IsSamePathOrDescendant(string path, string root)
+    {
+        var normalizedPath = NormalizePath(path);
+        var normalizedRoot = NormalizePath(root);
+        if (normalizedPath.Equals(normalizedRoot, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var prefix = normalizedRoot.EndsWith(Path.DirectorySeparatorChar)
+            ? normalizedRoot
+            : normalizedRoot + Path.DirectorySeparatorChar;
+        return normalizedPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Returns true if the registry path is safe to delete</summary>
@@ -253,7 +286,7 @@ public static class SafetyGuard
         if (!IsPathSafeToDelete(path)) return false;
 
         // Extra checks for junk cleaning
-        var normalized = Path.GetFullPath(path);
+        var normalized = NormalizePath(path);
 
         // Never touch files in active user's profile root
         var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -275,7 +308,7 @@ public static class SafetyGuard
 
         return safeJunkParents.Any(parent =>
             !string.IsNullOrEmpty(parent) &&
-            normalized.StartsWith(parent, StringComparison.OrdinalIgnoreCase));
+            IsSamePathOrDescendant(normalized, NormalizePath(parent)));
     }
 
     /// <summary>
@@ -368,70 +401,116 @@ public static class SafetyGuard
     }
 
     /// <summary>
-    /// Recursively deletes a directory tree, skipping child reparse points.
-    /// Safer alternative to Directory.Delete(path, recursive: true).
+    /// Recursively deletes a directory tree through pinned, no-follow handles.
+    /// The entire operation aborts if any root or child is a reparse point.
     /// </summary>
     public static bool SafeDeleteDirectory(string path)
     {
-        if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path)) return false;
-        if (!IsPathSafeToDelete(path)) return false;
-
-        Diagnostics.DeletionManifest.RecordDirectory(path, "delete-recursive");
-
-        try
+        if (string.IsNullOrWhiteSpace(path)) return false;
+        if (HandleBoundFileOperations.DeleteDirectoryTree(path, out var reason))
+            return true;
+        if (!string.IsNullOrWhiteSpace(reason))
         {
-            foreach (var file in SafeEnumerateFiles(path))
-                SafeDeleteFile(file);
-
-            foreach (var dir in SafeEnumerateDirectories(path))
-            {
-                try { if (Directory.Exists(dir)) Directory.Delete(dir, recursive: false); }
-                catch (Exception ex) { Diagnostics.Log.Warn($"SafeDelete dir '{dir}': {ex.Message}"); }
-            }
-
-            try { Directory.Delete(path, recursive: false); }
-            catch { /* root may not be empty if some files were locked */ }
-            return !Directory.Exists(path);
+            Diagnostics.Log.Warn($"SafeDeleteDirectory '{path}': {reason}");
         }
-        catch (Exception ex)
-        {
-            Diagnostics.Log.Warn($"SafeDeleteDirectory '{path}': {ex.Message}");
-            return false;
-        }
+        return false;
     }
 
     /// <summary>
-    /// Deletes a single file. If deletion fails with a sharing violation,
-    /// queries the Restart Manager for locking processes and queues the file
-    /// for delete-on-reboot as a fallback.
+    /// Deletes a single file through a pinned, no-follow handle. Locked files
+    /// fail closed rather than queuing a path string that could drift before
+    /// the next boot.
     /// </summary>
     public static bool SafeDeleteFile(string path)
     {
+        if (string.IsNullOrWhiteSpace(path)) return false;
+        if (HandleBoundFileOperations.DeleteFile(path, out var reason))
+            return true;
+        if (!string.IsNullOrWhiteSpace(reason))
+        {
+            Diagnostics.Log.Warn($"SafeDeleteFile '{path}': {reason}");
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Moves a file or directory to the Recycle Bin only after two no-follow
+    /// handle validations agree on its final path and object identity.
+    /// </summary>
+    public static bool SafeMoveToRecycleBin(
+        string path,
+        bool isDirectory,
+        out string reason)
+    {
+        if (!HandleBoundFileOperations.TryCaptureStablePathIdentity(
+                path,
+                isDirectory,
+                out var finalPath,
+                out _,
+                out var sizeBytes,
+                out reason))
+            return false;
+
         try
         {
-            Diagnostics.DeletionManifest.RecordFile(path, "delete");
-            File.Delete(path);
-            return true;
-        }
-        catch (IOException ex) when (ex.HResult == unchecked((int)0x80070020)) // ERROR_SHARING_VIOLATION
-        {
-            var lockers = FileSystem.LockedFileResolver.GetLockingProcesses(path);
-            if (lockers.Count > 0)
-                Diagnostics.Log.Warn($"Locked by: {string.Join(", ", lockers.Select(l => $"{l.ProcessName} (PID {l.ProcessId})"))} — '{path}'");
-
-            if (FileSystem.LockedFileResolver.QueueDeleteOnReboot(path))
+            var operation = new ShellFileOperation
             {
-                Diagnostics.Log.Info($"Queued for delete-on-reboot: '{path}'");
-                return true;
+                Function = ShellDelete,
+                From = finalPath + '\0' + '\0',
+                Flags = ShellAllowUndo | ShellNoConfirmation |
+                        ShellNoErrorUi | ShellSilent,
+            };
+            var result = SHFileOperation(ref operation);
+            if (result != 0 || operation.AnyOperationsAborted)
+            {
+                reason = operation.AnyOperationsAborted
+                    ? "The Recycle Bin operation was cancelled."
+                    : $"The Recycle Bin operation failed with code {result}.";
+                return false;
             }
-            return false;
+
+            if (File.Exists(finalPath) || Directory.Exists(finalPath))
+            {
+                reason = "The Recycle Bin operation returned success but the target still exists.";
+                return false;
+            }
+
+            Diagnostics.DeletionManifest.Record(
+                finalPath,
+                isDirectory ? "directory" : "file",
+                sizeBytes,
+                "recycle");
+            reason = "";
+            return true;
         }
         catch (Exception ex)
         {
-            Diagnostics.Log.Warn($"SafeDeleteFile '{path}': {ex.Message}");
+            reason = ex.Message;
             return false;
         }
     }
+
+    private const uint ShellDelete = 0x0003;
+    private const ushort ShellSilent = 0x0004;
+    private const ushort ShellNoConfirmation = 0x0010;
+    private const ushort ShellAllowUndo = 0x0040;
+    private const ushort ShellNoErrorUi = 0x0400;
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct ShellFileOperation
+    {
+        internal IntPtr Window;
+        internal uint Function;
+        [MarshalAs(UnmanagedType.LPWStr)] internal string From;
+        [MarshalAs(UnmanagedType.LPWStr)] internal string? To;
+        internal ushort Flags;
+        [MarshalAs(UnmanagedType.Bool)] internal bool AnyOperationsAborted;
+        internal IntPtr NameMappings;
+        [MarshalAs(UnmanagedType.LPWStr)] internal string? ProgressTitle;
+    }
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    private static extern int SHFileOperation(ref ShellFileOperation fileOperation);
 
     /// <summary>Get a human-readable safety assessment</summary>
     public static (bool Safe, string Reason) AssessOperation(string operationType, string target)

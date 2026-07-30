@@ -2,6 +2,7 @@ using System.Security.Principal;
 using DeepPurge.Core.App;
 using DeepPurge.Core.Packages;
 using DeepPurge.Core.Execution;
+using DeepPurge.Core.Safety;
 
 namespace DeepPurge.Core.Diagnostics;
 
@@ -95,7 +96,12 @@ public static class SelfTest
         try
         {
             var probe = Path.Combine(DataPaths.Logs, ".probe");
-            File.WriteAllText(probe, "ok"); File.Delete(probe);
+            File.WriteAllText(probe, "ok");
+            if (!HandleBoundFileOperations.DeleteFileWithinScope(
+                    probe,
+                    DataPaths.Logs,
+                    out var reason))
+                throw new IOException(reason);
             return new("Logs writable", SelfTestStatus.Ok, DataPaths.Logs);
         }
         catch (Exception ex)

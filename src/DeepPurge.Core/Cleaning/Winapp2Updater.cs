@@ -1,5 +1,6 @@
 using DeepPurge.Core.App;
 using DeepPurge.Core.Diagnostics;
+using DeepPurge.Core.Safety;
 using System.Security.Cryptography;
 using System.Text.Json;
 
@@ -340,7 +341,13 @@ public static class Winapp2Updater
     {
         try
         {
-            if (File.Exists(path)) File.Delete(path);
+            if (File.Exists(path))
+            {
+                HandleBoundFileOperations.DeleteFileWithinScope(
+                    path,
+                    Path.GetDirectoryName(path)!,
+                    out _);
+            }
         }
         catch { /* best-effort temp cleanup */ }
     }

@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using DeepPurge.Core.App;
 using DeepPurge.Core.Packages;
+using DeepPurge.Core.Safety;
 using DeepPurge.Core.Security;
 
 namespace DeepPurge.Core.Diagnostics;
@@ -37,7 +38,15 @@ public static class SupportBundleExporter
                 FinalRedactionPass(tempDir);
 
                 if (File.Exists(outputPath))
-                    File.Delete(outputPath);
+                {
+                    var outputDirectory = Path.GetDirectoryName(outputPath)
+                        ?? throw new InvalidOperationException("The output path has no parent directory.");
+                    if (!HandleBoundFileOperations.DeleteFileWithinScope(
+                            outputPath,
+                            outputDirectory,
+                            out var reason))
+                        throw new IOException(reason);
+                }
 
                 var dir = Path.GetDirectoryName(outputPath);
                 if (!string.IsNullOrEmpty(dir))
@@ -50,7 +59,14 @@ public static class SupportBundleExporter
             }
             finally
             {
-                try { Directory.Delete(tempDir, recursive: true); } catch { }
+                try
+                {
+                    HandleBoundFileOperations.DeleteDirectoryTreeWithinScope(
+                        tempDir,
+                        tempDir,
+                        out _);
+                }
+                catch { }
             }
         }
         catch (Exception ex)

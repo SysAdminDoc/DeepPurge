@@ -24,12 +24,6 @@ public static class LockedFileResolver
         out uint pnProcInfoNeeded, ref uint pnProcInfo,
         [In, Out] RM_PROCESS_INFO[]? rgAffectedApps, ref uint lpdwRebootReasons);
 
-    [DllImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool MoveFileEx(string lpExistingFileName, string? lpNewFileName, uint dwFlags);
-
-    private const uint MOVEFILE_DELAY_UNTIL_REBOOT = 0x00000004;
-
     [StructLayout(LayoutKind.Sequential)]
     private struct RM_UNIQUE_PROCESS
     {
@@ -99,22 +93,5 @@ public static class LockedFileResolver
         }
 
         return result;
-    }
-
-    public static bool QueueDeleteOnReboot(string filePath)
-    {
-        try
-        {
-            if (MoveFileEx(filePath, null, MOVEFILE_DELAY_UNTIL_REBOOT))
-                return true;
-            var error = Marshal.GetLastWin32Error();
-            Log.Warn($"MoveFileEx delay-until-reboot failed (Win32 error {error}) for '{filePath}'");
-            return false;
-        }
-        catch (Exception ex)
-        {
-            Log.Warn($"MoveFileEx delay-until-reboot failed for '{filePath}': {ex.Message}");
-            return false;
-        }
     }
 }

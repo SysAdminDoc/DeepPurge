@@ -38,7 +38,8 @@ public static class EmptyFolderScanner
     public static List<EmptyFolderInfo> ScanForEmptyFolders(string rootPath)
     {
         var results = new List<EmptyFolderInfo>();
-        if (!Directory.Exists(rootPath)) return results;
+        if (!Directory.Exists(rootPath) || SafetyGuard.IsReparsePoint(rootPath))
+            return results;
         try { ScanDirectory(rootPath, results, depth: 0, maxDepth: DefaultMaxDepth); }
         catch { /* skip */ }
         return results.OrderBy(f => f.Path).ToList();
@@ -80,10 +81,11 @@ public static class EmptyFolderScanner
             try
             {
                 if (Directory.Exists(folder.Path) && IsDirectoryEmpty(folder.Path)
-                    && SafetyGuard.IsPathSafeToDelete(folder.Path))
+                    && SafetyGuard.IsPathSafeToDelete(folder.Path)
+                    && !SafetyGuard.IsReparsePoint(folder.Path))
                 {
-                    SafetyGuard.SafeDeleteDirectory(folder.Path);
-                    deleted++;
+                    if (SafetyGuard.SafeDeleteDirectory(folder.Path))
+                        deleted++;
                 }
             }
             catch { /* skip */ }
@@ -96,6 +98,7 @@ public static class EmptyFolderScanner
     private static bool ScanDirectory(string path, List<EmptyFolderInfo> results, int depth, int maxDepth)
     {
         if (depth > maxDepth) return false;
+        if (SafetyGuard.IsReparsePoint(path)) return false;
 
         var dirName = Path.GetFileName(path);
         if (!string.IsNullOrEmpty(dirName) && SkipDirectories.Contains(dirName)) return false;

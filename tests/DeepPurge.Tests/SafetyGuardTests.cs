@@ -53,6 +53,8 @@ public class SafetyGuardTests
         Assert.False(SafetyGuard.IsPathSafeToDelete(winDir));
         Assert.False(SafetyGuard.IsPathSafeToDelete(Path.Combine(winDir, "System32")));
         Assert.False(SafetyGuard.IsPathSafeToDelete(Path.Combine(winDir, "System32", "ntdll.dll")));
+        Assert.False(SafetyGuard.IsPathSafeToDelete(
+            Path.Combine(winDir, "System32", "drivers", "etc", "hosts")));
     }
 
     [Fact]
@@ -60,6 +62,16 @@ public class SafetyGuardTests
     {
         var pf = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
         Assert.False(SafetyGuard.IsPathSafeToDelete(Path.Combine(pf, "Windows Defender")));
+        Assert.False(SafetyGuard.IsPathSafeToDelete(
+            Path.Combine(pf, "Windows Defender", "Platform", "MsMpEng.exe")));
+    }
+
+    [Fact]
+    public void Protected_path_matching_is_separator_aware()
+    {
+        var winDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+        Assert.True(SafetyGuard.IsPathSafeToDelete(
+            Path.Combine(Path.GetDirectoryName(winDir)!, Path.GetFileName(winDir) + "-old", "cache.bin")));
     }
 
     [Theory]

@@ -1,5 +1,6 @@
 using DeepPurge.Core.Diagnostics;
 using DeepPurge.Core.Execution;
+using DeepPurge.Core.Safety;
 
 namespace DeepPurge.Core.Repair;
 
@@ -130,7 +131,11 @@ public class WindowsRepairEngine
                 {
                     try
                     {
-                        File.Delete(file);
+                        if (!HandleBoundFileOperations.DeleteFileWithinScope(
+                                file,
+                                dir,
+                                out var reason))
+                            throw new IOException(reason);
                         removed++;
                         log.Report($"deleted {name}");
                     }
@@ -171,7 +176,11 @@ public class WindowsRepairEngine
         {
             try
             {
-                File.Delete(victim);
+                if (!HandleBoundFileOperations.DeleteFileWithinScope(
+                        victim,
+                        local,
+                        out var reason))
+                    throw new IOException(reason);
                 removed++;
                 log.Report($"deleted {Path.GetFileName(victim)}");
             }

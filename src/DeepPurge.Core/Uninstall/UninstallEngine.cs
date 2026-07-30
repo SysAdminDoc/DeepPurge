@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using System.Text;
 using DeepPurge.Core.Execution;
 using DeepPurge.Core.FileSystem;
@@ -290,18 +289,37 @@ public class UninstallEngine
                 try
                 {
                     var isDir = item.Type == LeftoverType.Folder;
+                    bool removed;
+                    string failureReason = "";
                     if (options.SecureDelete)
                     {
-                        if (isDir) SecureDelete.WipeDirectory(item.Path);
-                        else SecureDelete.Wipe(item.Path);
+                        removed = isDir
+                            ? SecureDelete.WipeDirectory(item.Path)
+                            : SecureDelete.Wipe(item.Path);
                     }
                     else if (options.UseRecycleBin)
                     {
-                        MoveToRecycleBin(item.Path, isDir);
+                        removed = SafetyGuard.SafeMoveToRecycleBin(
+                            item.Path,
+                            isDir,
+                            out failureReason);
                     }
                     else
                     {
-                        DeleteFileItem(item);
+                        removed = DeleteFileItem(item);
+                    }
+
+                    if (!removed)
+                    {
+                        skipped++;
+                        StatusChanged?.Invoke(
+                            $"Failed to delete: {item.Path}" +
+                            (string.IsNullOrWhiteSpace(failureReason)
+                                ? ""
+                                : $" - {failureReason}"));
+                        progress?.Report(
+                            new DeleteProgress(index, total, freed, item.Path, Skipped: true));
+                        continue;
                     }
 
                     fileDeleted++;
@@ -591,73 +609,12 @@ public class UninstallEngine
             ? RegistryDeletion.DeleteValue(item.Path, "uninstall-leftover")
             : RegistryDeletion.DeleteKeyTree(item.Path, "uninstall-leftover");
 
-    private static void DeleteFileItem(LeftoverItem item)
+    private static bool DeleteFileItem(LeftoverItem item)
     {
-        if (item.Type == LeftoverType.Folder && Directory.Exists(item.Path))
-            Safety.SafetyGuard.SafeDeleteDirectory(item.Path);
-        else if (File.Exists(item.Path))
-            Safety.SafetyGuard.SafeDeleteFile(item.Path);
+        if (item.Type == LeftoverType.Folder)
+            return Directory.Exists(item.Path) &&
+                   Safety.SafetyGuard.SafeDeleteDirectory(item.Path);
+        return File.Exists(item.Path) &&
+               Safety.SafetyGuard.SafeDeleteFile(item.Path);
     }
-
-    /// <summary>
-    /// Move a file/folder to the Recycle Bin.
-    /// Previously this silently fell back to <see cref="File.Delete"/> /
-    /// <see cref="Directory.Delete"/> on any Recycle-Bin failure, which
-    /// converts an "I can't safely recycle this" error into a permanent
-    /// delete without telling the user. Now we surface the error and
-    /// leave the file untouched — safer default, and matches Explorer's
-    /// behaviour.
-    /// </summary>
-    private void MoveToRecycleBin(string path, bool isDirectory)
-    {
-        try
-        {
-            var fileOp = new NativeMethods.SHFILEOPSTRUCT
-            {
-                wFunc = NativeMethods.FO_DELETE,
-                // SHFileOperation requires the path to be null-terminated
-                // AND the whole buffer to be double-null-terminated.
-                pFrom = path + '\0' + '\0',
-                fFlags = NativeMethods.FOF_ALLOWUNDO | NativeMethods.FOF_NOCONFIRMATION |
-                         NativeMethods.FOF_NOERRORUI | NativeMethods.FOF_SILENT,
-            };
-            var rc = NativeMethods.SHFileOperation(ref fileOp);
-            if (rc == 0 && !fileOp.fAnyOperationsAborted) return;
-
-            StatusChanged?.Invoke(
-                $"Recycle Bin move failed (code {rc}); leaving file in place: {path}");
-            // Leave the file where it is. If the user wants to force a
-            // permanent delete, they can toggle Secure Delete or rerun.
-        }
-        catch (Exception ex)
-        {
-            StatusChanged?.Invoke($"Recycle Bin move threw: {path} - {ex.Message}");
-        }
-        // Intentionally no fall-through to permanent delete — see summary above.
-    }
-}
-
-internal static class NativeMethods
-{
-    public const int FO_DELETE = 0x0003;
-    public const ushort FOF_ALLOWUNDO = 0x0040;
-    public const ushort FOF_NOCONFIRMATION = 0x0010;
-    public const ushort FOF_NOERRORUI = 0x0400;
-    public const ushort FOF_SILENT = 0x0004;
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    public struct SHFILEOPSTRUCT
-    {
-        public IntPtr hwnd;
-        public int wFunc;
-        [MarshalAs(UnmanagedType.LPWStr)] public string pFrom;
-        [MarshalAs(UnmanagedType.LPWStr)] public string? pTo;
-        public ushort fFlags;
-        [MarshalAs(UnmanagedType.Bool)] public bool fAnyOperationsAborted;
-        public IntPtr hNameMappings;
-        [MarshalAs(UnmanagedType.LPWStr)] public string? lpszProgressTitle;
-    }
-
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
-    public static extern int SHFileOperation(ref SHFILEOPSTRUCT FileOp);
 }
