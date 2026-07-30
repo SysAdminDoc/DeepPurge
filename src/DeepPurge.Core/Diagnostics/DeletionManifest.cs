@@ -1,6 +1,7 @@
 using System.Text.Json;
 using DeepPurge.Core.App;
 using DeepPurge.Core.Execution;
+using DeepPurge.Core.Safety;
 
 namespace DeepPurge.Core.Diagnostics;
 
@@ -9,7 +10,20 @@ public record DeletionEntry(
     string Type,
     long SizeBytes,
     DateTime TimestampUtc,
-    string Operation);
+    string Operation,
+    int SchemaVersion = 1,
+    string? OperationId = null,
+    string Outcome = "Succeeded",
+    string? BackupPath = null,
+    string? BackupSha256 = null,
+    string? RegistryHive = null,
+    string? RegistrySubKey = null,
+    string? RegistryValueName = null,
+    string? RegistryView = null,
+    string? ObjectIdentity = null,
+    string? BackupOwnerSid = null,
+    string? BackupDaclSddl = null,
+    bool BackupAclTrusted = false);
 
 public record ManifestSummary(
     string FilePath,
@@ -26,29 +40,23 @@ public record RestoreResult(
 public static class DeletionManifest
 {
     private static readonly object _lock = new();
+    private static readonly AsyncLocal<string?> ManifestPathOverride = new();
 
     public static string CurrentManifestPath =>
+        ManifestPathOverride.Value ??
         System.IO.Path.Combine(DataPaths.Logs, $"deletions-{DateTime.UtcNow:yyyy-MM-dd}.jsonl");
+
+    internal static IDisposable UseManifestPathForTests(string path)
+    {
+        var previous = ManifestPathOverride.Value;
+        ManifestPathOverride.Value = System.IO.Path.GetFullPath(path);
+        return new ManifestPathScope(previous);
+    }
 
     public static void Record(string path, string type, long sizeBytes, string operation)
     {
-        try
-        {
-            var entry = new DeletionEntry(path, type, sizeBytes, DateTime.UtcNow, operation);
-            var json = JsonSerializer.Serialize(entry);
-            lock (_lock)
-            {
-                Directory.CreateDirectory(System.IO.Path.GetDirectoryName(CurrentManifestPath)!);
-                using var stream = new FileStream(
-                    CurrentManifestPath,
-                    FileMode.Append,
-                    FileAccess.Write,
-                    FileShare.ReadWrite);
-                using var writer = new StreamWriter(stream, System.Text.Encoding.UTF8);
-                writer.WriteLine(json);
-            }
-        }
-        catch (Exception ex) { Log.Warn($"Failed to write deletion manifest: {ex.Message}"); }
+        var entry = new DeletionEntry(path, type, sizeBytes, DateTime.UtcNow, operation);
+        TryAppend(entry);
     }
 
     public static void RecordFile(string path, string operation)
@@ -67,6 +75,34 @@ public static class DeletionManifest
     public static void RecordRegistry(string path, string operation)
     {
         Record(path, "registry", 0, operation);
+    }
+
+    internal static bool RecordRegistryTransaction(
+        string path,
+        string operation,
+        RegistryBackupArtifact artifact,
+        string outcome)
+    {
+        var entry = new DeletionEntry(
+            path,
+            "registry",
+            0,
+            DateTime.UtcNow,
+            operation,
+            SchemaVersion: 2,
+            OperationId: artifact.OperationId,
+            Outcome: outcome,
+            BackupPath: artifact.BackupPath,
+            BackupSha256: artifact.BackupSha256,
+            RegistryHive: artifact.Hive,
+            RegistrySubKey: artifact.SubKey,
+            RegistryValueName: artifact.ValueName,
+            RegistryView: artifact.RegistryView,
+            ObjectIdentity: artifact.ObjectIdentity,
+            BackupOwnerSid: artifact.BackupOwnerSid,
+            BackupDaclSddl: artifact.BackupDaclSddl,
+            BackupAclTrusted: artifact.BackupAclTrusted);
+        return TryAppend(entry);
     }
 
     public static List<ManifestSummary> ListManifests()
@@ -92,7 +128,8 @@ public static class DeletionManifest
 
     public static List<DeletionEntry> LoadManifest(DateTime date)
     {
-        var path = System.IO.Path.Combine(DataPaths.Logs, $"deletions-{date:yyyy-MM-dd}.jsonl");
+        var path = ManifestPathOverride.Value ??
+            System.IO.Path.Combine(DataPaths.Logs, $"deletions-{date:yyyy-MM-dd}.jsonl");
         return File.Exists(path) ? LoadEntriesFromFile(path) : new();
     }
 
@@ -108,14 +145,15 @@ public static class DeletionManifest
                 entry.Path.StartsWith("HKCU", StringComparison.OrdinalIgnoreCase) ||
                 entry.Path.StartsWith("HKCR", StringComparison.OrdinalIgnoreCase))
             {
-                var backupFile = FindMatchingBackup(entry.Path, entry.TimestampUtc);
-                if (backupFile != null)
+                var store = RegistryBackupStore.Production;
+                if (store.TryValidateForRestore(entry, out var backupFile, out var validationReason))
                 {
                     if (!dryRun)
                     {
                         try
                         {
-                            var process = ExternalProcessRunner.Run(new ExternalProcessCommand("reg.exe")
+                            var registryTool = Path.Combine(Environment.SystemDirectory, "reg.exe");
+                            var process = ExternalProcessRunner.Run(new ExternalProcessCommand(registryTool)
                             {
                                 Arguments = new[] { "import", backupFile },
                                 Timeout = TimeSpan.FromSeconds(15),
@@ -136,7 +174,7 @@ public static class DeletionManifest
                 else
                 {
                     unrecoverable++;
-                    details.Add($"No backup found for registry path: {entry.Path}");
+                    details.Add($"Registry restore blocked for {entry.Path}: {validationReason}");
                 }
             }
             else if (entry.Operation.Contains("secure", StringComparison.OrdinalIgnoreCase) ||
@@ -162,26 +200,10 @@ public static class DeletionManifest
         return new RestoreResult(regRestored, recoverable, unrecoverable, details);
     }
 
-    private static string? FindMatchingBackup(string registryPath, DateTime deleteTime)
-    {
-        try
-        {
-            var backupDir = DataPaths.Backups;
-            if (!Directory.Exists(backupDir)) return null;
-            var backups = Directory.GetFiles(backupDir, "*.reg")
-                .Select(f => new FileInfo(f))
-                .Where(f => f.LastWriteTimeUtc <= deleteTime.AddMinutes(5) &&
-                            f.LastWriteTimeUtc >= deleteTime.AddHours(-1))
-                .OrderByDescending(f => f.LastWriteTimeUtc)
-                .ToList();
-            return backups.FirstOrDefault()?.FullName;
-        }
-        catch { return null; }
-    }
-
     private static List<DeletionEntry> LoadEntriesFromFile(string filePath)
     {
         var entries = new List<DeletionEntry>();
+        var operationIndexes = new Dictionary<string, int>(StringComparer.Ordinal);
         try
         {
             using var stream = new FileStream(
@@ -199,12 +221,60 @@ public static class DeletionManifest
                 try
                 {
                     var e = JsonSerializer.Deserialize<DeletionEntry>(line);
-                    if (e != null) entries.Add(e);
+                    if (e == null) continue;
+                    if (!string.IsNullOrWhiteSpace(e.OperationId) &&
+                        operationIndexes.TryGetValue(e.OperationId, out var existingIndex))
+                    {
+                        entries[existingIndex] = e;
+                    }
+                    else
+                    {
+                        if (!string.IsNullOrWhiteSpace(e.OperationId))
+                            operationIndexes[e.OperationId] = entries.Count;
+                        entries.Add(e);
+                    }
                 }
                 catch (Exception ex) { Log.Warn($"Malformed manifest line in {filePath}: {ex.Message}"); }
             }
         }
         catch (Exception ex) { Log.Warn($"Failed to load manifest {filePath}: {ex.Message}"); }
         return entries;
+    }
+
+    private static bool TryAppend(DeletionEntry entry)
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(entry);
+            lock (_lock)
+            {
+                Directory.CreateDirectory(System.IO.Path.GetDirectoryName(CurrentManifestPath)!);
+                using var stream = new FileStream(
+                    CurrentManifestPath,
+                    FileMode.Append,
+                    FileAccess.Write,
+                    FileShare.ReadWrite);
+                using var writer = new StreamWriter(stream, System.Text.Encoding.UTF8);
+                writer.WriteLine(json);
+            }
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Failed to write deletion manifest: {ex.Message}");
+            return false;
+        }
+    }
+
+    private sealed class ManifestPathScope(string? previous) : IDisposable
+    {
+        private bool _disposed;
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            ManifestPathOverride.Value = previous;
+            _disposed = true;
+        }
     }
 }

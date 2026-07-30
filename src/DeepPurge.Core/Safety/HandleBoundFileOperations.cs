@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Security.AccessControl;
 using System.Security.Cryptography;
 using Microsoft.Win32.SafeHandles;
 
@@ -257,6 +258,10 @@ internal static class HandleBoundFileOperations
 {
     internal const uint DeleteAccess = 0x00010000;
     internal const uint ReadAttributes = 0x00000080;
+    private const uint GenericRead = 0x80000000;
+    private const uint ReadControl = 0x00020000;
+    private const uint WriteDac = 0x00040000;
+    private const uint WriteOwner = 0x00080000;
     private const uint WriteAttributes = 0x00000100;
     private const uint GenericWrite = 0x40000000;
 
@@ -265,6 +270,8 @@ internal static class HandleBoundFileOperations
     private const uint FileFlagOpenReparsePoint = 0x00200000;
     private const uint FileAttributeReadOnly = 0x00000001;
     private const uint FileAttributeNormal = 0x00000080;
+    private const uint OwnerSecurityInformation = 0x00000001;
+    private const uint DaclSecurityInformation = 0x00000004;
     private const int FileBasicInfoClass = 0;
     internal const int FileDispositionInfoClass = 4;
     private const int ErrorFileNotFound = 2;
@@ -343,6 +350,137 @@ internal static class HandleBoundFileOperations
 
         using (target)
             return target!.TryDelete(out reason);
+    }
+
+    /// <summary>
+    /// Reads and hashes an app-owned file through the same no-follow handle.
+    /// Delete sharing is withheld for the complete read so the path cannot be
+    /// swapped after validation.
+    /// </summary>
+    internal static bool TryReadFileWithinScope(
+        string path,
+        string allowedRoot,
+        long maximumBytes,
+        out byte[] bytes,
+        out string sha256,
+        out string reason)
+    {
+        bytes = Array.Empty<byte>();
+        sha256 = string.Empty;
+        FileOperationScope scope;
+        try { scope = FileOperationScope.Tree(allowedRoot); }
+        catch (Exception ex)
+        {
+            reason = ex.Message;
+            return false;
+        }
+
+        if (!TryOpenValidated(
+                path,
+                expectedDirectory: false,
+                scope,
+                GenericRead | ReadAttributes,
+                FileShare.Read,
+                out var target,
+                out reason,
+                out _,
+                requireGlobalSafety: false))
+            return false;
+
+        using (target)
+        {
+            if (target!.SizeBytes < 0 || target.SizeBytes > maximumBytes ||
+                target.SizeBytes > int.MaxValue)
+            {
+                reason = $"The file exceeds the {maximumBytes} byte read limit.";
+                return false;
+            }
+
+            try
+            {
+                bytes = new byte[checked((int)target.SizeBytes)];
+                var offset = 0;
+                while (offset < bytes.Length)
+                {
+                    var read = RandomAccess.Read(
+                        target.Handle,
+                        bytes.AsSpan(offset),
+                        offset);
+                    if (read == 0)
+                        throw new EndOfStreamException(
+                            "The file ended before its validated length.");
+                    offset += read;
+                }
+
+                sha256 = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+                reason = string.Empty;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                bytes = Array.Empty<byte>();
+                sha256 = string.Empty;
+                reason = $"Handle-bound file read failed: {ex.Message}";
+                return false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Applies owner/DACL security to the exact no-follow filesystem object.
+    /// The held handle prevents path replacement between validation and the
+    /// security change.
+    /// </summary>
+    internal static bool TrySetSecurityExact(
+        string path,
+        bool expectedDirectory,
+        FileSystemSecurity security,
+        out string reason)
+    {
+        FileOperationScope scope;
+        try { scope = FileOperationScope.Exact(path); }
+        catch (Exception ex)
+        {
+            reason = ex.Message;
+            return false;
+        }
+
+        if (!TryOpenValidated(
+                path,
+                expectedDirectory,
+                scope,
+                ReadAttributes | ReadControl | WriteDac | WriteOwner,
+                FileShare.Read | FileShare.Write,
+                out var target,
+                out reason,
+                out _,
+                requireGlobalSafety: false))
+            return false;
+
+        using (target)
+        {
+            try
+            {
+                if (!SetKernelObjectSecurity(
+                        target!.Handle,
+                        OwnerSecurityInformation | DaclSecurityInformation,
+                        security.GetSecurityDescriptorBinaryForm()))
+                {
+                    reason = new Win32Exception(
+                        Marshal.GetLastWin32Error(),
+                        "Could not set owner/DACL on the exact filesystem object.").Message;
+                    return false;
+                }
+
+                reason = string.Empty;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                reason = $"Handle-bound security update failed: {ex.Message}";
+                return false;
+            }
+        }
     }
 
     /// <summary>
@@ -938,6 +1076,13 @@ internal static class HandleBoundFileOperations
         uint creationDisposition,
         uint flagsAndAttributes,
         IntPtr templateFile);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetKernelObjectSecurity(
+        SafeFileHandle handle,
+        uint securityInformation,
+        byte[] securityDescriptor);
 
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool GetFileInformationByHandle(

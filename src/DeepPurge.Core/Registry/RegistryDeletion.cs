@@ -12,7 +12,9 @@ public enum RegistryDeletionStatus
     SkippedUnsafePath,
     SkippedMissing,
     SkippedSymlink,
+    SkippedDrift,
     BackupFailed,
+    ManifestFailed,
     Failed,
 }
 
@@ -28,22 +30,35 @@ public readonly record struct RegistryDeletionResult(
     RegistryDeletionStatus Status,
     string Path,
     string? BackupPath = null,
-    string? ErrorMessage = null)
+    string? ErrorMessage = null,
+    string? OperationId = null,
+    string? BackupSha256 = null)
 {
     public bool Deleted => Status == RegistryDeletionStatus.Deleted;
 }
 
 /// <summary>
-/// Single choke point for destructive registry key/value cleanup.
+/// Single choke point for destructive registry key/value cleanup. Paths are
+/// resolved once through no-follow handles; backup, identity revalidation, and
+/// mutation all operate on those handles.
 /// </summary>
 public static class RegistryDeletion
 {
-    private static readonly BackupManager Backup = new();
-
     public static RegistryDeletionResult DeleteKeyTree(
         string registryPath,
         string operation,
         bool dryRun = false)
+        => DeleteKeyTree(
+            registryPath,
+            operation,
+            dryRun,
+            RegistryBackupStore.Production);
+
+    internal static RegistryDeletionResult DeleteKeyTree(
+        string registryPath,
+        string operation,
+        bool dryRun,
+        RegistryBackupStore backupStore)
     {
         if (!TryParseKeyPath(registryPath, out var target))
             return Result(RegistryDeletionStatus.SkippedMalformedPath, registryPath);
@@ -51,29 +66,92 @@ public static class RegistryDeletion
         if (!SafetyGuard.IsRegistryPathSafeToDelete(target.CanonicalPath))
             return Result(RegistryDeletionStatus.SkippedUnsafePath, target.CanonicalPath);
 
+        RegistryBackupArtifact? artifact = null;
+        var prepared = false;
         try
         {
-            using var baseKey = global::Microsoft.Win32.RegistryKey.OpenBaseKey(target.Hive, RegistryView.Default);
-            if (!TargetKeyExistsAndIsPlain(baseKey, target.SubKey, target.CanonicalPath, out var status))
-                return Result(status, target.CanonicalPath);
+            var openStatus = RegistryNative.TryOpenForKeyDeletion(target, out var chain);
+            if (openStatus != RegistryOpenStatus.Opened)
+                return Result(MapOpenStatus(openStatus), target.CanonicalPath);
 
-            if (dryRun) return Result(RegistryDeletionStatus.DryRun, target.CanonicalPath);
+            using (chain)
+            {
+                var before = RegistryNative.CaptureTree(target, chain!.Target);
+                if (dryRun)
+                    return Result(RegistryDeletionStatus.DryRun, target.CanonicalPath);
 
-            var backupPath = Backup.BackupRegistryKey(target.CanonicalPath);
-            if (string.IsNullOrEmpty(backupPath))
-                return Result(RegistryDeletionStatus.BackupFailed, target.CanonicalPath);
+                artifact = backupStore.Create(before);
+                if (artifact == null ||
+                    backupStore.RequiresTrustedAcl && !artifact.BackupAclTrusted)
+                    return Result(RegistryDeletionStatus.BackupFailed, target.CanonicalPath);
 
-            if (!TargetKeyExistsAndIsPlain(baseKey, target.SubKey, target.CanonicalPath, out status))
-                return Result(status, target.CanonicalPath, backupPath);
+                var afterBackup = RegistryNative.CaptureTree(target, chain.Target);
+                if (!before.ObjectIdentity.Equals(
+                        afterBackup.ObjectIdentity,
+                        StringComparison.Ordinal))
+                {
+                    backupStore.Discard(artifact);
+                    return Result(
+                        RegistryDeletionStatus.SkippedDrift,
+                        target.CanonicalPath,
+                        errorMessage: "The registry tree changed while its rollback artifact was created.");
+                }
 
-            baseKey.DeleteSubKeyTree(target.SubKey, throwOnMissingSubKey: false);
-            DeletionManifest.RecordRegistry(target.CanonicalPath, operation);
-            return Result(RegistryDeletionStatus.Deleted, target.CanonicalPath, backupPath);
+                prepared = DeletionManifest.RecordRegistryTransaction(
+                    target.CanonicalPath,
+                    operation,
+                    artifact,
+                    "Prepared");
+                if (!prepared)
+                {
+                    backupStore.Discard(artifact);
+                    return Result(
+                        RegistryDeletionStatus.ManifestFailed,
+                        target.CanonicalPath,
+                        errorMessage: "The write-ahead deletion record could not be persisted.");
+                }
+
+                RegistryNative.DeleteTree(chain.Target);
+            }
+
+            DeletionManifest.RecordRegistryTransaction(
+                target.CanonicalPath,
+                operation,
+                artifact,
+                "Succeeded");
+            return Result(
+                RegistryDeletionStatus.Deleted,
+                target.CanonicalPath,
+                artifact.BackupPath,
+                operationId: artifact.OperationId,
+                backupSha256: artifact.BackupSha256);
         }
         catch (Exception ex)
         {
+            if (artifact != null)
+            {
+                if (prepared)
+                {
+                    DeletionManifest.RecordRegistryTransaction(
+                        target.CanonicalPath,
+                        operation,
+                        artifact,
+                        "Failed");
+                }
+                else
+                {
+                    backupStore.Discard(artifact);
+                }
+            }
+
             Log.Warn($"Registry key delete failed '{target.CanonicalPath}': {ex.Message}");
-            return Result(RegistryDeletionStatus.Failed, target.CanonicalPath, errorMessage: ex.Message);
+            return Result(
+                RegistryDeletionStatus.Failed,
+                target.CanonicalPath,
+                artifact?.BackupPath,
+                ex.Message,
+                artifact?.OperationId,
+                artifact?.BackupSha256);
         }
     }
 
@@ -81,6 +159,17 @@ public static class RegistryDeletion
         string registryValuePath,
         string operation,
         bool dryRun = false)
+        => DeleteValue(
+            registryValuePath,
+            operation,
+            dryRun,
+            RegistryBackupStore.Production);
+
+    internal static RegistryDeletionResult DeleteValue(
+        string registryValuePath,
+        string operation,
+        bool dryRun,
+        RegistryBackupStore backupStore)
     {
         if (!TryParseValuePath(registryValuePath, out var target, out var valueName))
             return Result(RegistryDeletionStatus.SkippedMalformedPath, registryValuePath);
@@ -89,41 +178,97 @@ public static class RegistryDeletion
         if (!SafetyGuard.IsRegistryPathSafeToDelete(canonicalValuePath))
             return Result(RegistryDeletionStatus.SkippedUnsafePath, canonicalValuePath);
 
+        RegistryBackupArtifact? artifact = null;
+        var prepared = false;
         try
         {
-            using var baseKey = global::Microsoft.Win32.RegistryKey.OpenBaseKey(target.Hive, RegistryView.Default);
-            using var readKey = baseKey.OpenSubKey(target.SubKey);
-            if (readKey == null) return Result(RegistryDeletionStatus.SkippedMissing, canonicalValuePath);
-            if (SafetyGuard.IsRegistrySymlink(readKey))
+            var openStatus = RegistryNative.TryOpenForValueDeletion(target, out var chain);
+            if (openStatus != RegistryOpenStatus.Opened)
+                return Result(MapOpenStatus(openStatus), canonicalValuePath);
+
+            using (chain)
             {
-                Log.Warn($"Skipping registry symlink: {target.CanonicalPath}");
-                return Result(RegistryDeletionStatus.SkippedSymlink, canonicalValuePath);
+                var before = RegistryNative.CaptureValue(target, valueName, chain!.Target);
+                if (before == null)
+                    return Result(RegistryDeletionStatus.SkippedMissing, canonicalValuePath);
+                if (dryRun)
+                    return Result(RegistryDeletionStatus.DryRun, canonicalValuePath);
+
+                artifact = backupStore.Create(before);
+                if (artifact == null ||
+                    backupStore.RequiresTrustedAcl && !artifact.BackupAclTrusted)
+                    return Result(RegistryDeletionStatus.BackupFailed, canonicalValuePath);
+
+                var afterBackup = RegistryNative.CaptureValue(target, valueName, chain.Target);
+                if (afterBackup == null ||
+                    !before.ObjectIdentity.Equals(
+                        afterBackup.ObjectIdentity,
+                        StringComparison.Ordinal))
+                {
+                    backupStore.Discard(artifact);
+                    return Result(
+                        RegistryDeletionStatus.SkippedDrift,
+                        canonicalValuePath,
+                        errorMessage: "The registry value changed while its rollback artifact was created.");
+                }
+
+                prepared = DeletionManifest.RecordRegistryTransaction(
+                    canonicalValuePath,
+                    operation,
+                    artifact,
+                    "Prepared");
+                if (!prepared)
+                {
+                    backupStore.Discard(artifact);
+                    return Result(
+                        RegistryDeletionStatus.ManifestFailed,
+                        canonicalValuePath,
+                        errorMessage: "The write-ahead deletion record could not be persisted.");
+                }
+
+                if (!RegistryNative.DeleteValue(chain.Target, valueName))
+                    throw new InvalidOperationException(
+                        "The registry value disappeared immediately before deletion.");
             }
-            if (!readKey.GetValueNames().Contains(valueName, StringComparer.OrdinalIgnoreCase))
-                return Result(RegistryDeletionStatus.SkippedMissing, canonicalValuePath);
 
-            if (dryRun) return Result(RegistryDeletionStatus.DryRun, canonicalValuePath);
-
-            var backupPath = Backup.BackupRegistryKey(target.CanonicalPath);
-            if (string.IsNullOrEmpty(backupPath))
-                return Result(RegistryDeletionStatus.BackupFailed, canonicalValuePath);
-
-            using var writeKey = baseKey.OpenSubKey(target.SubKey, writable: true);
-            if (writeKey == null) return Result(RegistryDeletionStatus.SkippedMissing, canonicalValuePath, backupPath);
-            if (SafetyGuard.IsRegistrySymlink(writeKey))
-            {
-                Log.Warn($"Skipping registry symlink: {target.CanonicalPath}");
-                return Result(RegistryDeletionStatus.SkippedSymlink, canonicalValuePath, backupPath);
-            }
-
-            writeKey.DeleteValue(valueName, throwOnMissingValue: false);
-            DeletionManifest.RecordRegistry(canonicalValuePath, operation);
-            return Result(RegistryDeletionStatus.Deleted, canonicalValuePath, backupPath);
+            DeletionManifest.RecordRegistryTransaction(
+                canonicalValuePath,
+                operation,
+                artifact,
+                "Succeeded");
+            return Result(
+                RegistryDeletionStatus.Deleted,
+                canonicalValuePath,
+                artifact.BackupPath,
+                operationId: artifact.OperationId,
+                backupSha256: artifact.BackupSha256);
         }
         catch (Exception ex)
         {
+            if (artifact != null)
+            {
+                if (prepared)
+                {
+                    DeletionManifest.RecordRegistryTransaction(
+                        canonicalValuePath,
+                        operation,
+                        artifact,
+                        "Failed");
+                }
+                else
+                {
+                    backupStore.Discard(artifact);
+                }
+            }
+
             Log.Warn($"Registry value delete failed '{canonicalValuePath}': {ex.Message}");
-            return Result(RegistryDeletionStatus.Failed, canonicalValuePath, errorMessage: ex.Message);
+            return Result(
+                RegistryDeletionStatus.Failed,
+                canonicalValuePath,
+                artifact?.BackupPath,
+                ex.Message,
+                artifact?.OperationId,
+                artifact?.BackupSha256);
         }
     }
 
@@ -174,29 +319,13 @@ public static class RegistryDeletion
         return true;
     }
 
-    private static bool TargetKeyExistsAndIsPlain(
-        RegistryKey baseKey,
-        string subKey,
-        string canonicalPath,
-        out RegistryDeletionStatus status)
-    {
-        using var checkKey = baseKey.OpenSubKey(subKey);
-        if (checkKey == null)
+    private static RegistryDeletionStatus MapOpenStatus(RegistryOpenStatus status)
+        => status switch
         {
-            status = RegistryDeletionStatus.SkippedMissing;
-            return false;
-        }
-
-        if (SafetyGuard.IsRegistrySymlink(checkKey))
-        {
-            Log.Warn($"Skipping registry symlink: {canonicalPath}");
-            status = RegistryDeletionStatus.SkippedSymlink;
-            return false;
-        }
-
-        status = RegistryDeletionStatus.Deleted;
-        return true;
-    }
+            RegistryOpenStatus.Missing => RegistryDeletionStatus.SkippedMissing,
+            RegistryOpenStatus.SymbolicLink => RegistryDeletionStatus.SkippedSymlink,
+            _ => RegistryDeletionStatus.Failed,
+        };
 
     private static bool TryResolveHive(string hiveToken, out RegistryHive hive, out string hiveName)
     {
@@ -233,6 +362,8 @@ public static class RegistryDeletion
         RegistryDeletionStatus status,
         string path,
         string? backupPath = null,
-        string? errorMessage = null)
-        => new(status, path, backupPath, errorMessage);
+        string? errorMessage = null,
+        string? operationId = null,
+        string? backupSha256 = null)
+        => new(status, path, backupPath, errorMessage, operationId, backupSha256);
 }

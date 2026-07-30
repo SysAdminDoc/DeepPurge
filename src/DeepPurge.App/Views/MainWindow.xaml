@@ -1492,6 +1492,7 @@
                                 <DataGridTextColumn Binding="{Binding TimestampUtc, StringFormat={}{0:yyyy-MM-dd HH:mm}}" Header="TIME (UTC)" Width="140"/>
                                 <DataGridTextColumn Binding="{Binding Type}" Header="TYPE" Width="90"/>
                                 <DataGridTextColumn Binding="{Binding Operation}" Header="OPERATION" Width="150"/>
+                                <DataGridTextColumn Binding="{Binding Outcome}" Header="OUTCOME" Width="100"/>
                                 <DataGridTextColumn Binding="{Binding SizeBytes, Converter={StaticResource BytesToSizeConverter}}" Header="SIZE" Width="90"/>
                                 <DataGridTextColumn Binding="{Binding Path}" Header="PATH" Width="*"/>
                             </DataGrid.Columns>
@@ -1523,8 +1524,9 @@
                                        Foreground="{DynamicResource TextBrush}" Margin="0,0,0,8"/>
                             <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource SubtextBrush}"
                                        Margin="0,0,0,24" FontSize="13" LineHeight="21">
-                                Every destructive registry operation creates a <Run FontWeight="SemiBold">.reg</Run> export
-                                in your local app data. Open the folder to inspect, import, or prune backups.
+                                Every destructive registry operation creates a SHA-256-bound <Run FontWeight="SemiBold">.reg</Run>
+                                rollback artifact in protected system storage. Restore through Deletion Recovery so scope,
+                                ownership, DACL, operation identity, and content are validated before import.
                             </TextBlock>
                             <Button Content="Open Backup Folder" Click="OpenBackupFolder_Click"
                                     Style="{DynamicResource AccentButton}" HorizontalAlignment="Left" Padding="28,10"/>

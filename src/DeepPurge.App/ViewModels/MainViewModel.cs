@@ -1220,18 +1220,27 @@ public partial class MainViewModel : ObservableObject
 
     public void OpenBackupFolder()
     {
-        var dir = new Core.Safety.BackupManager().BackupDirectory;
-        try { Directory.CreateDirectory(dir); } catch { }
+        var dir = DataPaths.RegistryBackups;
+        if (!Directory.Exists(dir))
+        {
+            StatusText = "No protected registry rollback artifacts have been created yet.";
+            return;
+        }
         try
         {
             Process.Start(new ProcessStartInfo
             {
-                FileName = "explorer.exe",
+                FileName = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+                    "explorer.exe"),
                 Arguments = dir,
                 UseShellExecute = true,
             });
         }
-        catch { /* best-effort */ }
+        catch (Exception ex)
+        {
+            StatusText = $"Could not open the protected backup folder: {ex.Message}";
+        }
     }
 
     // ═══════════════════════════════════════════════════════
