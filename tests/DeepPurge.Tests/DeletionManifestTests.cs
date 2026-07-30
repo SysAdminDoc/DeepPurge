@@ -115,4 +115,104 @@ public class DeletionManifestTests
             }
         }
     }
+
+    [Fact]
+    public void Legacy_registry_record_cannot_time_match_and_import_a_decoy_backup()
+    {
+        var date = new DateTime(2099, 12, 29);
+        var manifestPath = Path.Combine(
+            DataPaths.Logs,
+            $"deletions-{date:yyyy-MM-dd}.jsonl");
+        var decoyPath = Path.Combine(
+            DataPaths.Backups,
+            $"legacy-decoy-{Guid.NewGuid():N}.reg");
+        var previousManifest = File.Exists(manifestPath)
+            ? File.ReadAllText(manifestPath)
+            : null;
+
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
+            File.WriteAllText(
+                decoyPath,
+                "Windows Registry Editor Version 5.00\r\n\r\n" +
+                "[HKEY_CURRENT_USER\\Software\\DeepPurgeDecoy]\r\n");
+            File.WriteAllText(
+                manifestPath,
+                JsonSerializer.Serialize(new DeletionEntry(
+                    @"HKCU\Software\DeepPurgeTests\Legacy",
+                    "registry",
+                    0,
+                    date,
+                    "legacy-delete")) + Environment.NewLine);
+
+            var result = DeletionManifest.RestoreFromManifest(date, dryRun: true);
+
+            Assert.Equal(0, result.RegistryRestored);
+            Assert.Equal(1, result.Unrecoverable);
+            Assert.Contains(
+                result.Details,
+                detail => detail.Contains(
+                    "legacy or missing bound recovery fields",
+                    StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (previousManifest == null)
+            {
+                try { File.Delete(manifestPath); } catch { }
+            }
+            else
+            {
+                File.WriteAllText(manifestPath, previousManifest);
+            }
+            try { File.Delete(decoyPath); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Manifest_loading_collapses_registry_write_ahead_states_by_operation_id()
+    {
+        var date = new DateTime(2099, 12, 28);
+        var path = Path.Combine(DataPaths.Logs, $"deletions-{date:yyyy-MM-dd}.jsonl");
+        var previous = File.Exists(path) ? File.ReadAllText(path) : null;
+        var operationId = Guid.NewGuid().ToString("N");
+        try
+        {
+            var prepared = new DeletionEntry(
+                @"HKCU\Software\DeepPurgeTests\Wal",
+                "registry",
+                0,
+                date,
+                "test",
+                SchemaVersion: 2,
+                OperationId: operationId,
+                Outcome: "Prepared");
+            var succeeded = prepared with
+            {
+                TimestampUtc = date.AddSeconds(1),
+                Outcome = "Succeeded",
+            };
+            File.WriteAllLines(path, new[]
+            {
+                JsonSerializer.Serialize(prepared),
+                JsonSerializer.Serialize(succeeded),
+            });
+
+            var entry = Assert.Single(DeletionManifest.LoadManifest(date));
+            Assert.Equal("Succeeded", entry.Outcome);
+            Assert.Equal(operationId, entry.OperationId);
+        }
+        finally
+        {
+            if (previous == null)
+            {
+                try { File.Delete(path); } catch { }
+            }
+            else
+            {
+                File.WriteAllText(path, previous);
+            }
+        }
+    }
 }

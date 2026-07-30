@@ -1038,7 +1038,9 @@ if ($app) {{
             foreach (var e in entries)
             {
                 var path = redact ? PrivacyRedactor.RedactPaths(e.Path) : e.Path;
-                Console.WriteLine($"  [{e.Type,-9}] {e.Operation,-15} {FormatBytes(e.SizeBytes),10}  {path}");
+                Console.WriteLine(
+                    $"  [{e.Type,-9}] {e.Outcome,-10} {e.Operation,-15} " +
+                    $"{FormatBytes(e.SizeBytes),10}  {path}");
             }
             return 0;
         }

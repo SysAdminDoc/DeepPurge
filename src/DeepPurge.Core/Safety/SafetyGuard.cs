@@ -311,41 +311,6 @@ public static class SafetyGuard
             IsSamePathOrDescendant(normalized, NormalizePath(parent)));
     }
 
-    /// <summary>
-    /// Returns true if a registry key is a symbolic link (REG_LINK).
-    /// Reads the key class via RegQueryInfoKeyW — symlinks have a non-empty class.
-    /// Normal keys have an empty/null class. Callers must NOT write/delete
-    /// symlinked keys — an attacker can redirect writes to critical system keys.
-    /// </summary>
-    public static bool IsRegistrySymlink(Microsoft.Win32.RegistryKey key)
-    {
-        try
-        {
-            var field = typeof(Microsoft.Win32.RegistryKey).GetField("_hkey",
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            if (field == null) return false;
-            var handle = field.GetValue(key) as Microsoft.Win32.SafeHandles.SafeRegistryHandle;
-            if (handle == null || handle.IsInvalid) return false;
-
-            var classBuffer = new StringBuilder(260);
-            int classLen = classBuffer.Capacity;
-            int result = RegQueryInfoKeyW(handle.DangerousGetHandle(),
-                classBuffer, ref classLen, IntPtr.Zero,
-                out _, out _, out _, out _, out _, out _, out _, IntPtr.Zero);
-
-            if (result != 0) return false;
-            return classLen > 0 && classBuffer.Length > 0;
-        }
-        catch { return false; }
-    }
-
-    [System.Runtime.InteropServices.DllImport("advapi32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
-    private static extern int RegQueryInfoKeyW(
-        IntPtr hKey, StringBuilder? lpClass, ref int lpcchClass, IntPtr lpReserved,
-        out int lpcSubKeys, out int lpcbMaxSubKeyLen, out int lpcbMaxClassLen,
-        out int lpcValues, out int lpcbMaxValueNameLen, out int lpcbMaxValueLen,
-        out int lpcbSecurityDescriptor, IntPtr lpftLastWriteTime);
-
     /// <summary>Returns true if the path is a reparse point (symlink, junction, mount point). Callers must NOT recurse into reparse points during deletion.</summary>
     public static bool IsReparsePoint(string path)
     {

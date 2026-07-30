@@ -25,6 +25,16 @@ public static class DataPaths
 
     public static string Logs      => Ensure(Path.Combine(Root, "Logs"));
     public static string Backups   => Ensure(Path.Combine(Root, "Backups"));
+    /// <summary>
+    /// Elevated-only storage for authenticated registry rollback artifacts.
+    /// This deliberately remains outside portable/per-user state: a backup
+    /// consumed by an elevated restore must not be replaceable by the
+    /// unelevated desktop user.
+    /// </summary>
+    public static string RegistryBackups => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+        "DeepPurge",
+        "RegistryBackups");
     public static string Snapshots => Ensure(Path.Combine(Root, "Snapshots"));
     public static string Cleaners  => Ensure(Path.Combine(Root, "Cleaners"));
     public static string Config    => Ensure(Path.Combine(Root, "Config"));

@@ -79,8 +79,8 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 ### Safety
 - **System Restore Points** - View, create, and manage restore points
 - Automatic restore point creation before uninstall operations (one per batch in bulk mode — Windows throttles SRSetRestorePoint)
-- **Deletion Recovery panel** - list deletion manifests, preview recorded file/registry deletions, run dry-run restores, and open manifest or backup folders
-- **Registry Backups panel** - Browse, inspect, and restore the `.reg` exports created before every destructive registry op
+- **Deletion Recovery panel** - list deletion manifests, preview recorded file/registry deletions, and run dry-run or live restores; registry rollback accepts only the exact SHA-256-bound artifact named by a versioned operation record
+- **Registry Backups panel** - Open the ACL-protected `%ProgramData%\DeepPurge\RegistryBackups` store; every artifact binds its hive, subkey/value, object identity, owner/DACL, and operation ID, and legacy manifests cannot auto-discover a `.reg` file
 - Recycle Bin for file deletions (with permanent-delete and secure-delete fallbacks)
 - Confidence-based leftover classification (Safe / Moderate / Risky)
 - Centralized `SafetyGuard` blocks every destructive call against Windows, Program Files, System32, and protected registry hives
