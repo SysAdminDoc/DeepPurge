@@ -446,7 +446,7 @@ public partial class MainViewModel
     // ═══════════════════════════════════════════════════════
     //  SCHEDULED JOBS
     // ═══════════════════════════════════════════════════════
-    public ObservableCollection<string> ScheduledJobs { get; } = new();
+    public ObservableCollection<ScheduledJobInfo> ScheduledJobs { get; } = new();
 
     [RelayCommand]
     private void RefreshScheduledJobs()
@@ -473,9 +473,13 @@ public partial class MainViewModel
         }
         try
         {
-            var ok = new ScheduleManager().CreateJob(
+            var manager = new ScheduleManager();
+            var ok = manager.CreateJob(
                 new ScheduleJob(name, freq, day, hh, mm, cliArgs), cliPath);
             RefreshScheduledJobs();
+            StatusText = ok
+                ? $"Scheduled protected job '{name}'."
+                : $"Schedule create failed: {manager.LastError}";
             return ok;
         }
         catch (Exception ex) { Log.Error("CreateScheduledJob", ex); StatusText = $"Schedule create failed: {ex.Message}"; return false; }
@@ -491,15 +495,52 @@ public partial class MainViewModel
 
         try
         {
-            var ok = new ScheduleManager().DeleteJob(name);
+            var manager = new ScheduleManager();
+            var ok = manager.DeleteJob(name);
             RefreshScheduledJobs();
-            StatusText = ok ? $"Removed scheduled job '{name}'." : $"Failed to remove scheduled job '{name}'.";
+            StatusText = ok
+                ? $"Removed scheduled job '{name}'."
+                : $"Failed to remove scheduled job '{name}': {manager.LastError}";
             return ok;
         }
         catch (Exception ex)
         {
             Log.Error("DeleteScheduledJob", ex);
             StatusText = $"Schedule remove failed: {ex.Message}";
+            return false;
+        }
+    }
+
+    public bool MigrateLegacyScheduledJobs()
+    {
+        var cliPath = ResolveCliPath();
+        if (cliPath == null)
+        {
+            StatusText = "DeepPurgeCli.exe not found. Run BUILD.bat or publish the CLI first.";
+            return false;
+        }
+
+        try
+        {
+            var results = new ScheduleManager().MigrateLegacyJobs(cliPath);
+            RefreshScheduledJobs();
+            if (results.Count == 0)
+            {
+                StatusText = "No legacy scheduled wrappers require migration.";
+                return true;
+            }
+
+            var migrated = results.Count(result => result.Migrated);
+            var failures = results.Count - migrated;
+            StatusText = failures == 0
+                ? $"Migrated {migrated} legacy job(s) to protected disabled dry-run actions."
+                : $"Migrated {migrated}; {failures} failed. Review schedule diagnostics.";
+            return failures == 0;
+        }
+        catch (Exception ex)
+        {
+            Log.Error("MigrateLegacyScheduledJobs", ex);
+            StatusText = $"Schedule migration failed: {ex.Message}";
             return false;
         }
     }

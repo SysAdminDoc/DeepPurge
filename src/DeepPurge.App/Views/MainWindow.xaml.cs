@@ -367,6 +367,7 @@ public partial class MainWindow : Window
                 panelSchedule.Visibility = Visibility.Visible; txtPanelTitle.Text = "Scheduled Cleaning";
                 AppendToolbarButton("Create Job", CreateScheduledJob_Click, "AccentButton");
                 AppendToolbarButton("Remove Job", RemoveScheduledJob_Click, "DangerButton");
+                AppendToolbarButton("Migrate Legacy", MigrateScheduledJobs_Click);
                 AppendToolbarButton("Refresh", RefreshSchedule_Click, "AccentButton");
                 // Refresh every time — schedule list is cheap and can change externally.
                 _vm.RefreshScheduledJobsCommand.Execute(null);
@@ -483,14 +484,21 @@ public partial class MainWindow : Window
 
     private void RemoveScheduledJob_Click(object s, RoutedEventArgs e)
     {
-        if (lstScheduledJobs.SelectedItem is not string name || string.IsNullOrWhiteSpace(name))
+        if (lstScheduledJobs.SelectedItem is not ScheduledJobInfo job ||
+            string.IsNullOrWhiteSpace(job.Name))
         {
             WarnStatus("Select a scheduled job first.");
             return;
         }
 
-        var ok = _vm.DeleteScheduledJob(name);
-        ShowToast(ok ? $"Removed {name}" : _vm.StatusText, isError: !ok);
+        var ok = _vm.DeleteScheduledJob(job.Name);
+        ShowToast(ok ? $"Removed {job.Name}" : _vm.StatusText, isError: !ok);
+    }
+
+    private void MigrateScheduledJobs_Click(object s, RoutedEventArgs e)
+    {
+        var ok = _vm.MigrateLegacyScheduledJobs();
+        ShowToast(_vm.StatusText, isError: !ok);
     }
 
     private void RefreshSchedule_Click(object s, RoutedEventArgs e)
