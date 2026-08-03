@@ -5,43 +5,6 @@ using DeepPurge.Core.Safety;
 
 namespace DeepPurge.Core.InstallMonitor;
 
-public record SnapshotEntry(string Path, long SizeBytes, DateTime LastWriteUtc, string? Sha256 = null);
-public record RegistryKeyEntry(string Path);
-
-public class InstallSnapshot
-{
-    public string Id { get; set; } = Guid.NewGuid().ToString("N");
-    public string ProgramName { get; set; } = "";
-    public string InstallerPath { get; set; } = "";
-    public DateTime CapturedAt { get; set; }
-    public List<SnapshotEntry>    Files        { get; set; } = new();
-    public List<RegistryKeyEntry> RegistryKeys { get; set; } = new();
-}
-
-public class InstallDelta
-{
-    public List<SnapshotEntry> AddedFiles         { get; set; } = new();
-    public List<string>        AddedRegistryKeys  { get; set; } = new();
-    public List<string>        RemovedFiles       { get; set; } = new();
-    public List<string>        RemovedRegistryKeys{ get; set; } = new();
-    public long TotalAddedBytes => AddedFiles.Sum(f => f.SizeBytes);
-    public bool IsUpgrade => RemovedFiles.Count > 0 || RemovedRegistryKeys.Count > 0;
-}
-
-public sealed record InstallReplayResult(
-    int Removed,
-    int Skipped,
-    long Freed,
-    IReadOnlyList<string> SkippedReasons)
-{
-    public void Deconstruct(out int removed, out int skipped, out long freed)
-    {
-        removed = Removed;
-        skipped = Skipped;
-        freed = Freed;
-    }
-}
-
 /// <summary>
 /// Captures before/after snapshots of the filesystem + registry around an
 /// installer run. The delta is persisted per-application so "forced uninstall"
