@@ -1,27 +1,8 @@
 # Roadmap
 
-Living plan. Items sit here until they ship or get dropped; dropping is a valid outcome.
-Blocked items live in `Roadmap_Blocked.md`.
+Actionable work only. Historical and completed roadmap material is archived in CHANGELOG.md; blocked work is kept in Roadmap_Blocked.md.
 
-## Active items
-
-No active implementation items.
-
-## What we will NOT ship
-
-Explicit "no" list, so anyone proposing these doesn't waste effort:
-
-- **Multi-pass DoD wipes** - obsolete on SSDs, wastes write cycles. Single-pass
-  cryptographic random already covers the real threat model.
-- **Keyboard shortcuts** - user preference
-- **Feature flags / A-B gating** - overkill for a local desktop tool
-- **Cloud sync of settings** - privacy surface without clear value
-- **MSIX distribution** - sandboxes DeepPurge out of the HKLM autorun edits it
-  needs to function; actively harmful for this app
-
-## Research-Driven Additions
-
-### P0
+## Actionable Items
 
 - [ ] P0 — Quarantine Install Monitor V2 replay until provenance is trustworthy
   Why: USN leaf names are converted to incorrect root paths, volume-wide modifications are treated as installer-created, fallback snapshots occur after installation, and Sysmon events are not safely attributed.
@@ -29,8 +10,6 @@ Explicit "no" list, so anyone proposing these doesn't waste effort:
   Touches: `src/DeepPurge.Core/InstallMonitor/`, manifest schemas, trace/replay WPF and CLI, injected install-monitor tests
   Acceptance: Until a new eligible manifest is produced, tracing falls back to the pre/post V1 path and V2 data is diagnostic-only; the replacement resolves parent FRNs, captures pre-launch identity, correlates the installer process tree/time window, distinguishes create from modify, preserves HKU SID/hive, and permits replay only for created objects whose identity still matches.
   Complexity: L
-
-### P1
 
 - [ ] P1 — Centralize deletion policy, outcomes, and success-only provenance
   Why: `UseRecycleBin`, dry-run, secure mode, result counts, and manifests mean different things across pipelines, so permanent or failed operations can be reported as recoverable success.
@@ -94,8 +73,6 @@ Explicit "no" list, so anyone proposing these doesn't waste effort:
   Touches: project package references, all `packages.lock.json`, `NuGet.Config`, `Build.ps1`, SDK bootstrap/version files, release validation tests/docs
   Acceptance: Microsoft.Data.Sqlite/.NET libraries resolve to 10.0.10 and SQLitePCLRaw to a 3.53.4-backed release; all packages map to explicit trusted sources; restore runs locked by default and fails on drift; SDK/bootstrap content is version/hash pinned; the default release path runs tests, dependency audit, and validation offline from the lock/cache.
   Complexity: M
-
-### P2
 
 - [ ] P2 — Enforce a capability-to-surface and documentation contract
   Why: Health Dashboard/System Slimming are advertised but unreachable, `ExpertMode` governs no behavior, some enrichment changes do not notify WPF, and architecture/status notes have drifted from implementation.
