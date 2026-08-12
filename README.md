@@ -49,7 +49,8 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 
 ### Installation Monitor *(flagship)*
 - **Before/after snapshot** - Captures filesystem + registry manifest before and after a traced installer; the diff becomes a precise per-app removal list
-- **Replay uninstall** - "Forced Uninstall" references the exact manifest instead of heuristic name-matching and skips replay files whose size, timestamp, or SHA256 no longer matches the captured identity
+- **Replay uninstall** - "Forced Uninstall" references the exact manifest instead of heuristic name-matching and skips replay files whose created-object identity, size, timestamp, or SHA256 no longer matches the captured identity. Legacy manifests and diagnostic-only journal evidence cannot be replayed.
+- **Diagnostic journal evidence** - The optional USN/Sysmon trace records parent-resolved filesystem changes and installer-process-tree registry activity for review, while authoritative pre/post snapshots decide what can be replayed.
 - Manifests persisted in `%LocalAppData%\DeepPurge\Snapshots\<name>.manifest.json` (or `./Data/Snapshots/` in portable mode)
 
 ### Community Cleaner Definitions

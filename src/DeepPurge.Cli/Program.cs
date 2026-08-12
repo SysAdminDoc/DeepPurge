@@ -457,20 +457,30 @@ public static class Program
 
         var engine = new InstallSnapshotEngine();
         var useV2 = !a.HasFlag("legacy") && UsnJournalReader.IsSupported(Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles)) ?? @"C:\");
-        if (useV2) Console.WriteLine("[v2 mode: USN journal + registry snapshot]");
+        if (useV2) Console.WriteLine("[diagnostic mode: pre/post snapshot is authoritative; USN/Sysmon evidence is non-replayable]");
         var delta = useV2
             ? await engine.TraceInstallV2Async(name, installer, extraArgs, ct)
             : await engine.TraceInstallAsync(name, installer, extraArgs, ct);
         if (a.HasFlag("json"))
         {
+            var manifest = engine.LoadInstallManifest(name);
             WriteJson(new {
                 delta.IsUpgrade,
+                TraceMode = manifest?.TraceMode.ToString() ?? "Unknown",
+                ReplayEligible = manifest?.ReplayEligible ?? false,
+                ReplayEligibilityReason = manifest?.ReplayEligibilityReason ?? "No manifest",
+                Diagnostics = manifest?.Diagnostics,
                 AddedFiles = delta.AddedFiles.Select(f => new { f.Path, f.SizeBytes }),
                 delta.AddedRegistryKeys, delta.RemovedFiles, delta.RemovedRegistryKeys,
                 delta.TotalAddedBytes,
             });
             return 0;
         }
+
+        var savedManifest = engine.LoadInstallManifest(name);
+        if (savedManifest?.Diagnostics.Warnings.Count > 0)
+            Console.WriteLine($"Diagnostics: {string.Join(" | ", savedManifest.Diagnostics.Warnings)}");
+        Console.WriteLine($"Replay eligible: {savedManifest?.ReplayEligible == true}");
 
         if (delta.IsUpgrade) Console.WriteLine("[upgrade detected — showing diff against prior version]");
         Console.WriteLine($"Added files:      {delta.AddedFiles.Count,5} ({FormatBytes(delta.TotalAddedBytes)})");

@@ -4,6 +4,9 @@ All notable changes to DeepPurge will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed (P0 install-monitor safety)
+- **Quarantined Install Monitor V2 replay** - Install traces now use an authoritative pre/post snapshot, capture installer identity before launch, classify created versus modified files, resolve USN parent FRNs without fabricating paths, correlate Sysmon registry events to the installer process tree/time window, preserve explicit HKU SIDs, and block legacy or diagnostic-only manifests from replay. Replay additionally requires a matching SHA256 and stable filesystem identity, and failed deletes no longer count as removed.
+
 ### Changed (design)
 - **DeepPurge Slate operations console** - The WPF shell now uses a bespoke graphite/cyan default theme, denser navigation, explicit local-data posture, searchable program inventory metrics, clearer uninstall hierarchy, responsive panel toolbars, trust/source badges, and calmer loading/status surfaces. Filled action buttons retain WCAG normal-text contrast across every bundled theme.
 - **Accurate navigation and empty states** - Collection-backed empty states now update from observable counts, unavailable leftover deletion stays hidden until a scan enables it, and `--target` launches select the Forced Uninstall navigation item that matches the visible workspace.
