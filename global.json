@@ -1,0 +1,8 @@
+{
+  "sdk": {
+    "version": "10.0.302",
+    "rollForward": "disable",
+    "allowPrerelease": false,
+    "errorMessage": "DeepPurge requires the .NET SDK 10.0.302. Install that exact SDK before restoring this repository."
+  }
+}

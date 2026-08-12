@@ -119,7 +119,9 @@ Ten built-in themes with runtime switching and persistence between sessions:
 
 ## Build
 
-Requires .NET 10 SDK. Run `BUILD.bat` from the project root.
+Requires the exact .NET SDK `10.0.302`; `global.json` disables SDK roll-forward.
+Install that SDK before running `BUILD.bat` from the project root. Restore uses
+the committed package lockfiles and fails if dependency versions drift.
 
 ```
 BUILD.bat
@@ -167,21 +169,21 @@ DeepPurgeCli doctor                         # Environment self-test (16 checks, 
 dotnet test tests/DeepPurge.Tests/DeepPurge.Tests.csproj
 ```
 
-The current suite has 400 tests covering parser routing, protected helper resolution, original-user process brokering, package-manager command builders and source diagnostics, cleaner schema validation, cleanup failure reporting, release validation, privacy retention, SafetyGuard block/allow lists, handle-bound deletion/rollback, protected Task Scheduler registration and migration, versioned settings import/export contracts, static WPF accessibility/resource-drift checks, and support-bundle redaction.
+The current suite has 400 tests covering parser routing, protected helper resolution, original-user process brokering, package-manager command builders and source diagnostics, cleaner schema validation, cleanup failure reporting, release validation, privacy retention, SafetyGuard block/allow lists, handle-bound deletion/rollback, protected Task Scheduler registration and migration, versioned settings import/export contracts, static WPF accessibility/resource-drift checks, and support-bundle redaction. Release builds run the suite, project-level dependency audit, and locked restore by default; use `Build.ps1 -SkipTests` only for an explicitly test-free inner-loop publish.
 
 ## Packaging
 
 - **winget** — `packaging/winget/SysAdminDoc.DeepPurge.yaml` (submit via `wingetcreate`)
 - **Scoop**  — `packaging/scoop/deeppurge.json` (drop into a personal bucket)
-- **GitHub Releases** — build locally with `BUILD.bat` / `Build.ps1`, attach both executables plus `SHA256SUMS.txt`, then run `Build.ps1 -ValidateReleaseOnly -ReleaseChecksumsPath <path-to-SHA256SUMS.txt>` before publishing package manifests; the validator includes the project-level NuGet dependency audit
-- **Dependency audit** — run `Build.ps1 -AuditDependenciesOnly` to check Core, App, CLI, and Tests for outdated or vulnerable NuGet packages without using the solution-level `dotnet list` path
+- **GitHub Releases** — build locally with `BUILD.bat` / `Build.ps1`, attach both executables plus `SHA256SUMS.txt`, then run `Build.ps1 -ValidateReleaseOnly -ReleaseChecksumsPath <path-to-SHA256SUMS.txt>` before publishing package manifests; the default Release path runs locked restore, tests, and the project-level NuGet dependency audit
+- **Dependency audit** — run `Build.ps1 -AuditDependenciesOnly` to report outdated packages and block vulnerable or unreadable dependency graphs across Core, App, CLI, and Tests without using the solution-level `dotnet list` path
 - **Authenticode signing** — `./Build.ps1 -Sign -CertPath signing.pfx -CertPassword (Read-Host -AsSecureString)`
 
 
 ## Requirements
 - Windows 10/11
 - Run as Administrator (enforced by the manifest)
-- .NET 10 SDK (build only)
+- .NET SDK `10.0.302` (build only; exact version required)
 - Optional: winget (auto-detected; `doctor` reports version/list parser health when unavailable or degraded)
 - Optional: Scoop in `%USERPROFILE%\scoop\apps` (filesystem-scanned; `doctor` reports root availability and app count)
 - Optional: Chocolatey (`choco.exe` on PATH; `doctor` reports version/list parser health when unavailable or degraded)

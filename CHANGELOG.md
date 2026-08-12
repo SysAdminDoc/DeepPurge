@@ -31,6 +31,9 @@ All notable changes to DeepPurge will be documented in this file.
 ### Changed (P1 scan diagnostics)
 - **Typed partial-scan confidence** - Scheduled-task, firewall, PATH, autorun, context-menu, service, package-enrichment, health, orphan, and initial scans now retain successful peer items while reporting failed sources, warnings, elapsed time, cancellation, and explicit clean/partial/failed/timed-out/cancelled status. CLI JSON/text, WPF status surfaces, scan diagnostics logs, and support bundles expose the same confidence facts.
 
+### Changed (P1 dependency/toolchain)
+- **Pinned build inputs and SQLite maintenance** - The repository now requires the exact .NET SDK 10.0.302, restores from committed lockfiles in locked mode with explicit package-source mappings, and refuses mutable SDK bootstrap downloads. Microsoft.Data.Sqlite and .NET libraries resolve to 10.0.10, while SQLitePCLRaw 3.0.5 carries the SQLite 3.53.4 engine. Release builds validate these inputs, audit dependencies, and run tests before publishing.
+
 ### Changed (design)
 - **DeepPurge Slate operations console** - The WPF shell now uses a bespoke graphite/cyan default theme, denser navigation, explicit local-data posture, searchable program inventory metrics, clearer uninstall hierarchy, responsive panel toolbars, trust/source badges, and calmer loading/status surfaces. Filled action buttons retain WCAG normal-text contrast across every bundled theme.
 - **Accurate navigation and empty states** - Collection-backed empty states now update from observable counts, unavailable leftover deletion stays hidden until a scan enables it, and `--target` launches select the Forced Uninstall navigation item that matches the visible workspace.
@@ -55,7 +58,7 @@ All notable changes to DeepPurge will be documented in this file.
 
 ### Added (P1 trust)
 - **Install-manifest replay identity guards** - install-trace manifests now stamp added files with replay identity data and forced-uninstall replay skips missing, changed-size, changed-timestamp, or SHA256-mismatched files instead of deleting by path alone.
-- **Project-level dependency audit gate** - release validation now audits Core, App, CLI, and Tests project files directly for outdated and vulnerable NuGet packages without using the failing solution-level `dotnet list` path.
+- **Project-level dependency audit gate** - release validation now audits Core, App, CLI, and Tests project files directly, reports outdated packages as actionable advisories, and blocks vulnerable or unreadable dependency graphs without using the failing solution-level `dotnet list` path.
 - **Per-item cleanup failure reasons** - Junk and Evidence cleanup summaries now preserve redacted skipped-item reasons, surface them in GUI status/activity history, print and serialize them from CLI clean runs, and test missing-file, protected-path, and command-failure reporting.
 
 ### Added (P2 package managers)

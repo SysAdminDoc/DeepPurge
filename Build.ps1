@@ -4,7 +4,7 @@
     Compiles the project into single portable .exe files (GUI + CLI)
 
 .DESCRIPTION
-    Automatically installs .NET 10 SDK if needed, then builds self-contained
+    Requires the pinned .NET 10.0.302 SDK, then builds self-contained
     single-file portable executables. No Visual Studio required.
 
 .NOTES
@@ -18,8 +18,9 @@ param(
     [switch]$SkipClean,
     [switch]$OpenOutput,
     # Run the xUnit suite after build, before publish. Release builds
-    # should always use -Test; dev-inner-loop builds can skip.
+    # run it by default; dev-inner-loop builds can opt out explicitly.
     [switch]$Test,
+    [switch]$SkipTests,
     # ── Signing (optional) ──────────────────────────────────────────
     # Pass -Sign to Authenticode-sign the two published exes. Certificate
     # source is auto-detected in this order:
@@ -127,7 +128,7 @@ function Invoke-Signing {
     }
 }
 
-# ── Locate or Install .NET 10 SDK ──────────────────────────────
+# ── Verify the pinned .NET 10 SDK ──────────────────────────────
 function Add-ReleaseValidationFailure {
     param(
         [Parameter(Mandatory=$true)][string]$Key,
@@ -453,7 +454,8 @@ function Invoke-DependencyAuditCommand {
         [Parameter(Mandatory=$true)][string]$AuditName,
         [Parameter(Mandatory=$true)][string[]]$Arguments,
         [Parameter(Mandatory=$true)][string]$SuccessText,
-        [Parameter(Mandatory=$true)][string]$FailureMessage
+        [Parameter(Mandatory=$true)][string]$FailureMessage,
+        [switch]$AdvisoryOnly
     )
 
     $output = & $script:DotNetExe @Arguments 2>&1 | Out-String
@@ -463,6 +465,10 @@ function Invoke-DependencyAuditCommand {
     }
 
     if ($output -notmatch [regex]::Escape($SuccessText)) {
+        if ($AdvisoryOnly) {
+            Write-Host "  [WARN] $ProjectName $AuditName advisory:`n$output" -ForegroundColor Yellow
+            return
+        }
         Add-DependencyAuditFailure "$ProjectName $AuditName" "$FailureMessage`n$output"
     }
 }
@@ -491,7 +497,8 @@ function Invoke-DependencyAuditValidation {
             -AuditName "outdated" `
             -Arguments @("list", $project.Path, "package", "--outdated", "--no-restore") `
             -SuccessText "has no updates" `
-            -FailureMessage "outdated packages found"
+            -FailureMessage "outdated packages found" `
+            -AdvisoryOnly
 
         Invoke-DependencyAuditCommand `
             -ProjectName $project.Name `
@@ -513,8 +520,54 @@ function Invoke-DependencyAuditValidation {
     return $true
 }
 
+function Invoke-BuildInputValidation {
+    $failures = [System.Collections.Generic.List[string]]::new()
+    $globalJsonPath = Join-Path $ProjectRoot "global.json"
+    $propsPath = Join-Path $ProjectRoot "Directory.Build.props"
+    $nugetPath = Join-Path $ProjectRoot "NuGet.Config"
+
+    if (-not (Test-Path $globalJsonPath)) {
+        $failures.Add("global.json is missing") | Out-Null
+    } else {
+        try {
+            $globalJson = Get-Content $globalJsonPath -Raw | ConvertFrom-Json
+            if ($globalJson.sdk.version -ne "10.0.302" -or
+                $globalJson.sdk.rollForward -ne "disable" -or
+                $globalJson.sdk.allowPrerelease -ne $false) {
+                $failures.Add("global.json must pin SDK 10.0.302 with rollForward=disable and allowPrerelease=false") | Out-Null
+            }
+        } catch {
+            $failures.Add("global.json could not be parsed: $_") | Out-Null
+        }
+    }
+
+    if (-not (Test-Path $propsPath) -or
+        (Get-Content $propsPath -Raw) -notmatch "<RestoreLockedMode>true</RestoreLockedMode>") {
+        $failures.Add("Directory.Build.props must enable RestoreLockedMode") | Out-Null
+    }
+    if (-not (Test-Path $nugetPath)) {
+        $failures.Add("NuGet.Config is missing") | Out-Null
+    }
+    foreach ($lockPath in @(
+        (Join-Path $ProjectRoot "src\DeepPurge.Core\packages.lock.json"),
+        (Join-Path $ProjectRoot "src\DeepPurge.App\packages.lock.json"),
+        (Join-Path $ProjectRoot "src\DeepPurge.Cli\packages.lock.json"),
+        (Join-Path $ProjectRoot "tests\DeepPurge.Tests\packages.lock.json"))) {
+        if (-not (Test-Path $lockPath)) { $failures.Add("package lock is missing: $lockPath") | Out-Null }
+    }
+
+    if ($failures.Count -gt 0) {
+        Write-Host "  [ERROR] Build input validation failed:" -ForegroundColor Red
+        foreach ($failure in $failures) { Write-Host "       - $failure" -ForegroundColor Red }
+        return $false
+    }
+    Write-Host "  [OK] Pinned SDK, locked restore, source map, and lock files validated" -ForegroundColor Green
+    return $true
+}
+
 function Find-DotNet {
-    # Check common locations
+    # Check common locations. global.json below this script pins the exact
+    # SDK feature band and disables roll-forward.
     $candidates = @(
         (Get-Command dotnet -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -ErrorAction SilentlyContinue),
         "$env:ProgramFiles\dotnet\dotnet.exe",
@@ -522,63 +575,42 @@ function Find-DotNet {
         "$env:USERPROFILE\.dotnet\dotnet.exe"
     ) | Where-Object { $_ -and (Test-Path $_ -ErrorAction SilentlyContinue) }
 
-    foreach ($path in $candidates) {
-        try {
-            $output = & $path --version 2>&1 | Out-String
-            $output = $output.Trim()
-            if ($output -match "^10\.") {
-                return $path
-            }
-        } catch { }
+    Push-Location $ProjectRoot
+    try {
+        foreach ($path in $candidates) {
+            try {
+                $output = (& $path --version 2>&1 | Out-String).Trim()
+                if ($output -eq "10.0.302") { return $path }
+            } catch { }
+        }
+        return $null
+    } finally {
+        Pop-Location
     }
-    return $null
 }
 
 function Confirm-DotNetSDK {
     $dotnetPath = Find-DotNet
     if ($dotnetPath) {
         try {
-            $version = (& $dotnetPath --version 2>&1 | Out-String).Trim()
-            Write-Host "  [OK] .NET SDK $version found at: $dotnetPath" -ForegroundColor Green
-            $script:DotNetExe = $dotnetPath
-            return
+            Push-Location $ProjectRoot
+            try {
+                $version = (& $dotnetPath --version 2>&1 | Out-String).Trim()
+            } finally {
+                Pop-Location
+            }
+            if ($version -eq "10.0.302") {
+                Write-Host "  [OK] .NET SDK $version found at: $dotnetPath" -ForegroundColor Green
+                $script:DotNetExe = $dotnetPath
+                return
+            }
+            Write-Host "  [ERROR] global.json requires .NET SDK 10.0.302, found '$version'." -ForegroundColor Red
         } catch { }
     }
 
-    Write-Host "  [!] .NET 10 SDK not found. Installing..." -ForegroundColor Yellow
-    Write-Host ""
-
-    $installerUrl = "https://dot.net/v1/dotnet-install.ps1"
-    $installerPath = Join-Path $env:TEMP "dotnet-install.ps1"
-    $installDir = Join-Path $env:LOCALAPPDATA "dotnet"
-
-    try {
-        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath -UseBasicParsing -ErrorAction Stop
-
-        Write-Host "  [*] Installing .NET 10 SDK to: $installDir" -ForegroundColor Yellow
-        & $installerPath -Channel 10.0 -InstallDir $installDir
-
-        # Update PATH for this session
-        $env:PATH = "$installDir;$env:PATH"
-        $env:DOTNET_ROOT = $installDir
-
-        $dotnetExe = Join-Path $installDir "dotnet.exe"
-        if (Test-Path $dotnetExe) {
-            $version = (& $dotnetExe --version 2>&1 | Out-String).Trim()
-            Write-Host "  [OK] .NET SDK $version installed" -ForegroundColor Green
-            $script:DotNetExe = $dotnetExe
-        } else {
-            throw "dotnet.exe not found after installation"
-        }
-    }
-    catch {
-        Write-Host "  [ERROR] Failed to install .NET SDK: $_" -ForegroundColor Red
-        Write-Host "  Download manually: https://dotnet.microsoft.com/download/dotnet/10.0" -ForegroundColor Yellow
-        Write-Host ""
-        Read-Host "  Press Enter to exit"
-        exit 1
-    }
+    Write-Host "  [ERROR] Required .NET SDK 10.0.302 is not installed." -ForegroundColor Red
+    Write-Host "  Install the pinned SDK from https://dotnet.microsoft.com/download/dotnet/10.0 and rerun this build." -ForegroundColor Yellow
+    exit 1
 }
 
 $script:DotNetExe = "dotnet"
@@ -616,6 +648,8 @@ if (-not (Test-Path $CoreProject)) {
     exit 1
 }
 
+if (-not (Invoke-BuildInputValidation)) { exit 1 }
+
 if ($ValidateReleaseOnly) {
     if (-not (Invoke-ReleaseReadinessValidation)) { exit 1 }
     exit 0
@@ -651,18 +685,6 @@ if (-not $SkipClean) {
 
 New-Item -ItemType Directory -Path $BuildDir -Force | Out-Null
 
-# ── Check NuGet connectivity ───────────────────────────────────
-Write-Host "  [*] Checking NuGet feed connectivity..." -ForegroundColor Yellow
-try {
-    $nugetCheck = Invoke-WebRequest -Uri "https://api.nuget.org/v3/index.json" -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
-    if ($nugetCheck.StatusCode -eq 200) {
-        Write-Host "  [OK] NuGet feed reachable" -ForegroundColor Green
-    }
-} catch {
-    Write-Host "  [WARN] Cannot reach NuGet.org: $_" -ForegroundColor Yellow
-    Write-Host "         Build may fail if runtime packs aren't cached locally." -ForegroundColor Yellow
-}
-
 # ── Verify project files ──────────────────────────────────────
 Write-Host "  [*] Verifying project configuration..." -ForegroundColor Yellow
 $appCsproj = Join-Path (Join-Path (Join-Path $ProjectRoot "src") "DeepPurge.App") "DeepPurge.App.csproj"
@@ -680,15 +702,9 @@ if (Test-Path $appCsproj) {
 # ── Restore ────────────────────────────────────────────────────
 Write-Host "  [*] Restoring NuGet packages..." -ForegroundColor Yellow
 $nugetConfig = Join-Path $ProjectRoot "NuGet.Config"
-$restoreArgs = @("restore", $SolutionFile, "--nologo", "--force", "--source", "https://api.nuget.org/v3/index.json")
+$restoreArgs = @("restore", $SolutionFile, "--nologo", "--locked-mode", "--ignore-failed-sources", "--runtime", "win-x64", "--source", "https://api.nuget.org/v3/index.json")
 if (Test-Path $nugetConfig) { $restoreArgs += @("--configfile", $nugetConfig) }
 $restoreOutput = & $script:DotNetExe @restoreArgs 2>&1 | Out-String
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "  [!] First restore attempt failed. Clearing NuGet caches and retrying..." -ForegroundColor Yellow
-    & $script:DotNetExe nuget locals http-cache --clear 2>&1 | Out-Null
-    & $script:DotNetExe nuget locals temp --clear 2>&1 | Out-Null
-    $restoreOutput = & $script:DotNetExe @restoreArgs 2>&1 | Out-String
-}
 if ($LASTEXITCODE -ne 0) {
     Write-Host "  [ERROR] Restore failed:" -ForegroundColor Red
     Write-Host $restoreOutput -ForegroundColor Gray
@@ -697,15 +713,20 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "  [OK] Packages restored" -ForegroundColor Green
 
-# -- Tests (optional, required for release) -------------------
-if ($Test) {
+if ($Configuration -eq "Release") {
+    if (-not (Invoke-DependencyAuditValidation)) { exit 1 }
+}
+
+# -- Tests (required for Release unless explicitly skipped) ----
+$runTests = $Test -or ($Configuration -eq "Release" -and -not $SkipTests)
+if ($runTests) {
     Write-Host ""
     Write-Host "  [*] Running test suite..." -ForegroundColor Yellow
     $testProject = Join-Path $ProjectRoot "tests\DeepPurge.Tests\DeepPurge.Tests.csproj"
     if (-not (Test-Path $testProject)) {
         Write-Host "  [!] Test project missing at $testProject - skipping." -ForegroundColor Yellow
     } else {
-        & $script:DotNetExe test $testProject -c $Configuration --nologo --verbosity minimal
+        & $script:DotNetExe test $testProject -c $Configuration --nologo --no-restore --verbosity minimal
         if ($LASTEXITCODE -ne 0) {
             Write-Host "  [ERROR] Tests failed - refusing to publish." -ForegroundColor Red
             Read-Host "  Press Enter to exit"
@@ -734,6 +755,7 @@ $publishArgs = @(
     "-p:EnableCompressionInSingleFile=true",
     "-p:DebugType=none",
     "-p:DebugSymbols=false",
+    "--no-restore",
     "--output", $BuildDir,
     "--nologo",
     "--source", "https://api.nuget.org/v3/index.json"
@@ -765,6 +787,7 @@ $cliPublishArgs = @(
     "-p:EnableCompressionInSingleFile=true",
     "-p:DebugType=none",
     "-p:DebugSymbols=false",
+    "--no-restore",
     "--output", $BuildDir,
     "--nologo",
     "--source", "https://api.nuget.org/v3/index.json"
@@ -793,6 +816,7 @@ $slimCommon = @(
     "-p:PublishSingleFile=true",
     "-p:DebugType=none",
     "-p:DebugSymbols=false",
+    "--no-restore",
     "--nologo",
     "--source", "https://api.nuget.org/v3/index.json"
 )
