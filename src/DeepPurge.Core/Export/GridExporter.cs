@@ -21,16 +21,19 @@ public static class GridExporter
                 d.PublishedName, d.OriginalName, d.ProviderName, d.ClassName,
                 d.DriverVersion, DriverDate = d.DriverDate?.ToString("yyyy-MM-dd"),
                 SizeBytes = d.SizeBytes, SizeMB = Math.Round(d.SizeBytes / 1048576.0, 2),
-                d.IsOldVersion
+                d.IsOldVersion, d.IsProtected, d.IsExcluded,
+                Safety = d.SafetyStatus, d.SafetyReason,
+                d.LastOperationId, d.BackupDirectory, d.PackageSha256,
+                Rollback = d.RollbackStatus
             });
             File.WriteAllText(filePath, JsonSerializer.Serialize(data, JsonOpts), Encoding.UTF8);
         }
         else
         {
             var sb = new StringBuilder();
-            sb.AppendLine("\"Published Name\",\"Original Name\",\"Provider\",\"Class\",\"Version\",\"Date\",\"Size (MB)\",\"Old Version\"");
+            sb.AppendLine("\"Published Name\",\"Original Name\",\"Provider\",\"Class\",\"Version\",\"Date\",\"Size (MB)\",\"Old Version\",\"Safety\",\"Safety Reason\",\"Rollback\",\"Backup\",\"Package SHA256\"");
             foreach (var d in list)
-                sb.AppendLine($"\"{Esc(d.PublishedName)}\",\"{Esc(d.OriginalName)}\",\"{Esc(d.ProviderName)}\",\"{Esc(d.ClassName)}\",\"{Esc(d.DriverVersion)}\",\"{d.DriverDate:yyyy-MM-dd}\",\"{Math.Round(d.SizeBytes / 1048576.0, 2)}\",\"{d.IsOldVersion}\"");
+                sb.AppendLine($"\"{Esc(d.PublishedName)}\",\"{Esc(d.OriginalName)}\",\"{Esc(d.ProviderName)}\",\"{Esc(d.ClassName)}\",\"{Esc(d.DriverVersion)}\",\"{d.DriverDate:yyyy-MM-dd}\",\"{Math.Round(d.SizeBytes / 1048576.0, 2)}\",\"{d.IsOldVersion}\",\"{Esc(d.SafetyStatus)}\",\"{Esc(d.SafetyReason)}\",\"{Esc(d.RollbackStatus)}\",\"{Esc(d.BackupDirectory ?? "")}\",\"{Esc(d.PackageSha256 ?? "")}\"");
             File.WriteAllText(filePath, sb.ToString(), Encoding.UTF8);
         }
         return filePath;

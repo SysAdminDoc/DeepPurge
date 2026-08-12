@@ -37,7 +37,7 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 - **Startup Impact ratings** - High / Medium / Low per autorun process, parsed from the Windows Diagnostic Infrastructure boot traces in `System32\wdi\LogFiles\StartupInfo\*.xml`. Same metric Task Manager uses — no undocumented APIs.
 - **Digital signature badges** - Every autorun entry and service shows its WinVerifyTrust result (signer CN / Unsigned / Untrusted / Revoked) *(inspired by Sysinternals Autoruns)*
 - **Browser Extensions** - Scan extensions across Chrome, Edge, Brave, Firefox, Vivaldi, and Opera; remove only exact profile packages while protecting system and stale entries
-- **Driver Store cleanup** - Enumerate third-party driver packages via `pnputil /enum-drivers`, group by `.inf` family, flag old versions for removal. Recovers 2-10 GB on OEM laptops. *(inspired by RAPR / DriverStoreExplorer)*
+- **Driver Store cleanup** - Enumerate third-party driver packages via `pnputil /enum-drivers`, group by `.inf` family, flag old versions for removal, and keep firmware/system packages pinned. A removal exports and hashes the full package to administrator-owned rollback storage before invoking `pnputil /delete-driver`; the CLI and WPF surface expose the operation identity and verified reinstall path. *(inspired by RAPR / DriverStoreExplorer)*
 - **Context Menu Cleaner** - Find and remove orphaned shell context menu entries with broken executables or CLSIDs
 - **Shortcut repair** - Enumerate `.lnk` files on Desktop / Start Menu via IShellLinkW COM; flag and delete broken-target shortcuts
 - **Services Manager** - View all Windows services, identify orphaned services pointing to deleted executables, disable or delete
@@ -141,6 +141,9 @@ DeepPurgeCli uninstall "Git.Git" --dry-run  # Preview source-native uninstall co
 DeepPurgeCli clean junk evidence --dry-run  # Preview what would be freed
 DeepPurgeCli repair sfc                     # sfc /scannow
 DeepPurgeCli drivers --old                  # Old driver packages ready to remove
+DeepPurgeCli drivers --remove oem42.inf --dry-run  # Preview export-first removal
+DeepPurgeCli drivers --remove oem42.inf            # Export, hash, and remove; prints rollback operation id
+DeepPurgeCli drivers --rollback <operation-id>     # Validate hashes and reinstall the recorded INF
 DeepPurgeCli startup-impact                 # High/Medium/Low per autorun process
 DeepPurgeCli duplicates C:\Users\you        # Duplicate file groups
 DeepPurgeCli duplicates C:\Users\you --delete --reference-folder C:\Users\you\Documents\Keep --dry-run  # Preview guarded removal

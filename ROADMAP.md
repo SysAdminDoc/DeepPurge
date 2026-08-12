@@ -4,13 +4,6 @@ Actionable work only. Historical and completed roadmap material is archived in C
 
 ## Actionable Items
 
-- [ ] P1 — Export and bind a rollback package before driver deletion
-  Why: DeepPurge removes driver-store packages without the export/backup workflow exposed by Windows and DriverStoreExplorer.
-  Evidence: `src/DeepPurge.Core/Drivers/DriverStoreScanner.cs`; DriverStoreExplorer; Microsoft PnPUtil and DISM driver-export documentation.
-  Touches: driver scanner/removal service, backup and operation manifests, driver WPF/CLI, tests
-  Acceptance: Each selected driver is exported before deletion, the exported files and INF identity are hashed into the operation ledger, export failure blocks removal, protected/excluded packages remain pinned, and the UI/CLI exposes a tested reinstall/rollback command.
-  Complexity: M
-
 - [ ] P1 — Make cleaner-definition updates diffable and rollback-safe
   Why: Elevated user-writable winapp2/JSON rules can regress into deleting configuration or package-manager state, as demonstrated by the cited winapp2 corrections.
   Evidence: `src/DeepPurge.Core/Cleaning/Winapp2Updater.cs`; `src/DeepPurge.Core/Cleaning/Winapp2Parser.cs`; `src/DeepPurge.Core/Cleaning/CleanerDefinition.cs`; Winapp2 PRs 1004 and 945; Kudu data-rule design.

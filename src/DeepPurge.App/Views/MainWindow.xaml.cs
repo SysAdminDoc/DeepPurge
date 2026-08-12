@@ -30,6 +30,7 @@ public partial class MainWindow : Window
     private string _currentPanel = "Programs";
     private TrayIconService? _trayIcon;
     private bool _exitRequested;
+    private string? _lastDriverOperationId;
 
     private static readonly IReadOnlyDictionary<string, string> PanelDescriptions =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -335,6 +336,7 @@ public partial class MainWindow : Window
                 dgDrivers.Visibility = Visibility.Visible; txtPanelTitle.Text = "Driver Store";
                 AppendToolbarButton("Rescan",         ScanDrivers_Click,  "AccentButton");
                 AppendToolbarButton("Delete Selected", DeleteDrivers_Click, "DangerButton");
+                AppendToolbarButton("Rollback Last",  RollbackDriver_Click, "AccentButton");
                 MaybeAutoLoad("Drivers", () => _vm.ScanDriversCommand.Execute(null));
                 break;
             case "StartupImpact":
@@ -418,14 +420,53 @@ public partial class MainWindow : Window
     {
         var row = dgDrivers.SelectedItem as DeepPurge.Core.Drivers.DriverPackage;
         if (row == null) { WarnStatus("Select a driver row first."); return; }
-        _vm.StatusText = $"Removing driver '{row.PublishedName}' ({row.OriginalName}) via pnputil...";
+        if (!row.MutationSupported)
+        {
+            WarnStatus(string.IsNullOrWhiteSpace(row.SafetyReason)
+                ? $"Driver {row.PublishedName} is protected or excluded."
+                : row.SafetyReason);
+            return;
+        }
+
+        _vm.StatusText = $"Exporting and removing driver '{row.PublishedName}' ({row.OriginalName})...";
         try
         {
-            var (ok, output) = await new DeepPurge.Core.Drivers.DriverStoreScanner().DeleteAsync(row.PublishedName, force: false);
-            _vm.StatusText = ok ? $"Removed {row.PublishedName}" : $"pnputil: {output.Trim()}";
-            if (ok) _vm.ScanDriversCommand.Execute(null);
+            var result = await new DeepPurge.Core.Drivers.DriverStoreScanner().DeleteAsync(row, force: false);
+            row.LastOperationId = result.OperationId;
+            row.LastMutationOutcome = result.Outcome;
+            row.BackupDirectory = result.BackupDirectory;
+            row.PackageSha256 = result.PackageSha256;
+            if (result.Artifact is not null) _lastDriverOperationId = result.OperationId;
+
+            _vm.StatusText = result.Outcome == DeepPurge.Core.Drivers.DriverMutationOutcome.Deleted
+                ? $"Removed {row.PublishedName}; rollback ready ({result.OperationId})."
+                : $"Driver {result.Outcome}: {result.Reason ?? result.Output.Trim()}";
+            if (result.Outcome == DeepPurge.Core.Drivers.DriverMutationOutcome.Deleted)
+                _vm.ScanDriversCommand.Execute(null);
         }
         catch (Exception ex) { _vm.StatusText = $"Driver delete failed: {ex.Message}"; }
+    }
+
+    private async void RollbackDriver_Click(object s, RoutedEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(_lastDriverOperationId))
+        {
+            WarnStatus("No driver rollback operation is available in this session.");
+            return;
+        }
+
+        _vm.StatusText = $"Validating driver backup {_lastDriverOperationId}...";
+        try
+        {
+            var result = await new DeepPurge.Core.Drivers.DriverStoreScanner()
+                .RollbackAsync(_lastDriverOperationId);
+            _vm.StatusText = result.Outcome == DeepPurge.Core.Drivers.DriverMutationOutcome.Restored
+                ? $"Restored {result.PublishedName} from its verified backup."
+                : $"Driver rollback {result.Outcome}: {result.Reason ?? result.Output.Trim()}";
+            if (result.Outcome == DeepPurge.Core.Drivers.DriverMutationOutcome.Restored)
+                _vm.ScanDriversCommand.Execute(null);
+        }
+        catch (Exception ex) { _vm.StatusText = $"Driver rollback failed: {ex.Message}"; }
     }
 
     private void ScanStartupImpact_Click(object s, RoutedEventArgs e)
