@@ -308,6 +308,10 @@ public enum ScanMode
 public class UninstallResult
 {
     public bool Success { get; set; }
+    public UninstallOutcome Outcome { get; set; } = UninstallOutcome.Failed;
+    public RemovalCapability Capability { get; set; } = RemovalCapability.Unsupported;
+    public UninstallerTrustFacts TrustFacts { get; set; } = UninstallerTrustFacts.Empty;
+    public string CapabilityReason { get; set; } = string.Empty;
     public int ExitCode { get; set; }
     public string Output { get; set; } = string.Empty;
     public string ErrorOutput { get; set; } = string.Empty;
@@ -315,4 +319,15 @@ public class UninstallResult
     public ScanResult? LeftoverScan { get; set; }
     public int RegistryItemsDeleted { get; set; }
     public int FileItemsDeleted { get; set; }
+    public bool IsPreview => Outcome == UninstallOutcome.Preview;
+}
+
+public enum UninstallOutcome
+{
+    Preview,
+    Completed,
+    Skipped,
+    Failed,
+    Unsupported,
+    Cancelled,
 }

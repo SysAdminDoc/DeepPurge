@@ -16,6 +16,9 @@ All notable changes to DeepPurge will be documented in this file.
 ### Changed (P1 administrative safety)
 - **Reversible administrative mutation policy** - Firewall rules, PATH values, autoruns, services, scheduled tasks, shell registrations, and DeepPurge scheduled jobs now pass matching protection gates, capture before/after state with rollback data, verify post-write state, record typed outcomes in an administrative JSONL ledger, and notify Windows after successful refresh-sensitive changes. Protected sources and mutation types without a rollback provider are explicitly skipped or unsupported in the WPF actions.
 
+### Added (P1 removal capability)
+- **Explicit removal capabilities and trust facts** - Every installed-program row now identifies its source-native removal capability, source identity, executable, arguments, owner, publisher, signature, and risk. Native uninstallers and package-manager commands are revalidated immediately before execution, portable folders use recoverable deletion, game-launcher discoveries remain disabled until a source-native action exists, and unsupported or skipped actions never report success. WPF, CLI, and program exports expose the same review facts.
+
 ### Changed (design)
 - **DeepPurge Slate operations console** - The WPF shell now uses a bespoke graphite/cyan default theme, denser navigation, explicit local-data posture, searchable program inventory metrics, clearer uninstall hierarchy, responsive panel toolbars, trust/source badges, and calmer loading/status surfaces. Filled action buttons retain WCAG normal-text contrast across every bundled theme.
 - **Accurate navigation and empty states** - Collection-backed empty states now update from observable counts, unavailable leftover deletion stays hidden until a scan enables it, and `--target` launches select the Forced Uninstall navigation item that matches the visible workspace.

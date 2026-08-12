@@ -45,7 +45,7 @@ public static class PortableAppScanner
         foreach (var app in portables)
         {
             if (existing.Contains(app.Name)) continue;
-            programs.Add(new InstalledProgram
+            var program = new InstalledProgram
             {
                 DisplayName = app.Name,
                 DisplayVersion = app.Version,
@@ -54,7 +54,9 @@ public static class PortableAppScanner
                 Source = RegistrySource.Portable,
                 PackageManager = "portable",
                 ActualSizeBytes = app.SizeBytes,
-            });
+            };
+            RemovalCapabilityInspector.Populate(program);
+            programs.Add(program);
             existing.Add(app.Name);
         }
     }

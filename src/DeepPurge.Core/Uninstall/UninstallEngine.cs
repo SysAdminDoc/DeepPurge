@@ -34,14 +34,55 @@ public class UninstallEngine
 
         try
         {
+            // Registry/package-manager data can change after the inventory
+            // scan. Re-evaluate the capability and trust facts immediately
+            // before any restore point, backup, or elevated process launch.
+            RemovalCapabilityInspector.Populate(program, silent);
+            result.Capability = program.RemovalCapability;
+            result.TrustFacts = program.UninstallerTrust;
+            result.CapabilityReason = program.UninstallerTrust.Reason;
+
             if (dryRun)
             {
-                result.Success = true;
+                result.Outcome = program.RemovalSupported
+                    ? UninstallOutcome.Preview
+                    : UninstallOutcome.Unsupported;
+                result.Success = program.RemovalSupported;
                 result.UninstallerSkipped = true;
                 result.Output = DescribeUninstallPreview(program, silent);
+                if (!program.RemovalSupported)
+                {
+                    result.ErrorOutput = program.UninstallerTrust.Reason;
+                    StatusChanged?.Invoke($"Uninstall preview blocked for {program.DisplayName}: {result.ErrorOutput}");
+                }
                 StatusChanged?.Invoke(result.Output);
                 return result;
             }
+
+            if (!program.RemovalSupported)
+            {
+                result.Outcome = UninstallOutcome.Unsupported;
+                result.Success = false;
+                result.UninstallerSkipped = true;
+                result.ErrorOutput = program.UninstallerTrust.Reason;
+                StatusChanged?.Invoke(
+                    $"Uninstall unsupported for {program.DisplayName}: {result.ErrorOutput}");
+                return result;
+            }
+
+            if (!runBuiltInUninstaller)
+            {
+                result.Outcome = UninstallOutcome.Skipped;
+                result.Success = false;
+                result.UninstallerSkipped = true;
+                result.ErrorOutput = "The removal action was disabled by the caller.";
+                StatusChanged?.Invoke(result.ErrorOutput);
+                return result;
+            }
+
+            if (program.RemovalCapability == RemovalCapability.PortableFolder)
+                return await RemovePortableFolderAsync(program, result, ct)
+                    .ConfigureAwait(false);
 
             StatusChanged?.Invoke("Creating safety backups...");
             ProgressChanged?.Invoke(5);
@@ -61,7 +102,7 @@ public class UninstallEngine
                 out var nativeCommand,
                 out var nativeError);
 
-            if (runBuiltInUninstaller && nativePackageUninstaller != null)
+            if (nativePackageUninstaller != null)
             {
                 StatusChanged?.Invoke($"Running {program.PackageManager} uninstall for {program.DisplayName}...");
                 ProgressChanged?.Invoke(20);
@@ -72,11 +113,14 @@ public class UninstallEngine
                 result.Output = output;
                 result.ErrorOutput = error;
                 result.Success = UninstallerSuccessCodes.Contains(exitCode);
+                result.Outcome = result.Success
+                    ? UninstallOutcome.Completed
+                    : UninstallOutcome.Failed;
 
                 DeepPurge.Core.Diagnostics.Log.Info(
                     $"Package uninstall {program.PackageManager}/{program.PackageId} exit={exitCode} command={nativeCommand}");
             }
-            else if (runBuiltInUninstaller && program.HasUninstaller)
+            else if (program.HasUninstaller)
             {
                 StatusChanged?.Invoke($"Running {program.DisplayName} uninstaller...");
                 ProgressChanged?.Invoke(20);
@@ -100,6 +144,7 @@ public class UninstallEngine
                     result.ErrorOutput = "No uninstall command registered.";
                     result.UninstallerSkipped = true;
                     result.Success = false;
+                    result.Outcome = UninstallOutcome.Failed;
                 }
                 else
                 {
@@ -111,22 +156,21 @@ public class UninstallEngine
                     result.Output = output;
                     result.ErrorOutput = error;
                     result.Success = UninstallerSuccessCodes.Contains(exitCode);
+                    result.Outcome = result.Success
+                        ? UninstallOutcome.Completed
+                        : UninstallOutcome.Failed;
                 }
             }
             else
             {
                 result.UninstallerSkipped = true;
-                if (string.IsNullOrWhiteSpace(nativeError))
-                {
-                    result.Success = true;
-                }
-                else
-                {
-                    result.ExitCode = -1;
-                    result.ErrorOutput = nativeError;
-                    result.Success = false;
-                    StatusChanged?.Invoke(nativeError);
-                }
+                result.ExitCode = -1;
+                result.ErrorOutput = string.IsNullOrWhiteSpace(nativeError)
+                    ? "No supported uninstall action was available."
+                    : nativeError;
+                result.Success = false;
+                result.Outcome = UninstallOutcome.Unsupported;
+                StatusChanged?.Invoke(result.ErrorOutput);
             }
             ProgressChanged?.Invoke(50);
 
@@ -156,14 +200,55 @@ public class UninstallEngine
         {
             StatusChanged?.Invoke("Operation cancelled");
             result.Success = false;
+            result.Outcome = UninstallOutcome.Cancelled;
         }
         catch (Exception ex)
         {
             StatusChanged?.Invoke($"Error: {ex.Message}");
             result.Success = false;
+            result.Outcome = UninstallOutcome.Failed;
             result.ErrorOutput = ex.ToString();
         }
 
+        return result;
+    }
+
+    private static async Task<UninstallResult> RemovePortableFolderAsync(
+        InstalledProgram program,
+        UninstallResult result,
+        CancellationToken ct)
+    {
+        var request = new DeletionRequest(
+            program.InstallLocation,
+            IsDirectory: true,
+            Operation: "portable-folder-uninstall");
+        var deletion = await Task.Run(
+            () => new DeletionExecutor().Execute(
+                request,
+                new DeleteOptions(UseRecycleBin: true),
+                ct),
+            ct).ConfigureAwait(false);
+
+        result.Output = deletion.Outcome switch
+        {
+            DeletionOutcomeKind.Recycled =>
+                $"Moved portable folder to the Recycle Bin: {program.InstallLocation}",
+            DeletionOutcomeKind.Preview =>
+                $"Dry-run: would move portable folder to the Recycle Bin: {program.InstallLocation}",
+            _ => deletion.Reason ?? "Portable folder removal was not completed.",
+        };
+        result.ErrorOutput = deletion.Reason ?? string.Empty;
+        result.FileItemsDeleted = deletion.IsConfirmed ? 1 : 0;
+        result.Success = deletion.IsConfirmed || deletion.IsPreview;
+        result.Outcome = deletion.IsPreview
+            ? UninstallOutcome.Preview
+            : deletion.IsConfirmed
+                ? UninstallOutcome.Completed
+                : deletion.Outcome is DeletionOutcomeKind.Skipped
+                    ? UninstallOutcome.Skipped
+                    : deletion.Outcome is DeletionOutcomeKind.Cancelled
+                        ? UninstallOutcome.Cancelled
+                        : UninstallOutcome.Failed;
         return result;
     }
 
@@ -319,7 +404,25 @@ public class UninstallEngine
 
             if (program.IsProtected || App.ProtectedPrograms.IsProtected(program.DisplayName))
             {
+                RemovalCapabilityInspector.Populate(program, silent: true);
+                var protectedResult = new UninstallResult
+                {
+                    Success = false,
+                    Outcome = UninstallOutcome.Unsupported,
+                    Capability = program.RemovalCapability,
+                    TrustFacts = program.UninstallerTrust,
+                    CapabilityReason = "The program is protected by the application safety policy.",
+                    ErrorOutput = "The program is protected by the application safety policy.",
+                    UninstallerSkipped = true,
+                };
                 StatusChanged?.Invoke($"[{i + 1}/{programs.Count}] Skipping protected: {program.DisplayName}");
+                results.Add(protectedResult);
+                progress?.Report(new DeleteProgress(
+                    i + 1,
+                    programs.Count,
+                    0,
+                    program.DisplayName,
+                    Skipped: true));
                 continue;
             }
 

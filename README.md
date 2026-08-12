@@ -13,6 +13,8 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 - **Scoop integration** - Scoop apps that skip the Windows installer DB are auto-discovered, merged into the list, and removed through `scoop uninstall`
 - **Chocolatey integration** - `choco list --local-only --limit-output` entries are merged into the installed programs list and removed through non-interactive `choco uninstall`
 - **Privilege-contained package managers** - winget, Scoop, and Chocolatey resolve from known absolute install roots and run as the original non-elevated desktop user, never with the GUI's administrator token or a current-directory/PATH-selected shim
+- **Explicit removal capability and trust** - Each row declares a `NativeUninstaller`, `PackageManager`, `PortableFolder`, `GameLauncher`, or `Unsupported` action with source identity, executable, arguments, owner/publisher, signature, and risk facts. Unsupported actions are disabled and the action is revalidated immediately before execution.
+- **Recoverable portable removal** - Portable folders are moved to the Recycle Bin as one recoverable action; game-launcher discoveries are review-only until a source-native uninstall command is available.
 - **Silent-switch database** - Curated per-installer-family silent flags (`/S`, `/qn`, `/VERYSILENT`, `/quiet`, Squirrel `--uninstall --silent`) with vendor fingerprint overrides *(inspired by PatchMyPC)*
 - **Forced Uninstall** - Scan for remnants of already-removed or partially uninstalled programs
 - **Windows Apps** - Remove UWP/MSIX apps including system bloatware
@@ -66,6 +68,7 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 ### Program Discovery
 - **Portable app detection** - Scans Desktop, Downloads, PortableApps folders, and removable drives for standalone executables not tracked by any installer. Shows with a "Portable" source badge. *(only Uninstalr previously offered this)*
 - **Game platform detection** - Discovers Steam games (via `libraryfolders.vdf` + `appmanifest_*.acf`), Epic Games (via `.item` manifests), and GOG Galaxy titles (via registry). Games appear in the unified programs list with platform badges.
+- **Game removal safety** - Discovered games expose their launcher/source identity and remain non-actionable until DeepPurge can invoke the platform's native uninstall operation.
 - **Bundleware / sideload detection** - Flags programs installed on the same day from a non-trusted publisher that appear as the sole representative of their publisher — likely bundled silently with other software.
 - **OEM bloat scoring** - Flags likely OEM support/trial utilities while suppressing driver and firmware components
 - **BAM remnant discovery** - Reads Windows Background Activity Moderator data to find previously-executed binaries that are no longer installed. Available via `deeppurgecli orphans --remnants`.
@@ -86,6 +89,7 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 - Recycle Bin for ordinary file cleanup through `IFileOperation` where supported, with explicit permanent-delete and secure-delete outcomes
 - Typed cleanup results distinguish preview, recycled, permanent, secure, queued, skipped, failed, and cancelled items; only confirmed mutations enter recovery manifests
 - Administrative mutation ledger for firewall, PATH, autorun, service, scheduled-task, shell, and DeepPurge schedule changes with before/after state, rollback data, verification, and exact typed outcomes
+- Installed-program removal capability/trust facts are visible in the GUI, CLI list/uninstall output, and CSV/HTML/JSON exports before an action reaches the elevated process
 - Protected services, firewall rules, PATH entries, registry roots, and Microsoft scheduled-task paths are skipped before production mutation; unsupported rollback-sensitive actions are disabled in the WPF surface
 - Confidence-based leftover classification (Safe / Moderate / Risky)
 - Leftover ownership evidence and conflict review: another product's install root, protected Windows scope, and weak single-source matches are never auto-removable
