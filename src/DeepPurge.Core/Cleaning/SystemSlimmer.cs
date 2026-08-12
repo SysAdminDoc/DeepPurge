@@ -1,9 +1,48 @@
 using DeepPurge.Core.Diagnostics;
 using DeepPurge.Core.Safety;
+using System.ComponentModel;
 
 namespace DeepPurge.Core.Cleaning;
 
-public record SlimmableComponent(string Name, string Description, string Category, string Path, long SizeBytes, bool IsSelected);
+public sealed class SlimmableComponent : INotifyPropertyChanged
+{
+    private bool _isSelected;
+
+    public SlimmableComponent(
+        string name,
+        string description,
+        string category,
+        string path,
+        long sizeBytes,
+        bool isSelected)
+    {
+        Name = name;
+        Description = description;
+        Category = category;
+        Path = path;
+        SizeBytes = sizeBytes;
+        _isSelected = isSelected;
+    }
+
+    public string Name { get; }
+    public string Description { get; }
+    public string Category { get; }
+    public string Path { get; }
+    public long SizeBytes { get; }
+
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set
+        {
+            if (_isSelected == value) return;
+            _isSelected = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsSelected)));
+        }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+}
 
 public static class SystemSlimmer
 {

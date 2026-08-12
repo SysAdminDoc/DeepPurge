@@ -25,8 +25,8 @@ namespace DeepPurge.App.ViewModels;
 /// <summary>
 /// v0.9.0 feature surface. The main <see cref="MainViewModel"/> stays focused
 /// on the pre-v0.9 feature set; this partial exposes the ten new Core services
-/// through observable collections and async RelayCommand methods for future
-/// XAML panels (and for anything that wants to dispatch the same logic
+/// through observable collections and async RelayCommand methods for the
+/// corresponding XAML panels (and for anything that wants to dispatch the same logic
 /// programmatically, e.g. status-bar shortcuts).
 /// </summary>
 public partial class MainViewModel
@@ -914,6 +914,12 @@ public partial class MainViewModel
     [RelayCommand]
     private async Task RunSlimAsync()
     {
+        if (!ExpertMode)
+        {
+            StatusText = "Enable Expert mode in Settings / Privacy to remove Windows components.";
+            return;
+        }
+
         IsBusy = true;
         StatusText = "Removing selected Windows components...";
         try

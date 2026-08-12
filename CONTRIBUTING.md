@@ -7,7 +7,7 @@ Thanks for your interest. This guide covers local setup, PR conventions, and the
 Requirements:
 
 - Windows 10/11 x64
-- .NET 10 SDK (`winget install Microsoft.DotNet.SDK.10`)
+- Exact .NET SDK `10.0.302` (`global.json` disables SDK roll-forward)
 - Git Bash or PowerShell 5.1+
 
 ```powershell
@@ -24,7 +24,7 @@ This produces `build/DeepPurge.exe` (GUI) and `build/DeepPurgeCli.exe` (CLI).
 dotnet test tests/DeepPurge.Tests/DeepPurge.Tests.csproj
 ```
 
-All PRs must keep the full suite green. If you touch a parser, detector, or sanitiser,
+All PRs must keep the full 454-test suite green. If you touch a parser, detector, or sanitiser,
 add a test that locks in the expected behaviour. We use xUnit v3.
 
 ## Project layout
@@ -71,8 +71,9 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the cross-cutting flow and the v0.9 f
 Before a PR lands:
 
 - [ ] `dotnet build DeepPurge.sln -c Release` — 0 errors and no new warnings
-- [ ] `dotnet test tests/DeepPurge.Tests/DeepPurge.Tests.csproj` — all 352 tests pass
-- [ ] `Build.ps1 -AuditDependenciesOnly` — no outdated or vulnerable NuGet packages in Core, App, CLI, or Tests
+- [ ] `dotnet test tests/DeepPurge.Tests/DeepPurge.Tests.csproj` — all 454 tests pass
+- [ ] `Build.ps1 -AuditDependenciesOnly` — outdated packages are reported as advisories; vulnerable or unreadable graphs fail in Core, App, CLI, or Tests
+- [ ] `Build.ps1 -Sign` — Release builds run tests and locked restore before publishing
 - [ ] If a feature: `deeppurgecli doctor` still reports 0 FAIL on a clean install
 - [ ] README / CHANGELOG updated if the PR changes observable behaviour
 - [ ] Version bumped everywhere listed below

@@ -60,6 +60,8 @@ public static class Program
                 "portable"        => CmdPortable(args),
                 "list"            => await CmdListAsync(args, cts.Token),
                 "clean"           => await CmdCleanAsync(args, cts.Token),
+                "health"          => await CmdHealthAsync(args, cts.Token),
+                "slim"            => await CmdSlimAsync(args, cts.Token),
                 "uninstall"       => await CmdUninstallAsync(args, cts.Token),
                 "repair"          => await CmdRepairAsync(args, cts.Token),
                 "drivers"         => await CmdDriversAsync(args, cts.Token),
@@ -170,6 +172,88 @@ public static class Program
         }
         Console.WriteLine($"# {sorted.Count} programs");
         return 0;
+    }
+
+    private static async Task<int> CmdHealthAsync(ParsedArgs a, CancellationToken ct)
+    {
+        var report = await HealthScorer.AssessAsync(ct);
+        if (a.HasFlag("json"))
+        {
+            WriteJson(new
+            {
+                report.OverallScore,
+                report.Grade,
+                Trend = report.Trend.ToString(),
+                Status = report.StatusDisplay,
+                report.IsDegraded,
+                DurationMs = report.Duration.TotalMilliseconds,
+                Categories = report.Categories,
+                FailedSources = report.FailedSources,
+                report.Warnings,
+            });
+            return 0;
+        }
+
+        Console.WriteLine($"Health: {report.Grade} ({report.OverallScore}/100) — {report.StatusDisplay}");
+        if (report.Trend != HealthTrend.Unknown)
+            Console.WriteLine($"Trend:  {report.Trend}");
+        foreach (var category in report.Categories)
+            Console.WriteLine($"{category.Category,-18} {category.Score,3}/100  {category.Summary}  [{category.Action}]");
+        foreach (var issue in report.FailedSources ?? Array.Empty<ScanIssue>())
+            Console.Error.WriteLine($"warning: {issue.Source}: {issue.Message}");
+        return 0;
+    }
+
+    private static async Task<int> CmdSlimAsync(ParsedArgs a, CancellationToken ct)
+    {
+        var components = await Task.Run(() => SystemSlimmer.Scan(), ct);
+        var delete = a.HasFlag("delete");
+
+        if (!delete)
+        {
+            if (a.HasFlag("json"))
+            {
+                WriteJson(components.Select(component => new
+                {
+                    component.Name,
+                    component.Description,
+                    component.Category,
+                    component.Path,
+                    component.SizeBytes,
+                    component.IsSelected,
+                }));
+                return 0;
+            }
+
+            foreach (var component in components)
+                Console.WriteLine($"[{(component.IsSelected ? "selected" : "review  ")}] {component.Category,-10} {FormatBytes(component.SizeBytes),10}  {component.Name}  {component.Path}");
+            Console.WriteLine($"# {components.Count} removable component(s), {FormatBytes(components.Sum(c => c.SizeBytes))} total");
+            Console.WriteLine("Scan only. Pass --delete to apply the selected component policy; add --dry-run to preview it.");
+            return 0;
+        }
+
+        var options = new DeleteOptions(
+            DryRun: a.HasFlag("dry-run"),
+            SecureDelete: false,
+            UseRecycleBin: false);
+        var summary = await Task.Run(
+            () => SystemSlimmer.Delete(components, options, ProgressSink("slim"), ct),
+            ct);
+
+        if (a.HasFlag("json"))
+        {
+            WriteJson(summary);
+        }
+        else
+        {
+            Console.WriteLine($"{(options.DryRun ? "Would free" : "Freed")} {FormatBytes(summary.BytesFreed)} " +
+                              $"({summary.ItemsDeleted} {(options.DryRun ? "planned" : "confirmed")}, " +
+                              $"{summary.ItemsSkipped} skipped, {summary.ItemsFailed} failed)");
+            foreach (var reason in summary.SkippedReasons.Distinct().Take(10))
+                Console.Error.WriteLine($"  skipped: {reason}");
+        }
+
+        return summary.HasFailures || summary.ItemsSkipped > 0 ? 1 : 0;
     }
 
     private sealed record CleanCategoryResult(
@@ -1461,6 +1545,8 @@ if ($app) {{
         Console.WriteLine("  list [--registry-only]                    List installed programs (TSV)");
         Console.WriteLine("  uninstall <name> [--silent] [--dry-run]  Uninstall a program or preview the native command");
         Console.WriteLine("  clean [junk|evidence ...] [--dry-run] [--secure] [--keep-cookies domain1,domain2]");
+        Console.WriteLine("  health [--json]                           Score junk, privacy, startup, and disk hygiene");
+        Console.WriteLine("  slim [--delete] [--dry-run] [--json]      Scan or guardedly remove Windows components");
         Console.WriteLine("  repair <sfc|dism-scan|dism-restore|dism-cleanup|dism-resetbase|chkdsk|fontcache|iconcache>");
         Console.WriteLine("  drivers [--old] [--export file --format csv|json]");
         Console.WriteLine("  drivers --remove <oem#.inf> [--force] [--dry-run] [--json]");

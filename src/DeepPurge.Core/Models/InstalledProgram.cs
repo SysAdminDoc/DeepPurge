@@ -7,11 +7,25 @@ public class InstalledProgram : INotifyPropertyChanged
 {
     private bool _isSelected;
     private object? _icon;
+    private string _displayVersion = string.Empty;
+    private long _actualSizeBytes = -1;
+    private DateTime? _lastUsedDate;
+    private string _packageManager = string.Empty;
+    private string _packageId = string.Empty;
+    private string _upgradeAvailable = string.Empty;
+    private bool _isSuspectedBundleware;
+    private int _oemBloatScore;
+    private string _oemBloatReason = string.Empty;
+    private string _signatureDisplay = string.Empty;
 
     public string RegistryKeyName { get; set; } = string.Empty;
     public string RegistryPath { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
-    public string DisplayVersion { get; set; } = string.Empty;
+    public string DisplayVersion
+    {
+        get => _displayVersion;
+        set { _displayVersion = value ?? string.Empty; OnPropertyChanged(); }
+    }
     public string Publisher { get; set; } = string.Empty;
     public string InstallLocation { get; set; } = string.Empty;
     public string InstallDate { get; set; } = string.Empty;
@@ -19,8 +33,16 @@ public class InstalledProgram : INotifyPropertyChanged
     public string QuietUninstallString { get; set; } = string.Empty;
     public string DisplayIconPath { get; set; } = string.Empty;
     public long EstimatedSizeKB { get; set; }
-    public long ActualSizeBytes { get; set; } = -1;
-    public DateTime? LastUsedDate { get; set; }
+    public long ActualSizeBytes
+    {
+        get => _actualSizeBytes;
+        set { _actualSizeBytes = value; OnPropertyChanged(); OnPropertyChanged(nameof(EstimatedSizeDisplay)); }
+    }
+    public DateTime? LastUsedDate
+    {
+        get => _lastUsedDate;
+        set { _lastUsedDate = value; OnPropertyChanged(); OnPropertyChanged(nameof(LastUsedDisplay)); }
+    }
     public bool IsSystemComponent { get; set; }
     public bool IsWindowsInstaller { get; set; }
     public string ParentKeyName { get; set; } = string.Empty;
@@ -30,9 +52,21 @@ public class InstalledProgram : INotifyPropertyChanged
     /// Non-empty when a package manager (winget, scoop, chocolatey) also
     /// tracks this program. Populated by <c>PackageManagerScanner.EnrichAsync</c>.
     /// </summary>
-    public string PackageManager { get; set; } = string.Empty;
-    public string PackageId { get; set; } = string.Empty;
-    public string UpgradeAvailable { get; set; } = string.Empty;
+    public string PackageManager
+    {
+        get => _packageManager;
+        set { _packageManager = value ?? string.Empty; OnPropertyChanged(); OnPropertyChanged(nameof(SourceDisplay)); }
+    }
+    public string PackageId
+    {
+        get => _packageId;
+        set { _packageId = value ?? string.Empty; OnPropertyChanged(); }
+    }
+    public string UpgradeAvailable
+    {
+        get => _upgradeAvailable;
+        set { _upgradeAvailable = value ?? string.Empty; OnPropertyChanged(); OnPropertyChanged(nameof(SourceDisplay)); }
+    }
 
     private RemovalCapability _removalCapability = RemovalCapability.Unsupported;
     private string _removalSourceIdentity = string.Empty;
@@ -141,11 +175,27 @@ public class InstalledProgram : INotifyPropertyChanged
         set { _isProtected = value; OnPropertyChanged(); OnPropertyChanged(nameof(RemovalSupported)); OnPropertyChanged(nameof(CanUninstall)); OnPropertyChanged(nameof(RemovalStatus)); OnPropertyChanged(nameof(RemovalFactsDisplay)); }
     }
 
-    public bool IsSuspectedBundleware { get; set; }
-    public int OemBloatScore { get; set; }
-    public string OemBloatReason { get; set; } = string.Empty;
+    public bool IsSuspectedBundleware
+    {
+        get => _isSuspectedBundleware;
+        set { _isSuspectedBundleware = value; OnPropertyChanged(); OnPropertyChanged(nameof(FlagsDisplay)); }
+    }
+    public int OemBloatScore
+    {
+        get => _oemBloatScore;
+        set { _oemBloatScore = value; OnPropertyChanged(); OnPropertyChanged(nameof(IsOemBloatCandidate)); OnPropertyChanged(nameof(FlagsDisplay)); }
+    }
+    public string OemBloatReason
+    {
+        get => _oemBloatReason;
+        set { _oemBloatReason = value ?? string.Empty; OnPropertyChanged(); }
+    }
     public string Note { get; set; } = string.Empty;
-    public string SignatureDisplay { get; set; } = string.Empty;
+    public string SignatureDisplay
+    {
+        get => _signatureDisplay;
+        set { _signatureDisplay = value ?? string.Empty; OnPropertyChanged(); OnPropertyChanged(nameof(RemovalFactsDisplay)); }
+    }
 
     public bool IsOemBloatCandidate => OemBloatScore >= 60;
 

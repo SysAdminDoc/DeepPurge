@@ -76,6 +76,7 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 
 ### System Slimming
 - **Windows component cleanup** - Scans ~15 removable components (wallpapers, sample media, help files, MSI patch cache, delivery optimization, WER reports, font cache, log folders, Windows.old) with per-item sizes and delete through SafetyGuard.
+  The GUI surface is available in Expert mode; `deeppurgecli slim` is scan-only by default and requires `--delete` for mutation (`--dry-run` previews the selected policy).
 
 ### Shell Integration
 - **Context menu** - `deeppurgecli register-shell` adds "Uninstall with DeepPurge" to the right-click menu for `.exe` files. `unregister-shell` removes it. The GUI accepts `--target <path>` to pre-populate the forced-uninstall panel.
@@ -141,6 +142,8 @@ DeepPurgeCli list                           # TSV-formatted installed programs
 DeepPurgeCli uninstall "Some App" --silent  # Silent uninstall with auto-flag detection
 DeepPurgeCli uninstall "Git.Git" --dry-run  # Preview source-native uninstall command
 DeepPurgeCli clean junk evidence --dry-run  # Preview what would be freed
+DeepPurgeCli health --json                   # Score junk, privacy, startup, and disk hygiene
+DeepPurgeCli slim --dry-run                  # Preview selected Windows component cleanup
 DeepPurgeCli repair sfc                     # sfc /scannow
 DeepPurgeCli drivers --old                  # Old driver packages ready to remove
 DeepPurgeCli drivers --remove oem42.inf --dry-run  # Preview export-first removal
@@ -169,7 +172,7 @@ DeepPurgeCli doctor                         # Environment self-test (16 checks, 
 dotnet test tests/DeepPurge.Tests/DeepPurge.Tests.csproj
 ```
 
-The current suite has 400 tests covering parser routing, protected helper resolution, original-user process brokering, package-manager command builders and source diagnostics, cleaner schema validation, cleanup failure reporting, release validation, privacy retention, SafetyGuard block/allow lists, handle-bound deletion/rollback, protected Task Scheduler registration and migration, versioned settings import/export contracts, static WPF accessibility/resource-drift checks, and support-bundle redaction. Release builds run the suite, project-level dependency audit, and locked restore by default; use `Build.ps1 -SkipTests` only for an explicitly test-free inner-loop publish.
+The current suite has 454 tests covering parser routing, protected helper resolution, original-user process brokering, package-manager command builders and source diagnostics, cleaner schema validation, cleanup failure reporting, release validation, privacy retention, SafetyGuard block/allow lists, handle-bound deletion/rollback, protected Task Scheduler registration and migration, versioned settings import/export contracts, capability-to-surface routing, observable enrichment updates, static WPF accessibility/resource-drift checks, and support-bundle redaction. Release builds run the suite, project-level dependency audit, and locked restore by default; use `Build.ps1 -SkipTests` only for an explicitly test-free inner-loop publish.
 
 ## Packaging
 

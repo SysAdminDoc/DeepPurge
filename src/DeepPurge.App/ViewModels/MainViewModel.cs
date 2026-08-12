@@ -128,6 +128,9 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnExpertModeChanged(bool value)
     {
+        if (!value)
+            SecureDeleteEnabled = false;
+
         AppSettings.Current.ExpertMode = value;
         AppSettings.Current.Save();
         UpdateSettingsSummary();
@@ -1143,6 +1146,12 @@ public partial class MainViewModel : ObservableObject
 
     public async Task<int> HuntRegistryAsync(string needle)
     {
+        if (!ExpertMode)
+        {
+            StatusText = "Enable Expert mode in Settings / Privacy to use Registry Hunter.";
+            return 0;
+        }
+
         RegistryHits.Clear();
         HunterLiveCount = 0;
 
