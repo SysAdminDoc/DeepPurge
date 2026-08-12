@@ -33,6 +33,7 @@ public static class SupportBundleExporter
                 sections += WritePackageSourceHealth(tempDir);
                 sections += WriteRecentActivity(tempDir);
                 sections += WriteRecentLogs(tempDir);
+                sections += WriteRecentScanDiagnostics(tempDir);
                 sections += WriteExecutableTrust(tempDir);
 
                 FinalRedactionPass(tempDir);
@@ -212,6 +213,43 @@ public static class SupportBundleExporter
         catch (Exception ex)
         {
             Log.Warn($"SupportBundle: log copy failed: {ex.Message}");
+            return 0;
+        }
+    }
+
+    private static int WriteRecentScanDiagnostics(string dir)
+    {
+        try
+        {
+            var entries = ScanDiagnosticsLedger.LoadRecent(100);
+            if (entries.Count == 0) return 0;
+
+            var redacted = entries.Select(entry => new
+            {
+                entry.TimestampUtc,
+                entry.ScanName,
+                Status = entry.Status.ToString(),
+                entry.ItemCount,
+                entry.FailedSourceCount,
+                entry.WarningCount,
+                entry.DurationMilliseconds,
+                entry.IsCancelled,
+                FailedSources = entry.FailedSources.Select(issue => new
+                {
+                    Source = Redact(issue.Source),
+                    Message = Redact(issue.Message),
+                    issue.ExceptionType,
+                    issue.IsWarning,
+                }),
+                Warnings = entry.Warnings.Select(Redact),
+            });
+            var json = JsonSerializer.Serialize(redacted, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(Path.Combine(dir, "scan-diagnostics.json"), json);
+            return 1;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"SupportBundle: scan diagnostics failed: {ex.Message}");
             return 0;
         }
     }

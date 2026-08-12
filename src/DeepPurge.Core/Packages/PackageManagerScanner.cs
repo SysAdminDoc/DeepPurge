@@ -38,24 +38,45 @@ public static class PackageManagerScanner
     public static async Task EnrichAsync(
         IList<InstalledProgram> programs,
         CancellationToken ct = default)
+        => await EnrichDetailedAsync(programs, ct).ConfigureAwait(false);
+
+    public static async Task<ScanResult<InstalledProgram>> EnrichDetailedAsync(
+        IList<InstalledProgram> programs,
+        CancellationToken ct = default)
     {
-        var wingetTask = Task.Run(() => QueryWinget(ct), ct);
-        var scoopTask  = Task.Run(() => QueryScoop(ct), ct);
-        var chocoTask  = Task.Run(() => QueryChocolatey(ct), ct);
-        var portableTask = Task.Run(() =>
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var failures = new List<ScanIssue>();
+        var warnings = new List<string>();
+
+        var wingetTask = Task.Run(() => RunSourceQuery("winget", () => QueryWinget(ct), () => new List<WingetEntry>(), ct), CancellationToken.None);
+        var scoopTask  = Task.Run(() => RunSourceQuery("scoop", () => QueryScoop(ct), () => new List<ScoopEntry>(), ct), CancellationToken.None);
+        var chocoTask  = Task.Run(() => RunSourceQuery("chocolatey", () => QueryChocolatey(ct), () => new List<ChocolateyEntry>(), ct), CancellationToken.None);
+        var portableTask = Task.Run(() => RunSourceQuery("portable-apps", () =>
         {
             var known = new HashSet<string>(
                 programs.Select(p => p.DisplayName),
                 StringComparer.OrdinalIgnoreCase);
             return PortableAppScanner.Scan(known);
-        }, ct);
-        var gamesTask = Task.Run(() => GamePlatformScanner.ScanAll(), ct);
+        }, () => new List<PortableApp>(), ct), CancellationToken.None);
+        var gamesTask = Task.Run(() => RunSourceQuery("game-platforms", () => GamePlatformScanner.ScanAll(), () => new List<GameEntry>(), ct), CancellationToken.None);
 
-        var winget = await wingetTask.ConfigureAwait(false);
-        var scoop  = await scoopTask.ConfigureAwait(false);
-        var choco  = await chocoTask.ConfigureAwait(false);
-        var portables = await portableTask.ConfigureAwait(false);
-        var games = await gamesTask.ConfigureAwait(false);
+        await Task.WhenAll(wingetTask, scoopTask, chocoTask, portableTask, gamesTask).ConfigureAwait(false);
+
+        var wingetResult = wingetTask.Result;
+        var scoopResult = scoopTask.Result;
+        var chocoResult = chocoTask.Result;
+        var portableResult = portableTask.Result;
+        var gamesResult = gamesTask.Result;
+        foreach (var queryFailure in new[] { wingetResult.Failure, scoopResult.Failure, chocoResult.Failure, portableResult.Failure, gamesResult.Failure })
+        {
+            if (queryFailure != null) failures.Add(queryFailure);
+        }
+
+        var winget = wingetResult.Value;
+        var scoop = scoopResult.Value;
+        var choco = chocoResult.Value;
+        var portables = portableResult.Value;
+        var games = gamesResult.Value;
 
         var lookup = BuildNameLookup(programs);
 
@@ -118,11 +139,42 @@ public static class PackageManagerScanner
             lookup[norm] = synthetic;
         }
 
-        PortableAppScanner.InjectIntoPrograms(programs, portables);
-        GamePlatformScanner.InjectIntoPrograms(programs, games);
+        if (!ct.IsCancellationRequested)
+        {
+            PortableAppScanner.InjectIntoPrograms(programs, portables);
+            GamePlatformScanner.InjectIntoPrograms(programs, games);
+        }
 
         foreach (var program in programs)
             RemovalCapabilityInspector.Populate(program);
+
+        try
+        {
+            var sourceHealth = await Task.Run(() => GetSourceHealth(ct), CancellationToken.None)
+                .ConfigureAwait(false);
+            foreach (var source in sourceHealth.Where(source => source.Status != SelfTestStatus.Ok))
+                warnings.Add($"{source.Source}: {source.Detail}");
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            warnings.Add("Package-source health checks were cancelled.");
+        }
+        catch (Exception ex)
+        {
+            failures.Add(new ScanIssue("package-source-health", ex.Message, ex.GetType().Name));
+        }
+
+        var result = ScanResult<InstalledProgram>.Create(
+            "package-enrichment",
+            programs.ToList(),
+            failures,
+            warnings,
+            stopwatch.Elapsed,
+            isCancelled: ct.IsCancellationRequested ||
+                wingetResult.Cancelled || scoopResult.Cancelled || chocoResult.Cancelled ||
+                portableResult.Cancelled || gamesResult.Cancelled);
+        ScanDiagnosticsLedger.Record("package-enrichment", result);
+        return result;
     }
 
     public static IReadOnlyList<PackageSourceHealth> GetSourceHealth(CancellationToken ct = default)
@@ -508,6 +560,35 @@ public static class PackageManagerScanner
         if (end > s.Length) end = s.Length;
         if (end <= start) return "";
         return s[start..end];
+    }
+
+    private sealed record SourceQuery<T>(T Value, ScanIssue? Failure, bool Cancelled);
+
+    private static SourceQuery<T> RunSourceQuery<T>(
+        string source,
+        Func<T> query,
+        Func<T> empty,
+        CancellationToken ct)
+    {
+        try
+        {
+            ct.ThrowIfCancellationRequested();
+            return new SourceQuery<T>(query(), null, false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            return new SourceQuery<T>(
+                empty(),
+                new ScanIssue(source, "The package source scan was cancelled."),
+                true);
+        }
+        catch (Exception ex)
+        {
+            return new SourceQuery<T>(
+                empty(),
+                new ScanIssue(source, ex.Message, ex.GetType().Name),
+                false);
+        }
     }
 
     private sealed record ProcessProbeResult(

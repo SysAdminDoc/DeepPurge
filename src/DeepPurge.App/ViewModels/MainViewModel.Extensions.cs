@@ -870,8 +870,14 @@ public partial class MainViewModel
                     ? $"{trendIcon} {trendText} since last check"
                     : "";
                 HealthSummary = $"Overall: {report.Grade} ({report.OverallScore}/100)" +
-                               (string.IsNullOrEmpty(HealthTrendDisplay) ? "" : $" — {HealthTrendDisplay}");
-                StatusText = HealthSummary;
+                               (string.IsNullOrEmpty(HealthTrendDisplay) ? "" : $" — {HealthTrendDisplay}") +
+                               $" — {report.StatusDisplay}";
+                StatusText = HealthSummary +
+                    (report.FailedSources is { Count: > 0 }
+                        ? $"; sources: {string.Join(", ", report.FailedSources.Select(issue => issue.Source).Take(3))}"
+                        : report.Warnings is { Count: > 0 }
+                            ? $"; {report.Warnings[0]}"
+                            : "");
             });
         }
         catch (Exception ex) { StatusText = $"Health check failed: {ex.Message}"; Log.Error("HealthCheck", ex); }
@@ -1037,18 +1043,21 @@ public partial class MainViewModel
         try
         {
             // Run all four orphan scans in parallel.
-            var fwTask = Task.Run(() => FirewallRuleScanner.GetAllRules(orphanedOnly: true));
-            var pathTask = Task.Run(() => PathCleaner.ScanPathEntries(orphanedOnly: true));
-            var svcTask = Task.Run(() => Core.Services.ServiceScanner.GetAllServices(orphanedOnly: true));
-            var taskTask = Task.Run(() => Core.Tasks.ScheduledTaskScanner.GetAllTasks()
-                .Where(t => t.IsOrphaned).ToList());
+            var fwTask = Task.Run(() => FirewallRuleScanner.GetAllRulesDetailed(orphanedOnly: true));
+            var pathTask = Task.Run(() => PathCleaner.ScanPathEntriesDetailed(orphanedOnly: true));
+            var svcTask = Task.Run(() => Core.Services.ServiceScanner.GetAllServicesDetailed(orphanedOnly: true));
+            var taskTask = Task.Run(() => Core.Tasks.ScheduledTaskScanner.GetAllTasksDetailed());
 
             await Task.WhenAll(fwTask, pathTask, svcTask, taskTask);
 
-            var fwRules = fwTask.Result;
-            var pathEntries = pathTask.Result;
-            var orphanedSvcs = svcTask.Result;
-            var orphanedTasks = taskTask.Result;
+            var fwScan = fwTask.Result;
+            var pathScan = pathTask.Result;
+            var serviceScan = svcTask.Result;
+            var taskScan = taskTask.Result;
+            var fwRules = fwScan.Items.ToList();
+            var pathEntries = pathScan.Items.ToList();
+            var orphanedSvcs = serviceScan.Items.ToList();
+            var orphanedTasks = taskScan.Items.Where(t => t.IsOrphaned).ToList();
 
             _dispatcher.Invoke(() =>
             {
@@ -1065,7 +1074,14 @@ public partial class MainViewModel
                 OrphanBadge = total > 0 ? total.ToString() : "";
                 OrphanSummary = $"{orphanedSvcs.Count} services, {orphanedTasks.Count} tasks, " +
                                 $"{fwRules.Count} firewall rules, {pathEntries.Count} PATH entries";
-                StatusText = $"Orphan scan: {total} orphaned artifacts — {OrphanSummary}";
+                var degraded = new[]
+                {
+                    ScanConfidenceSuffix(fwScan),
+                    ScanConfidenceSuffix(pathScan),
+                    ScanConfidenceSuffix(serviceScan),
+                    ScanConfidenceSuffix(taskScan),
+                }.FirstOrDefault(suffix => !string.IsNullOrEmpty(suffix)) ?? "";
+                StatusText = $"Orphan scan: {total} orphaned artifacts — {OrphanSummary}{degraded}";
             });
         }
         catch (Exception ex)

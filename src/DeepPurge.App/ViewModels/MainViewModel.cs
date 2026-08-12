@@ -346,8 +346,13 @@ public partial class MainViewModel : ObservableObject
         {
             ScanOverlayText = "Scanning installed programs...";
             ProgramsScanProgress = 0;
-            var programs = await Task.Run(() => InstalledProgramScanner.GetAllInstalledPrograms(), ct);
-            ct.ThrowIfCancellationRequested();
+            var programScan = await Task.Run(
+                () => ScanExecution.RunItems(
+                    "installed-programs",
+                    () => InstalledProgramScanner.GetAllInstalledPrograms(),
+                    ct),
+                CancellationToken.None);
+            var programs = programScan.Items.ToList();
 
             _dispatcher.Invoke(() =>
             {
@@ -369,50 +374,75 @@ public partial class MainViewModel : ObservableObject
             var junkTask = Task.Run(() =>
             {
                 _dispatcher.BeginInvoke(() => JunkScanProgress = 10);
-                var result = JunkFilesCleaner.ScanForJunk();
+                var result = ScanExecution.RunItems(
+                    "junk-files",
+                    () => JunkFilesCleaner.ScanForJunk(),
+                    ct);
                 _dispatcher.BeginInvoke(() => JunkScanProgress = 100);
                 Tick("Junk categories discovered...");
                 return result;
-            }, ct);
+            }, CancellationToken.None);
 
             var tasksTask = Task.Run(() =>
             {
                 _dispatcher.BeginInvoke(() => TasksScanProgress = 10);
-                var result = ScheduledTaskScanner.GetAllTasks();
+                var result = ScheduledTaskScanner.GetAllTasksDetailed(ct);
                 _dispatcher.BeginInvoke(() => TasksScanProgress = 100);
                 Tick("Scheduled tasks enumerated...");
                 return result;
-            }, ct);
+            }, CancellationToken.None);
 
-            var autorunTask = Task.Run(() => { var r = AutorunScanner.GetAllAutoruns(); Tick("Autoruns + signatures checked..."); return r; }, ct);
-            var extTask     = Task.Run(() => { var r = BrowserExtensionScanner.GetAllExtensions(); Tick("Browser extensions scanned..."); return r; }, ct);
-            var appsTask    = WindowsAppManager.GetInstalledAppsAsync().ContinueWith(t => { Tick("Windows Apps enumerated..."); return t.Result; }, ct);
-            var evidenceTask= Task.Run(() => { var r = EvidenceRemover.ScanAllTraces(); Tick("Privacy traces scanned..."); return r; }, ct);
-            var emptyTask   = Task.Run(() => { var r = EmptyFolderScanner.ScanCommonLocations(); Tick("Empty folders scanned..."); return r; }, ct);
-            var ctxTask     = Task.Run(() => { var r = ContextMenuCleaner.ScanContextMenuEntries(); Tick("Shell context menu scanned..."); return r; }, ct);
-            var svcTask     = Task.Run(() => { var r = ServiceScanner.GetAllServices(); Tick("Services + signatures checked..."); return r; }, ct);
-            var restoreTask = Task.Run(() => { var r = SystemRestoreManager.GetRestorePoints(); Tick("Restore points loaded..."); return r; }, ct);
+            var autorunTask = Task.Run(() => { var r = AutorunScanner.GetAllAutorunsDetailed(ct); Tick("Autoruns + signatures checked..."); return r; }, CancellationToken.None);
+            var extTask     = Task.Run(() => { var r = ScanExecution.RunItems("browser-extensions", () => BrowserExtensionScanner.GetAllExtensions(), ct); Tick("Browser extensions scanned..."); return r; }, CancellationToken.None);
+            var appsTask    = ScanExecution.RunItemsAsync<WindowsApp>(
+                "windows-apps",
+                async () => await WindowsAppManager.GetInstalledAppsAsync().ConfigureAwait(false),
+                ct).ContinueWith(t => { Tick("Windows Apps enumerated..."); return t.Result; }, CancellationToken.None);
+            var evidenceTask= Task.Run(() => { var r = ScanExecution.RunItems("privacy-traces", () => EvidenceRemover.ScanAllTraces(), ct); Tick("Privacy traces scanned..."); return r; }, CancellationToken.None);
+            var emptyTask   = Task.Run(() => { var r = ScanExecution.RunItems("empty-folders", () => EmptyFolderScanner.ScanCommonLocations(), ct); Tick("Empty folders scanned..."); return r; }, CancellationToken.None);
+            var ctxTask     = Task.Run(() => { var r = ContextMenuCleaner.ScanContextMenuEntriesDetailed(ct); Tick("Shell context menu scanned..."); return r; }, CancellationToken.None);
+            var svcTask     = Task.Run(() => { var r = ServiceScanner.GetAllServicesDetailed(ct: ct); Tick("Services + signatures checked..."); return r; }, CancellationToken.None);
+            var restoreTask = Task.Run(() => { var r = ScanExecution.RunItems("restore-points", () => SystemRestoreManager.GetRestorePoints(), ct); Tick("Restore points loaded..."); return r; }, CancellationToken.None);
 
             await Task.WhenAll(junkTask, tasksTask, autorunTask, extTask, appsTask,
                                evidenceTask, emptyTask, ctxTask, svcTask, restoreTask);
 
             _dispatcher.Invoke(() =>
             {
-                ApplyJunkResults(junkTask.Result);
-                ApplyTaskResults(tasksTask.Result);
-                ApplyAutorunResults(autorunTask.Result);
-                ApplyExtensionResults(extTask.Result);
-                ApplyWindowsAppResults(appsTask.Result);
-                ApplyEvidenceResults(evidenceTask.Result);
-                ApplyEmptyFolderResults(emptyTask.Result);
-                ApplyContextMenuResults(ctxTask.Result);
-                ApplyServiceResults(svcTask.Result);
-                ApplyRestoreResults(restoreTask.Result);
+                ApplyJunkResults(junkTask.Result.Items.ToList());
+                ApplyTaskResults(tasksTask.Result.Items.ToList());
+                ApplyAutorunResults(autorunTask.Result.Items.ToList());
+                ApplyExtensionResults(extTask.Result.Items.ToList());
+                ApplyWindowsAppResults(appsTask.Result.Items.ToList());
+                ApplyEvidenceResults(evidenceTask.Result.Items.ToList());
+                ApplyEmptyFolderResults(emptyTask.Result.Items.ToList());
+                ApplyContextMenuResults(ctxTask.Result.Items.ToList());
+                ApplyServiceResults(svcTask.Result.Items.ToList());
+                ApplyRestoreResults(restoreTask.Result.Items.ToList());
                 OverlayScanProgress = 100;
             });
 
-            ScanOverlayText = "Scan complete!";
-            StatusText = $"Loaded {programs.Count} programs | {FormatSize(_totalJunkBytes)} junk | All panels ready";
+            var confidence = new[]
+            {
+                ScanConfidenceSuffix(programScan),
+                ScanConfidenceSuffix(junkTask.Result),
+                ScanConfidenceSuffix(tasksTask.Result),
+                ScanConfidenceSuffix(autorunTask.Result),
+                ScanConfidenceSuffix(extTask.Result),
+                ScanConfidenceSuffix(appsTask.Result),
+                ScanConfidenceSuffix(evidenceTask.Result),
+                ScanConfidenceSuffix(emptyTask.Result),
+                ScanConfidenceSuffix(ctxTask.Result),
+                ScanConfidenceSuffix(svcTask.Result),
+                ScanConfidenceSuffix(restoreTask.Result),
+            }.FirstOrDefault(suffix => !string.IsNullOrEmpty(suffix)) ?? "";
+            ScanOverlayText = string.IsNullOrEmpty(confidence)
+                ? "Scan complete!"
+                : $"Scan complete with degraded sources{confidence}";
+            StatusText = $"Loaded {programs.Count} programs | {FormatSize(_totalJunkBytes)} junk | " +
+                         (string.IsNullOrEmpty(confidence)
+                             ? "All panels ready"
+                             : $"Initial scan partial{confidence}");
         }
         catch (OperationCanceledException)
         {
@@ -445,9 +475,9 @@ public partial class MainViewModel : ObservableObject
         {
             case "Autorun":
                 IsBusy = true; StatusText = "Loading autorun entries...";
-                var entries = await Task.Run(() => AutorunScanner.GetAllAutoruns());
-                _dispatcher.Invoke(() => ApplyAutorunResults(entries));
-                StatusText = $"Loaded {entries.Count} autorun entries";
+                var autorunScan = await Task.Run(() => AutorunScanner.GetAllAutorunsDetailed());
+                _dispatcher.Invoke(() => ApplyAutorunResults(autorunScan.Items.ToList()));
+                StatusText = $"Loaded {autorunScan.Items.Count} autorun entries{ScanConfidenceSuffix(autorunScan)}";
                 IsBusy = false;
                 break;
 
@@ -683,10 +713,10 @@ public partial class MainViewModel : ObservableObject
         IsBusy = true; StatusText = "Scanning context menu entries...";
         try
         {
-            var entries = await Task.Run(ContextMenuCleaner.ScanContextMenuEntries);
-            ApplyContextMenuResults(entries);
-            var orphaned = entries.Count(e => e.IsOrphaned);
-            StatusText = $"Found {entries.Count} entries, {orphaned} orphaned";
+            var scan = await Task.Run(() => ContextMenuCleaner.ScanContextMenuEntriesDetailed());
+            ApplyContextMenuResults(scan.Items.ToList());
+            var orphaned = scan.Items.Count(e => e.IsOrphaned);
+            StatusText = $"Found {scan.Items.Count} entries, {orphaned} orphaned{ScanConfidenceSuffix(scan)}";
         }
         finally { IsBusy = false; }
     }
@@ -696,10 +726,10 @@ public partial class MainViewModel : ObservableObject
         IsBusy = true; StatusText = "Scanning Windows services...";
         try
         {
-            var services = await Task.Run(() => ServiceScanner.GetAllServices());
-            ApplyServiceResults(services);
-            var orphaned = services.Count(s => s.IsOrphaned);
-            StatusText = $"Found {services.Count} services, {orphaned} orphaned";
+            var scan = await Task.Run(() => ServiceScanner.GetAllServicesDetailed());
+            ApplyServiceResults(scan.Items.ToList());
+            var orphaned = scan.Items.Count(s => s.IsOrphaned);
+            StatusText = $"Found {scan.Items.Count} services, {orphaned} orphaned{ScanConfidenceSuffix(scan)}";
         }
         finally { IsBusy = false; }
     }
@@ -709,10 +739,10 @@ public partial class MainViewModel : ObservableObject
         IsBusy = true; StatusText = "Scanning scheduled tasks...";
         try
         {
-            var tasks = await Task.Run(ScheduledTaskScanner.GetAllTasks);
-            ApplyTaskResults(tasks);
-            var orphaned = tasks.Count(t => t.IsOrphaned);
-            StatusText = $"Found {tasks.Count} tasks, {orphaned} orphaned";
+            var scan = await Task.Run(() => ScheduledTaskScanner.GetAllTasksDetailed());
+            ApplyTaskResults(scan.Items.ToList());
+            var orphaned = scan.Items.Count(t => t.IsOrphaned);
+            StatusText = $"Found {scan.Items.Count} tasks, {orphaned} orphaned{ScanConfidenceSuffix(scan)}";
         }
         finally { IsBusy = false; }
     }
@@ -963,8 +993,8 @@ public partial class MainViewModel : ObservableObject
         {
             try
             {
-                await PackageManagerScanner.EnrichAsync(list, ct).ConfigureAwait(false);
-                var sourceHealth = await Task.Run(() => PackageManagerScanner.GetSourceHealth(ct), ct).ConfigureAwait(false);
+                var enrichment = await PackageManagerScanner.EnrichDetailedAsync(list, ct).ConfigureAwait(false);
+                var sourceHealth = PackageManagerScanner.LastSourceHealth;
 
                 // Add any new synthetic scoop entries back to the VM lists.
                 var existingNames = new HashSet<string>(Programs.Select(p => p.DisplayName),
@@ -993,8 +1023,14 @@ public partial class MainViewModel : ObservableObject
                         .Where(h => h.Status != SelfTestStatus.Ok)
                         .Select(h => h.Source)
                         .ToList();
-                    if (degraded.Count > 0)
-                        StatusText = $"Package source warning: {string.Join(", ", degraded)} unavailable or degraded. Run deeppurgecli doctor for details.";
+                    if (enrichment.IsDegraded || degraded.Count > 0)
+                        StatusText = $"Package enrichment {enrichment.StatusDisplay.ToLowerInvariant()}: " +
+                                     (degraded.Count > 0
+                                         ? string.Join(", ", degraded)
+                                         : enrichment.FailedSources.Count > 0
+                                             ? string.Join(", ", enrichment.FailedSources.Select(issue => issue.Source).Take(3))
+                                             : enrichment.Warnings.FirstOrDefault() ?? "review diagnostics") +
+                                     ". Run deeppurgecli doctor for details.";
                     else if (upgradeable > 0)
                         StatusText = $"{upgradeable} programs have winget upgrades available";
                 });
@@ -1337,6 +1373,24 @@ public partial class MainViewModel : ObservableObject
         var orphaned = tasks.Count(t => t.IsOrphaned);
         TasksBadge = orphaned > 0 ? $"{orphaned} orphaned" : $"{tasks.Count}";
         _loadedPanels.Add("Tasks");
+    }
+
+    private static string ScanConfidenceSuffix<T>(ScanResult<T> result)
+    {
+        if (!result.IsDegraded) return "";
+
+        var sources = result.FailedSources
+            .Select(issue => issue.Source)
+            .Where(source => !string.IsNullOrWhiteSpace(source))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(3)
+            .ToList();
+        var detail = sources.Count > 0
+            ? $"; sources: {string.Join(", ", sources)}"
+            : result.Warnings.Count > 0
+                ? $"; {result.Warnings[0]}"
+                : "";
+        return $" [{result.StatusDisplay}{detail}]";
     }
 
     private void ApplyAutorunResults(List<AutorunEntry> autoruns)

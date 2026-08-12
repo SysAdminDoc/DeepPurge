@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using DeepPurge.Core.Diagnostics;
 using DeepPurge.Core.Safety;
 // Using fully-qualified Microsoft.Win32.Registry to avoid collision with DeepPurge.Core.Registry namespace.
 
@@ -44,22 +45,38 @@ public static class PathCleaner
     /// flagging any that point to non-existent directories.
     /// </summary>
     public static List<PathEntry> ScanPathEntries(bool orphanedOnly = false)
+        => ScanPathEntriesDetailed(orphanedOnly).Items.ToList();
+
+    public static ScanResult<PathEntry> ScanPathEntriesDetailed(
+        bool orphanedOnly = false,
+        CancellationToken ct = default)
     {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var entries = new List<PathEntry>();
+        var failures = new List<ScanIssue>();
+        var warnings = new List<string>();
 
         // System PATH
         ScanScope(entries, orphanedOnly, "System",
             global::Microsoft.Win32.Registry.LocalMachine,
             @"SYSTEM\CurrentControlSet\Control\Session Manager\Environment",
-            "Path");
+            "Path", failures, warnings, ct);
 
         // User PATH
         ScanScope(entries, orphanedOnly, "User",
             global::Microsoft.Win32.Registry.CurrentUser,
             @"Environment",
-            "Path");
+            "Path", failures, warnings, ct);
 
-        return entries;
+        var result = ScanResult<PathEntry>.Create(
+            "path-entries",
+            entries,
+            failures,
+            warnings,
+            stopwatch.Elapsed,
+            isCancelled: ct.IsCancellationRequested);
+        ScanDiagnosticsLedger.Record("path-entries", result);
+        return result;
     }
 
     /// <summary>
@@ -125,12 +142,18 @@ public static class PathCleaner
     // ===============================================================
 
     private static void ScanScope(List<PathEntry> entries, bool orphanedOnly,
-        string source, global::Microsoft.Win32.RegistryKey root, string subKeyPath, string valueName)
+        string source, global::Microsoft.Win32.RegistryKey root, string subKeyPath, string valueName,
+        List<ScanIssue> failures, List<string> warnings, CancellationToken ct)
     {
         try
         {
+            ct.ThrowIfCancellationRequested();
             using var key = root.OpenSubKey(subKeyPath);
-            if (key == null) return;
+            if (key == null)
+            {
+                warnings.Add($"{source} PATH registry scope is unavailable.");
+                return;
+            }
 
             var raw = key.GetValue(valueName, "", global::Microsoft.Win32.RegistryValueOptions.DoNotExpandEnvironmentNames)
                          ?.ToString() ?? "";
@@ -139,6 +162,7 @@ public static class PathCleaner
             var parts = raw.Split(';', StringSplitOptions.RemoveEmptyEntries);
             foreach (var part in parts)
             {
+                ct.ThrowIfCancellationRequested();
                 var dir = part.Trim();
                 if (string.IsNullOrEmpty(dir)) continue;
 
@@ -156,7 +180,14 @@ public static class PathCleaner
                 });
             }
         }
-        catch { /* registry unreadable */ }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            warnings.Add($"{source} PATH scan was cancelled.");
+        }
+        catch (Exception ex)
+        {
+            failures.Add(new ScanIssue($"path-{source.ToLowerInvariant()}", ex.Message, ex.GetType().Name));
+        }
     }
 
     private static bool IsOrphanedPathEntry(string path)

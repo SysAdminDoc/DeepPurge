@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using DeepPurge.Core.Diagnostics;
 using DeepPurge.Core.Execution;
 using DeepPurge.Core.Safety;
 
@@ -50,11 +51,21 @@ public static class FirewallRuleScanner
     /// via PowerShell for reliable JSON output.
     /// </summary>
     public static List<FirewallRuleEntry> GetAllRules(bool orphanedOnly = false)
+        => GetAllRulesDetailed(orphanedOnly).Items.ToList();
+
+    public static ScanResult<FirewallRuleEntry> GetAllRulesDetailed(
+        bool orphanedOnly = false,
+        CancellationToken ct = default)
     {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var entries = new List<FirewallRuleEntry>();
+        var failures = new List<ScanIssue>();
+        var warnings = new List<string>();
+        ScanCompletionStatus? forcedStatus = null;
 
         try
         {
+            ct.ThrowIfCancellationRequested();
             // Step 1: Get all firewall rules with their application filters in one call.
             // We join rules with their application filters to get the Program path.
             var result = ExternalProcessRunner.Run(PowerShellCommand(
@@ -72,7 +83,34 @@ public static class FirewallRuleScanner
                 "$result | ConvertTo-Json -Depth 2 -Compress",
                 TimeSpan.FromSeconds(60)));
             var output = result.Output;
-            if (string.IsNullOrWhiteSpace(output)) return entries;
+            if (!result.Success)
+            {
+                failures.Add(new ScanIssue(
+                    "firewall-rules",
+                    string.IsNullOrWhiteSpace(result.CombinedOutput)
+                        ? "PowerShell could not enumerate firewall rules."
+                        : result.CombinedOutput,
+                    result.Started ? null : "ProcessStartFailure"));
+                forcedStatus = result.TimedOut
+                    ? ScanCompletionStatus.TimedOut
+                    : result.Canceled
+                        ? ScanCompletionStatus.Cancelled
+                        : null;
+            }
+
+            if (string.IsNullOrWhiteSpace(output))
+            {
+                var emptyResult = ScanResult<FirewallRuleEntry>.Create(
+                    "firewall-rules",
+                    entries,
+                    failures,
+                    warnings,
+                    stopwatch.Elapsed,
+                    forcedStatus,
+                    forcedStatus == ScanCompletionStatus.Cancelled);
+                ScanDiagnosticsLedger.Record("firewall-rules", emptyResult);
+                return emptyResult;
+            }
 
             using var doc = JsonDocument.Parse(output);
             var root = doc.RootElement;
@@ -80,16 +118,43 @@ public static class FirewallRuleScanner
             if (root.ValueKind == JsonValueKind.Array)
             {
                 foreach (var el in root.EnumerateArray())
-                    TryAddRule(entries, el, orphanedOnly);
+                {
+                    try { TryAddRule(entries, el, orphanedOnly); }
+                    catch (Exception ex)
+                    {
+                        warnings.Add($"A firewall rule record could not be parsed: {ex.Message}");
+                    }
+                }
             }
             else if (root.ValueKind == JsonValueKind.Object)
             {
-                TryAddRule(entries, root, orphanedOnly);
+                try { TryAddRule(entries, root, orphanedOnly); }
+                catch (Exception ex)
+                {
+                    warnings.Add($"The firewall response could not be parsed: {ex.Message}");
+                }
             }
         }
-        catch { /* PowerShell / parse failure */ }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            forcedStatus = ScanCompletionStatus.Cancelled;
+        }
+        catch (Exception ex)
+        {
+            failures.Add(new ScanIssue("firewall-rules", ex.Message, ex.GetType().Name));
+        }
 
-        return entries.OrderByDescending(e => e.IsOrphaned).ThenBy(e => e.DisplayName).ToList();
+        var ordered = entries.OrderByDescending(e => e.IsOrphaned).ThenBy(e => e.DisplayName).ToList();
+        var scanResult = ScanResult<FirewallRuleEntry>.Create(
+            "firewall-rules",
+            ordered,
+            failures,
+            warnings,
+            stopwatch.Elapsed,
+            forcedStatus,
+            forcedStatus == ScanCompletionStatus.Cancelled);
+        ScanDiagnosticsLedger.Record("firewall-rules", scanResult);
+        return scanResult;
     }
 
     /// <summary>
