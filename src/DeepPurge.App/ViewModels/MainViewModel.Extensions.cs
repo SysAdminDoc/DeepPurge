@@ -165,9 +165,18 @@ public partial class MainViewModel
                 DryRun: DryRunEnabled,
                 SecureDelete: SecureDeleteEnabled,
                 UseRecycleBin: !SecureDeleteEnabled);
-            var n = new DuplicateFinder().DeleteDuplicates(DuplicateGroups.ToList(), opt);
-            ActivityLog.Record("duplicates", $"{(opt.DryRun ? "Would delete" : "Deleted")} {n} duplicate file(s)", itemCount: n, dryRun: opt.DryRun);
-            StatusText = $"{(opt.DryRun ? "Would delete" : "Deleted")} {n} duplicate file(s).";
+            var summary = new DuplicateFinder().DeleteDuplicatesDetailed(
+                DuplicateGroups.ToList(),
+                opt);
+            ActivityLog.Record(
+                "duplicates",
+                $"{(opt.DryRun ? "Would delete" : "Deleted")} {summary.ItemsDeleted} duplicate file(s)",
+                bytesFreed: summary.BytesFreed,
+                itemCount: summary.ItemsDeleted,
+                dryRun: opt.DryRun);
+            StatusText = $"{(opt.DryRun ? "Would delete" : "Deleted")} " +
+                         $"{summary.ItemsDeleted} duplicate file(s)" +
+                         (summary.ItemsSkipped > 0 ? $" ({summary.ItemsSkipped} skipped)." : ".");
         }
         catch (Exception ex) { Log.Error("DeleteDuplicates", ex); StatusText = $"Duplicate delete failed: {ex.Message}"; }
     }

@@ -123,10 +123,27 @@ public class DuplicateFinder
     /// file that disappears between scan and delete doesn't throw.
     /// </summary>
     public int DeleteDuplicates(IEnumerable<DuplicateGroup> groups, DeleteOptions opt, bool keepNewest = true)
+        => DeleteDuplicatesDetailed(groups, opt, keepNewest).ItemsDeleted;
+
+    public DeleteSummary DeleteDuplicatesDetailed(
+        IEnumerable<DuplicateGroup> groups,
+        DeleteOptions opt,
+        bool keepNewest = true,
+        IProgress<DeleteProgress>? progress = null,
+        CancellationToken ct = default)
     {
-        int n = 0;
-        foreach (var group in groups)
+        var selectedGroups = groups.ToList();
+        var candidates = selectedGroups
+            .Where(g => g.Paths.Count >= 2)
+            .SelectMany(g => g.Paths.Skip(1))
+            .ToList();
+        var executor = new DeletionExecutor();
+        var results = new List<DeletionResult>(candidates.Count);
+        var processed = 0;
+
+        foreach (var group in selectedGroups)
         {
+            if (ct.IsCancellationRequested) break;
             if (group.Paths.Count < 2) continue;
 
             var annotated = new List<(string Path, DateTime Stamp)>(group.Paths.Count);
@@ -144,21 +161,39 @@ public class DuplicateFinder
 
             foreach (var victim in sorted.Skip(1))
             {
-                if (!SafetyGuard.IsPathSafeToDelete(victim)) continue;
-                try
+                processed++;
+                if (ct.IsCancellationRequested)
                 {
-                    if (!File.Exists(victim)) continue;
-                    if (opt.IsDestructive)
-                    {
-                        if (opt.SecureDelete) SecureDelete.Wipe(victim);
-                        else Safety.SafetyGuard.SafeDeleteFile(victim);
-                    }
-                    n++;
+                    results.Add(new DeletionResult(
+                        victim,
+                        DeletionOutcomeKind.Cancelled,
+                        group.FileSize,
+                        "duplicate-clean",
+                        "Cancellation requested."));
+                    break;
                 }
-                catch (Exception ex) { Log.Warn($"DeleteDuplicates '{victim}': {ex.Message}"); }
+
+                var result = executor.Execute(
+                    new DeletionRequest(
+                        victim,
+                        IsDirectory: false,
+                        ExpectedSizeBytes: group.FileSize,
+                        Operation: "duplicate-clean"),
+                    opt,
+                    ct);
+                results.Add(result);
+                progress?.Report(new DeleteProgress(
+                    processed,
+                    candidates.Count,
+                    opt.DryRun
+                        ? results.Where(r => r.IsPreview).Sum(r => r.SizeBytes)
+                        : results.Where(r => r.IsConfirmed).Sum(r => r.SizeBytes),
+                    victim,
+                    !result.IsConfirmed && !result.IsPreview));
             }
         }
-        return n;
+
+        return DeleteSummary.FromResults(results, opt.DryRun);
     }
 
     // ═══════════════════════════════════════════════════════

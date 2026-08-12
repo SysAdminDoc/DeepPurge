@@ -23,7 +23,8 @@ public record DeletionEntry(
     string? ObjectIdentity = null,
     string? BackupOwnerSid = null,
     string? BackupDaclSddl = null,
-    bool BackupAclTrusted = false);
+    bool BackupAclTrusted = false,
+    bool Recoverable = false);
 
 public record ManifestSummary(
     string FilePath,
@@ -53,10 +54,23 @@ public static class DeletionManifest
         return new ManifestPathScope(previous);
     }
 
-    public static void Record(string path, string type, long sizeBytes, string operation)
+    public static bool Record(
+        string path,
+        string type,
+        long sizeBytes,
+        string operation,
+        string outcome = "Succeeded",
+        bool recoverable = false)
     {
-        var entry = new DeletionEntry(path, type, sizeBytes, DateTime.UtcNow, operation);
-        TryAppend(entry);
+        var entry = new DeletionEntry(
+            path,
+            type,
+            sizeBytes,
+            DateTime.UtcNow,
+            operation,
+            Outcome: outcome,
+            Recoverable: recoverable);
+        return TryAppend(entry);
     }
 
     public static void RecordFile(string path, string operation)
@@ -101,7 +115,8 @@ public static class DeletionManifest
             ObjectIdentity: artifact.ObjectIdentity,
             BackupOwnerSid: artifact.BackupOwnerSid,
             BackupDaclSddl: artifact.BackupDaclSddl,
-            BackupAclTrusted: artifact.BackupAclTrusted);
+            BackupAclTrusted: artifact.BackupAclTrusted,
+            Recoverable: true);
         return TryAppend(entry);
     }
 
@@ -141,6 +156,12 @@ public static class DeletionManifest
 
         foreach (var entry in entries)
         {
+            if (!IsConfirmedEntry(entry))
+            {
+                details.Add($"Skipped non-confirmed deletion record: {entry.Path}");
+                continue;
+            }
+
             if (entry.Type == "registry" || entry.Path.StartsWith("HKLM", StringComparison.OrdinalIgnoreCase) ||
                 entry.Path.StartsWith("HKCU", StringComparison.OrdinalIgnoreCase) ||
                 entry.Path.StartsWith("HKCR", StringComparison.OrdinalIgnoreCase))
@@ -177,11 +198,13 @@ public static class DeletionManifest
                     details.Add($"Registry restore blocked for {entry.Path}: {validationReason}");
                 }
             }
-            else if (entry.Operation.Contains("secure", StringComparison.OrdinalIgnoreCase) ||
+            else if (!entry.Recoverable ||
+                     entry.Operation.Contains("secure", StringComparison.OrdinalIgnoreCase) ||
+                     entry.Outcome.Equals("SecurelyDeleted", StringComparison.OrdinalIgnoreCase) ||
                      entry.Operation.Contains("wipe", StringComparison.OrdinalIgnoreCase))
             {
                 unrecoverable++;
-                details.Add($"Secure-deleted (unrecoverable): {entry.Path}");
+                details.Add($"Permanently deleted (unrecoverable): {entry.Path}");
             }
             else
             {
@@ -199,6 +222,12 @@ public static class DeletionManifest
 
         return new RestoreResult(regRestored, recoverable, unrecoverable, details);
     }
+
+    private static bool IsConfirmedEntry(DeletionEntry entry)
+        => entry.Outcome.Equals("Succeeded", StringComparison.OrdinalIgnoreCase) ||
+           entry.Outcome.Equals("Recycled", StringComparison.OrdinalIgnoreCase) ||
+           entry.Outcome.Equals("PermanentlyDeleted", StringComparison.OrdinalIgnoreCase) ||
+           entry.Outcome.Equals("SecurelyDeleted", StringComparison.OrdinalIgnoreCase);
 
     private static List<DeletionEntry> LoadEntriesFromFile(string filePath)
     {

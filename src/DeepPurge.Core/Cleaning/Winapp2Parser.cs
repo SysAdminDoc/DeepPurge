@@ -189,54 +189,91 @@ public class Winapp2Runner
         IProgress<DeleteProgress>? progress = null,
         CancellationToken ct = default)
     {
-        int processed = 0, skipped = 0;
-        long bytes = 0;
         var list = entries.ToList();
         int total = list.Count;
+        var results = new List<DeletionResult>();
 
         await Task.Run(() =>
         {
             foreach (var entry in list)
             {
                 ct.ThrowIfCancellationRequested();
-                processed++;
-                progress?.Report(new DeleteProgress(processed, total, bytes, entry.Section, false));
+                progress?.Report(new DeleteProgress(
+                    results.Count,
+                    total,
+                    CurrentBytes(results, options.DryRun),
+                    entry.Section,
+                    false));
 
-                if (!entry.IsApplicable()) { skipped++; continue; }
+                if (!entry.IsApplicable())
+                {
+                    results.Add(DeletionExecutor.Skipped(
+                        new DeletionRequest(entry.Section, Operation: "winapp2-rule"),
+                        "Rule is not applicable."));
+                    continue;
+                }
 
                 foreach (var fk in entry.FileKeys)
                 {
-                    try { bytes += RunFileKey(fk, options, ct); }
+                    try { results.AddRange(RunFileKey(fk, options, ct)); }
                     catch (OperationCanceledException) { throw; }
-                    catch (Exception ex) { Log.Warn($"winapp2 FileKey '{fk}' failed: {ex.Message}"); skipped++; }
+                    catch (Exception ex)
+                    {
+                        Log.Warn($"winapp2 FileKey '{fk}' failed: {ex.Message}");
+                        results.Add(DeletionExecutor.FailedExternal(
+                            fk,
+                            "winapp2-file-key",
+                            ex.Message));
+                    }
                 }
 
                 foreach (var rk in entry.RegKeys)
                 {
-                    try { RunRegKey(rk, options); }
-                    catch (Exception ex) { Log.Warn($"winapp2 RegKey '{rk}' failed: {ex.Message}"); skipped++; }
+                    try { results.Add(RunRegKey(rk, options)); }
+                    catch (Exception ex)
+                    {
+                        Log.Warn($"winapp2 RegKey '{rk}' failed: {ex.Message}");
+                        results.Add(DeletionExecutor.FailedExternal(
+                            rk,
+                            "winapp2-regkey",
+                            ex.Message));
+                    }
                 }
             }
         }, ct);
 
-        return new DeleteSummary(processed - skipped, skipped, bytes, options.DryRun);
+        return DeleteSummary.FromResults(results, options.DryRun);
     }
 
     // FileKey format: path|filespec[|RECURSE|REMOVESELF]
-    private static long RunFileKey(string raw, DeleteOptions opt, CancellationToken ct)
+    private static List<DeletionResult> RunFileKey(
+        string raw,
+        DeleteOptions opt,
+        CancellationToken ct)
     {
+        var results = new List<DeletionResult>();
         var parts = raw.Split('|');
-        if (parts.Length == 0) return 0;
+        if (parts.Length == 0) return results;
 
         var dir = Environment.ExpandEnvironmentVariables(parts[0]);
         var spec = parts.Length > 1 && !string.IsNullOrEmpty(parts[1]) ? parts[1] : "*.*";
         bool recurse    = parts.Skip(2).Any(f => f.Equals("RECURSE",    StringComparison.OrdinalIgnoreCase));
         bool removeSelf = parts.Skip(2).Any(f => f.Equals("REMOVESELF", StringComparison.OrdinalIgnoreCase));
 
-        if (!Directory.Exists(dir)) return 0;
-        if (!SafetyGuard.IsPathSafeToDelete(dir)) return 0;
-
-        long freed = 0;
+        if (!Directory.Exists(dir))
+        {
+            results.Add(DeletionExecutor.Skipped(
+                new DeletionRequest(dir, IsDirectory: true, Operation: "winapp2-file-key"),
+                "Missing."));
+            return results;
+        }
+        if (!SafetyGuard.IsPathSafeToDelete(dir))
+        {
+            results.Add(DeletionExecutor.Skipped(
+                new DeletionRequest(dir, IsDirectory: true, Operation: "winapp2-file-key"),
+                "The path is protected or invalid."));
+            return results;
+        }
 
         IEnumerable<string> files;
         try
@@ -245,41 +282,69 @@ public class Winapp2Runner
                 ? SafetyGuard.SafeEnumerateFiles(dir, spec)
                 : Directory.EnumerateFiles(dir, spec, SearchOption.TopDirectoryOnly);
         }
-        catch { return 0; }
+        catch
+        {
+            results.Add(DeletionExecutor.FailedExternal(
+                dir,
+                "winapp2-file-key",
+                "The cleaner target could not be enumerated."));
+            return results;
+        }
+
+        var executor = new DeletionExecutor();
 
         foreach (var file in files)
         {
             ct.ThrowIfCancellationRequested();
-            if (!SafetyGuard.IsPathSafeToDelete(file)) continue;
-            try
-            {
-                var fi = new FileInfo(file);
-                if (!fi.Exists) continue;
-                freed += fi.Length;
-                if (opt.IsDestructive)
-                {
-                    if (opt.SecureDelete) SecureDelete.Wipe(file);
-                    else SafetyGuard.SafeDeleteFile(file);
-                }
-            }
-            catch (IOException)        { /* locked by OS: skip */ }
-            catch (UnauthorizedAccessException) { /* perms: skip */ }
+            long size = 0;
+            try { size = new FileInfo(file).Length; } catch { /* executor reports missing metadata */ }
+            results.Add(executor.Execute(
+                new DeletionRequest(file, ExpectedSizeBytes: size, Operation: "winapp2-file"),
+                opt,
+                ct));
         }
 
-        if (removeSelf && opt.IsDestructive)
+        if (removeSelf)
         {
-            try { if (Directory.Exists(dir)) SafetyGuard.SafeDeleteDirectory(dir); }
-            catch (Exception ex) { Log.Warn($"REMOVESELF '{dir}' failed: {ex.Message}"); }
+            results.Add(executor.Execute(
+                new DeletionRequest(dir, IsDirectory: true, Operation: "winapp2-remove-self"),
+                opt,
+                ct));
         }
-        return freed;
+        return results;
     }
 
-    private static void RunRegKey(string raw, DeleteOptions opt)
+    private static DeletionResult RunRegKey(string raw, DeleteOptions opt)
     {
         var result = RegistryDeletion.DeleteKeyTree(raw, "winapp2-regkey", opt.DryRun);
-        if (result.Status is RegistryDeletionStatus.Deleted or RegistryDeletionStatus.DryRun or RegistryDeletionStatus.SkippedMissing)
-            return;
-
-        Log.Warn($"winapp2 RegKey '{raw}' skipped: {result.Status} {result.ErrorMessage}");
+        var outcome = result.Status switch
+        {
+            RegistryDeletionStatus.DryRun => DeletionOutcomeKind.Preview,
+            RegistryDeletionStatus.Deleted => DeletionOutcomeKind.PermanentlyDeleted,
+            RegistryDeletionStatus.SkippedMissing or
+            RegistryDeletionStatus.SkippedMalformedPath or
+            RegistryDeletionStatus.SkippedUnsafePath or
+            RegistryDeletionStatus.SkippedSymlink or
+            RegistryDeletionStatus.SkippedDrift => DeletionOutcomeKind.Skipped,
+            _ => DeletionOutcomeKind.Failed,
+        };
+        if (outcome is DeletionOutcomeKind.Skipped or DeletionOutcomeKind.Failed)
+            Log.Warn($"winapp2 RegKey '{raw}' skipped: {result.Status} {result.ErrorMessage}");
+        return new DeletionResult(
+            result.Path,
+            outcome,
+            0,
+            "winapp2-regkey",
+            outcome is DeletionOutcomeKind.Preview or DeletionOutcomeKind.PermanentlyDeleted
+                ? null
+                : result.ErrorMessage ?? result.Status.ToString(),
+            Recoverable: result.Deleted);
     }
+
+    private static long CurrentBytes(
+        IReadOnlyList<DeletionResult> results,
+        bool dryRun)
+        => dryRun
+            ? results.Where(r => r.IsPreview).Sum(r => r.SizeBytes)
+            : results.Where(r => r.IsConfirmed).Sum(r => r.SizeBytes);
 }

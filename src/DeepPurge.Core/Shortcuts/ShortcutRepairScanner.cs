@@ -82,25 +82,20 @@ public class ShortcutRepairScanner
     /// </summary>
     public int RecycleBroken(IEnumerable<ShortcutEntry> broken)
     {
+        var executor = new DeletionExecutor();
         int n = 0;
         foreach (var s in broken.Where(x => x.Status == ShortcutStatus.Broken))
         {
-            try
-            {
-                if (!File.Exists(s.Path)) continue;
-                if (SafetyGuard.SafeMoveToRecycleBin(
-                        s.Path,
-                        isDirectory: false,
-                        out var reason))
-                {
-                    n++;
-                }
-                else
-                {
-                    Log.Warn($"Recycle '{s.Path}': {reason}");
-                }
-            }
-            catch (Exception ex) { Log.Warn($"Recycle '{s.Path}': {ex.Message}"); }
+            var result = executor.Execute(
+                new DeletionRequest(
+                    s.Path,
+                    ExpectedSizeBytes: s.SizeBytes,
+                    Operation: "shortcut-recycle"),
+                DeleteOptions.Default);
+            if (result.IsConfirmed)
+                n++;
+            else
+                Log.Warn($"Recycle '{s.Path}': {result.Reason ?? result.Outcome.ToString()}");
         }
         return n;
     }

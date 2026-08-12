@@ -71,26 +71,77 @@ public static class EmptyFolderScanner
     }
 
     public static int DeleteEmptyFolders(IEnumerable<EmptyFolderInfo> folders)
+        => DeleteEmptyFolders(
+            folders,
+            DeleteOptions.Default,
+            progress: null,
+            ct: default).ItemsDeleted;
+
+    public static DeleteSummary DeleteEmptyFolders(
+        IEnumerable<EmptyFolderInfo> folders,
+        DeleteOptions options,
+        IProgress<DeleteProgress>? progress = null,
+        CancellationToken ct = default)
     {
-        int deleted = 0;
+        var selected = folders
+            .Where(f => f.IsSelected)
+            .OrderByDescending(f => f.Path.Length)
+            .ToList();
+        var executor = new DeletionExecutor();
+        var results = new List<DeletionResult>(selected.Count);
+
         // Delete the deepest paths first so parent folders also become eligible.
-        foreach (var folder in folders
-                     .Where(f => f.IsSelected)
-                     .OrderByDescending(f => f.Path.Length))
+        for (var i = 0; i < selected.Count; i++)
         {
-            try
+            var folder = selected[i];
+            var request = new DeletionRequest(
+                folder.Path,
+                IsDirectory: true,
+                Operation: "empty-folder-clean");
+            DeletionResult result;
+
+            if (ct.IsCancellationRequested)
             {
-                if (Directory.Exists(folder.Path) && IsDirectoryEmpty(folder.Path)
-                    && SafetyGuard.IsPathSafeToDelete(folder.Path)
-                    && !SafetyGuard.IsReparsePoint(folder.Path))
-                {
-                    if (SafetyGuard.SafeDeleteDirectory(folder.Path))
-                        deleted++;
-                }
+                result = new DeletionResult(
+                    folder.Path,
+                    DeletionOutcomeKind.Cancelled,
+                    0,
+                    request.Operation,
+                    "Cancellation requested.");
             }
-            catch { /* skip */ }
+            else if (!Directory.Exists(folder.Path))
+            {
+                result = DeletionExecutor.Skipped(request, "Missing.");
+            }
+            else if (!IsDirectoryEmpty(folder.Path))
+            {
+                result = DeletionExecutor.Skipped(request, "Directory is no longer empty.");
+            }
+            else if (!SafetyGuard.IsPathSafeToDelete(folder.Path))
+            {
+                result = DeletionExecutor.Skipped(request, "The path is protected or invalid.");
+            }
+            else if (SafetyGuard.IsReparsePoint(folder.Path))
+            {
+                result = DeletionExecutor.Skipped(request, "Reparse point.");
+            }
+            else
+            {
+                result = executor.Execute(request, options, ct);
+            }
+
+            results.Add(result);
+            progress?.Report(new DeleteProgress(
+                i + 1,
+                selected.Count,
+                options.DryRun
+                    ? results.Where(r => r.IsPreview).Sum(r => r.SizeBytes)
+                    : results.Where(r => r.IsConfirmed).Sum(r => r.SizeBytes),
+                folder.Path,
+                !result.IsConfirmed && !result.IsPreview));
         }
-        return deleted;
+
+        return DeleteSummary.FromResults(results, options.DryRun);
     }
 
     // ═══════════════════════════════════════════════════════

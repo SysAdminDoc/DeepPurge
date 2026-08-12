@@ -844,20 +844,27 @@ public partial class MainWindow : Window
         if (selected.Count == 0) { WarnStatus("Select at least one large file to delete."); return; }
         _vm.IsBusy = true;
         _vm.StatusText = $"Deleting {selected.Count} files...";
-        int deleted = 0, skipped = 0;
-        await Task.Run(() =>
+        var options = new DeleteOptions(
+            DryRun: _vm.DryRunEnabled,
+            SecureDelete: _vm.SecureDeleteEnabled,
+            UseRecycleBin: !_vm.SecureDeleteEnabled);
+        var batch = await Task.Run(() => new DeletionExecutor().Execute(
+            selected.Select(f => new DeletionRequest(
+                f.Path,
+                ExpectedSizeBytes: f.SizeBytes,
+                Operation: "large-file-clean")),
+            options));
+        for (var i = 0; i < selected.Count && i < batch.Results.Count; i++)
         {
-            foreach (var f in selected)
-            {
-                if (!SafetyGuard.IsPathSafeToDelete(f.Path)) { Interlocked.Increment(ref skipped); continue; }
-                try { if (SafetyGuard.SafeDeleteFile(f.Path)) Interlocked.Increment(ref deleted); else Interlocked.Increment(ref skipped); }
-                catch { Interlocked.Increment(ref skipped); }
-            }
-        });
-        var deletedItems = selected.Where(f => !File.Exists(f.Path)).ToList();
-        foreach (var f in deletedItems) _vm.LargeFiles.Remove(f);
+            if (batch.Results[i].IsConfirmed)
+                _vm.LargeFiles.Remove(selected[i]);
+        }
         _vm.IsBusy = false;
-        ShowToast($"Deleted {deleted} files" + (skipped > 0 ? $" ({skipped} skipped)" : ""));
+        var verb = options.DryRun ? "Would delete" : "Deleted";
+        ShowToast($"{verb} {batch.Summary.ItemsDeleted} files" +
+                  (batch.Summary.ItemsSkipped > 0
+                      ? $" ({batch.Summary.ItemsSkipped} skipped)"
+                      : ""));
     }
 
     private async void ScanContextMenu_Click(object sender, RoutedEventArgs e) => await _vm.ScanContextMenuAsync();

@@ -406,6 +406,13 @@ public static class SafetyGuard
         string path,
         bool isDirectory,
         out string reason)
+        => SafeMoveToRecycleBin(path, isDirectory, "recycle", out reason);
+
+    internal static bool SafeMoveToRecycleBin(
+        string path,
+        bool isDirectory,
+        string operation,
+        out string reason)
     {
         if (!HandleBoundFileOperations.TryCaptureStablePathIdentity(
                 path,
@@ -418,17 +425,32 @@ public static class SafetyGuard
 
         try
         {
-            var operation = new ShellFileOperation
+            if (TryMoveToRecycleBinWithFileOperation(
+                    finalPath,
+                    out var fileOperationReason))
+            {
+                Diagnostics.DeletionManifest.Record(
+                    finalPath,
+                    isDirectory ? "directory" : "file",
+                    sizeBytes,
+                    operation,
+                    outcome: "Recycled",
+                    recoverable: true);
+                reason = "";
+                return true;
+            }
+
+            var shellOperation = new ShellFileOperation
             {
                 Function = ShellDelete,
                 From = finalPath + '\0' + '\0',
                 Flags = ShellAllowUndo | ShellNoConfirmation |
                         ShellNoErrorUi | ShellSilent,
             };
-            var result = SHFileOperation(ref operation);
-            if (result != 0 || operation.AnyOperationsAborted)
+            var result = SHFileOperation(ref shellOperation);
+            if (result != 0 || shellOperation.AnyOperationsAborted)
             {
-                reason = operation.AnyOperationsAborted
+                reason = shellOperation.AnyOperationsAborted
                     ? "The Recycle Bin operation was cancelled."
                     : $"The Recycle Bin operation failed with code {result}.";
                 return false;
@@ -444,7 +466,9 @@ public static class SafetyGuard
                 finalPath,
                 isDirectory ? "directory" : "file",
                 sizeBytes,
-                "recycle");
+                operation,
+                outcome: "Recycled",
+                recoverable: true);
             reason = "";
             return true;
         }
@@ -455,11 +479,160 @@ public static class SafetyGuard
         }
     }
 
+    /// <summary>
+    /// Uses the supported Vista+ IFileOperation shell contract for ordinary
+    /// recoverable cleanup. A legacy SHFileOperation fallback remains for
+    /// machines where the COM class is unavailable or rejects the item.
+    /// </summary>
+    private static bool TryMoveToRecycleBinWithFileOperation(
+        string finalPath,
+        out string reason)
+    {
+        reason = "IFileOperation is unavailable.";
+        object? operation = null;
+        object? item = null;
+        try
+        {
+            var operationType = Type.GetTypeFromCLSID(
+                FileOperationClsid,
+                throwOnError: false);
+            if (operationType == null ||
+                Activator.CreateInstance(operationType) is not IFileOperation fileOperation)
+                return false;
+
+            operation = fileOperation;
+            var flags = (uint)(ShellAllowUndo | ShellNoConfirmation |
+                               ShellNoErrorUi | ShellSilent);
+            if (fileOperation.SetOperationFlags(flags) != 0)
+            {
+                reason = "IFileOperation rejected its operation flags.";
+                return false;
+            }
+
+            var shellItemId = ShellItemIid;
+            var hr = SHCreateItemFromParsingName(
+                finalPath,
+                IntPtr.Zero,
+                ref shellItemId,
+                out var shellItem);
+            if (hr != 0 || shellItem == null)
+            {
+                reason = $"IFileOperation could not bind the target (HRESULT 0x{hr:X8}).";
+                return false;
+            }
+
+            item = shellItem;
+            if (fileOperation.DeleteItem(shellItem, null) != 0 ||
+                fileOperation.PerformOperations() != 0)
+            {
+                reason = "IFileOperation failed to submit the Recycle Bin operation.";
+                return false;
+            }
+
+            if (fileOperation.GetAnyOperationsAborted(out var aborted) != 0 || aborted)
+            {
+                reason = "The IFileOperation Recycle Bin operation was cancelled.";
+                return false;
+            }
+
+            if (File.Exists(finalPath) || Directory.Exists(finalPath))
+            {
+                reason = "IFileOperation returned success but the target still exists.";
+                return false;
+            }
+
+            reason = "";
+            return true;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidComObjectException or
+                                   UnauthorizedAccessException or
+                                   PlatformNotSupportedException)
+        {
+            reason = ex.Message;
+            return false;
+        }
+        finally
+        {
+            if (item != null && Marshal.IsComObject(item))
+                Marshal.FinalReleaseComObject(item);
+            if (operation != null && Marshal.IsComObject(operation))
+                Marshal.FinalReleaseComObject(operation);
+        }
+    }
+
     private const uint ShellDelete = 0x0003;
     private const ushort ShellSilent = 0x0004;
     private const ushort ShellNoConfirmation = 0x0010;
     private const ushort ShellAllowUndo = 0x0040;
     private const ushort ShellNoErrorUi = 0x0400;
+    private static readonly Guid FileOperationClsid =
+        new("3AD05575-8857-4850-9277-11B85BDB8E09");
+    private static readonly Guid ShellItemIid =
+        new("43826D1E-E718-42EE-BC55-A1E261C37BFE");
+
+    [ComImport]
+    [Guid("947AAB5F-0A5C-4C13-B4D6-4BF7836FC9F8")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IFileOperation
+    {
+        uint Advise([MarshalAs(UnmanagedType.Interface)] object sink, out uint cookie);
+        uint Unadvise(uint cookie);
+        uint SetOperationFlags(uint flags);
+        uint SetProgressMessage([MarshalAs(UnmanagedType.LPWStr)] string message);
+        uint SetProgressDialog([MarshalAs(UnmanagedType.Interface)] object dialog);
+        uint SetProperties([MarshalAs(UnmanagedType.Interface)] object properties);
+        uint RenameItem(
+            [MarshalAs(UnmanagedType.Interface)] object item,
+            [MarshalAs(UnmanagedType.LPWStr)] string name,
+            [MarshalAs(UnmanagedType.Interface)] object sink);
+        uint RenameItems(
+            [MarshalAs(UnmanagedType.Interface)] object items,
+            [MarshalAs(UnmanagedType.LPWStr)] string name);
+        uint MoveItem(
+            [MarshalAs(UnmanagedType.Interface)] object item,
+            [MarshalAs(UnmanagedType.Interface)] object destination,
+            [MarshalAs(UnmanagedType.LPWStr)] string name,
+            [MarshalAs(UnmanagedType.Interface)] object sink);
+        uint MoveItems(
+            [MarshalAs(UnmanagedType.Interface)] object items,
+            [MarshalAs(UnmanagedType.Interface)] object destination);
+        uint CopyItem(
+            [MarshalAs(UnmanagedType.Interface)] object item,
+            [MarshalAs(UnmanagedType.Interface)] object destination,
+            [MarshalAs(UnmanagedType.LPWStr)] string name,
+            [MarshalAs(UnmanagedType.Interface)] object sink);
+        uint CopyItems(
+            [MarshalAs(UnmanagedType.Interface)] object items,
+            [MarshalAs(UnmanagedType.Interface)] object destination);
+        uint DeleteItem(
+            [MarshalAs(UnmanagedType.Interface)] object item,
+            [MarshalAs(UnmanagedType.Interface)] object? sink);
+        uint DeleteItems(
+            [MarshalAs(UnmanagedType.Interface)] object items,
+            [MarshalAs(UnmanagedType.Interface)] object sink);
+        uint NewItem(
+            [MarshalAs(UnmanagedType.Interface)] object destination,
+            uint attributes,
+            [MarshalAs(UnmanagedType.LPWStr)] string name,
+            [MarshalAs(UnmanagedType.LPWStr)] string templateName,
+            [MarshalAs(UnmanagedType.Interface)] object sink);
+        uint PerformOperations();
+        uint GetAnyOperationsAborted([MarshalAs(UnmanagedType.Bool)] out bool aborted);
+    }
+
+    [ComImport]
+    [Guid("43826D1E-E718-42EE-BC55-A1E261C37BFE")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IShellItem
+    {
+    }
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    private static extern int SHCreateItemFromParsingName(
+        string path,
+        IntPtr bindContext,
+        ref Guid riid,
+        [MarshalAs(UnmanagedType.Interface)] out IShellItem? item);
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct ShellFileOperation

@@ -227,118 +227,69 @@ public class UninstallEngine
 
         return await Task.Run(() =>
         {
-            int regDeleted = 0, fileDeleted = 0, skipped = 0;
-            long freed = 0;
+            var executor = new DeletionExecutor();
+            var results = new List<DeletionResult>(total);
+            int regDeleted = 0, fileDeleted = 0;
             int index = 0;
 
             foreach (var item in regList)
             {
-                ct.ThrowIfCancellationRequested();
                 index++;
-
-                if (options.DryRun)
+                var result = DeleteRegistryItem(item, options.DryRun);
+                var deletionResult = ToDeletionResult(item, result);
+                results.Add(deletionResult);
+                if (deletionResult.IsConfirmed || deletionResult.IsPreview)
                 {
                     regDeleted++;
-                    progress?.Report(new DeleteProgress(index, total, freed, item.Path, Skipped: false));
-                    continue;
+                }
+                else
+                {
+                    StatusChanged?.Invoke(
+                        $"Skipped registry: {item.Path} - {result.Status} {result.ErrorMessage}");
                 }
 
-                try
-                {
-                    var result = DeleteRegistryItem(item);
-                    if (result.Deleted)
-                    {
-                        regDeleted++;
-                    }
-                    else
-                    {
-                        skipped++;
-                        StatusChanged?.Invoke($"Skipped registry: {item.Path} - {result.Status}");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    skipped++;
-                    StatusChanged?.Invoke($"Failed to delete registry: {item.Path} - {ex.Message}");
-                }
-
-                progress?.Report(new DeleteProgress(index, total, freed, item.Path, Skipped: false));
+                progress?.Report(new DeleteProgress(
+                    index,
+                    total,
+                    CurrentBytes(results, options.DryRun),
+                    item.Path,
+                    !deletionResult.IsConfirmed && !deletionResult.IsPreview));
             }
 
             foreach (var item in fileList)
             {
-                ct.ThrowIfCancellationRequested();
                 index++;
-
-                if (!SafetyGuard.IsPathSafeToDelete(item.Path))
-                {
-                    StatusChanged?.Invoke($"Blocked by SafetyGuard (file): {item.Path}");
-                    skipped++;
-                    progress?.Report(new DeleteProgress(index, total, freed, item.Path, Skipped: true));
-                    continue;
-                }
-
-                if (options.DryRun)
+                var request = new DeletionRequest(
+                    item.Path,
+                    item.Type == LeftoverType.Folder,
+                    item.SizeBytes,
+                    "uninstall-leftover");
+                var deletionResult = executor.Execute(request, options, ct);
+                results.Add(deletionResult);
+                if (deletionResult.IsConfirmed || deletionResult.IsPreview)
                 {
                     fileDeleted++;
-                    freed += item.SizeBytes;
-                    progress?.Report(new DeleteProgress(index, total, freed, item.Path, Skipped: false));
-                    continue;
                 }
-
-                try
+                else
                 {
-                    var isDir = item.Type == LeftoverType.Folder;
-                    bool removed;
-                    string failureReason = "";
-                    if (options.SecureDelete)
-                    {
-                        removed = isDir
-                            ? SecureDelete.WipeDirectory(item.Path)
-                            : SecureDelete.Wipe(item.Path);
-                    }
-                    else if (options.UseRecycleBin)
-                    {
-                        removed = SafetyGuard.SafeMoveToRecycleBin(
-                            item.Path,
-                            isDir,
-                            out failureReason);
-                    }
-                    else
-                    {
-                        removed = DeleteFileItem(item);
-                    }
-
-                    if (!removed)
-                    {
-                        skipped++;
-                        StatusChanged?.Invoke(
-                            $"Failed to delete: {item.Path}" +
-                            (string.IsNullOrWhiteSpace(failureReason)
-                                ? ""
-                                : $" - {failureReason}"));
-                        progress?.Report(
-                            new DeleteProgress(index, total, freed, item.Path, Skipped: true));
-                        continue;
-                    }
-
-                    fileDeleted++;
-                    freed += item.SizeBytes;
-                }
-                catch (Exception ex)
-                {
-                    skipped++;
-                    StatusChanged?.Invoke($"Failed to delete: {item.Path} - {ex.Message}");
+                    StatusChanged?.Invoke(
+                        $"Failed to delete: {item.Path} - {deletionResult.Reason}");
                 }
 
-                progress?.Report(new DeleteProgress(index, total, freed, item.Path, Skipped: false));
+                progress?.Report(new DeleteProgress(
+                    index,
+                    total,
+                    CurrentBytes(results, options.DryRun),
+                    item.Path,
+                    !deletionResult.IsConfirmed && !deletionResult.IsPreview));
             }
 
+            var summary = DeleteSummary.FromResults(results, options.DryRun);
             var verb = options.DryRun ? "Would delete" : "Deleted";
             StatusChanged?.Invoke($"{verb} {regDeleted} registry entries and {fileDeleted} files/folders");
 
             return (
-                new DeleteSummary(regDeleted + fileDeleted, skipped, freed, options.DryRun),
+                summary,
                 regDeleted,
                 fileDeleted);
         }, ct).ConfigureAwait(false);
@@ -671,17 +622,41 @@ public class UninstallEngine
     //  Deletion primitives
     // ═══════════════════════════════════════════════════════
 
-    private static RegistryDeletionResult DeleteRegistryItem(LeftoverItem item)
+    private static RegistryDeletionResult DeleteRegistryItem(
+        LeftoverItem item,
+        bool dryRun)
         => item.Type == LeftoverType.RegistryValue
-            ? RegistryDeletion.DeleteValue(item.Path, "uninstall-leftover")
-            : RegistryDeletion.DeleteKeyTree(item.Path, "uninstall-leftover");
+            ? RegistryDeletion.DeleteValue(item.Path, "uninstall-leftover", dryRun)
+            : RegistryDeletion.DeleteKeyTree(item.Path, "uninstall-leftover", dryRun);
 
-    private static bool DeleteFileItem(LeftoverItem item)
+    private static DeletionResult ToDeletionResult(
+        LeftoverItem item,
+        RegistryDeletionResult result)
     {
-        if (item.Type == LeftoverType.Folder)
-            return Directory.Exists(item.Path) &&
-                   Safety.SafetyGuard.SafeDeleteDirectory(item.Path);
-        return File.Exists(item.Path) &&
-               Safety.SafetyGuard.SafeDeleteFile(item.Path);
+        var outcome = result.Status switch
+        {
+            RegistryDeletionStatus.DryRun => DeletionOutcomeKind.Preview,
+            RegistryDeletionStatus.Deleted => DeletionOutcomeKind.PermanentlyDeleted,
+            RegistryDeletionStatus.SkippedMissing or
+            RegistryDeletionStatus.SkippedMalformedPath or
+            RegistryDeletionStatus.SkippedUnsafePath or
+            RegistryDeletionStatus.SkippedSymlink or
+            RegistryDeletionStatus.SkippedDrift => DeletionOutcomeKind.Skipped,
+            _ => DeletionOutcomeKind.Failed,
+        };
+        return new DeletionResult(
+            item.Path,
+            outcome,
+            item.SizeBytes,
+            "uninstall-leftover",
+            result.ErrorMessage ?? result.Status.ToString(),
+            Recoverable: result.Deleted);
     }
+
+    private static long CurrentBytes(
+        IReadOnlyList<DeletionResult> results,
+        bool dryRun)
+        => dryRun
+            ? results.Where(r => r.IsPreview).Sum(r => r.SizeBytes)
+            : results.Where(r => r.IsConfirmed).Sum(r => r.SizeBytes);
 }
