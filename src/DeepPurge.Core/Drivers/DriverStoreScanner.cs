@@ -17,6 +17,44 @@ public class DriverPackage
     public string SignerName    { get; set; } = "";
     public long   SizeBytes     { get; set; }
     public bool   IsOldVersion  { get; set; }
+
+    /// <summary>System/firmware packages and malformed records stay pinned.</summary>
+    public bool IsProtected { get; set; }
+
+    /// <summary>Reserved for operator/configuration exclusions.</summary>
+    public bool IsExcluded { get; set; }
+
+    public string SafetyReason { get; set; } = "";
+    public string? LastOperationId { get; set; }
+    public string? BackupDirectory { get; set; }
+    public string? PackageSha256 { get; set; }
+    public DriverMutationOutcome? LastMutationOutcome { get; set; }
+
+    public bool MutationSupported =>
+        RegexValidPublishedName(PublishedName) && !IsProtected && !IsExcluded;
+
+    public string SafetyStatus => IsProtected
+        ? "PROTECTED"
+        : IsExcluded
+            ? "EXCLUDED"
+            : MutationSupported
+                ? "ELIGIBLE"
+                : "UNAVAILABLE";
+
+    public string RollbackStatus => LastMutationOutcome switch
+    {
+        DriverMutationOutcome.Deleted => "ROLLBACK READY",
+        DriverMutationOutcome.Failed when !string.IsNullOrWhiteSpace(BackupDirectory) => "BACKUP RETAINED",
+        DriverMutationOutcome.Restored => "RESTORED",
+        _ => "—",
+    };
+
+    private static bool RegexValidPublishedName(string? name)
+        => !string.IsNullOrWhiteSpace(name) &&
+           System.Text.RegularExpressions.Regex.IsMatch(
+               name,
+               @"^oem\d+\.inf$",
+               System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 }
 
 /// <summary>
@@ -35,6 +73,19 @@ public class DriverPackage
 /// </summary>
 public class DriverStoreScanner
 {
+    private readonly IDriverPackageTool _tool;
+    private readonly DriverRollbackStore _rollbackStore;
+
+    public DriverStoreScanner(
+        IDriverPackageTool? tool = null,
+        DriverRollbackStore? rollbackStore = null)
+    {
+        _tool = tool ?? new PnpUtilDriverPackageTool();
+        _rollbackStore = rollbackStore ?? new DriverRollbackStore();
+    }
+
+    public DriverOperationLedger OperationLedger => _rollbackStore.Ledger;
+
     public async Task<List<DriverPackage>> EnumerateAsync(CancellationToken ct = default)
     {
         var xmlResult = await RunPnpUtilAsync("/enum-drivers /format:xml", ct);
@@ -57,59 +108,93 @@ public class DriverStoreScanner
 
         ComputeSizes(packages);
         FlagOldVersions(packages);
+        ApplySafetyPolicy(packages);
         return packages;
     }
 
     /// <summary>
-    /// Delete a driver package via <c>pnputil /delete-driver {oemXX.inf}</c>.
+    /// Export, hash, ledger, and then remove a driver package. The package
+    /// artifact is retained even after a successful deletion for rollback.
     /// </summary>
-    public async Task<(bool Ok, string Output)> DeleteAsync(string publishedName, bool force, CancellationToken ct = default)
+    public Task<DriverMutationResult> DeleteAsync(
+        DriverPackage package,
+        bool force = false,
+        bool dryRun = false,
+        CancellationToken ct = default)
+        => _rollbackStore.DeleteAsync(package, _tool, force, dryRun, ct);
+
+    public Task<DriverMutationResult> RollbackAsync(
+        string operationId,
+        CancellationToken ct = default)
+        => _rollbackStore.RollbackAsync(operationId, _tool, ct);
+
+    public IReadOnlyList<DriverOperationEntry> LoadRollbackOperations(int max = 100)
+        => _rollbackStore.Ledger.LoadRecent(max);
+
+    /// <summary>
+    /// Compatibility wrapper for older callers. New callers must pass the
+    /// enumerated package so protection/exclusion facts are preserved.
+    /// </summary>
+    public async Task<(bool Ok, string Output)> DeleteAsync(
+        string publishedName,
+        bool force,
+        CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(publishedName) ||
-            !System.Text.RegularExpressions.Regex.IsMatch(publishedName,
-                @"^oem\d+\.inf$",
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+            !RegexValidPublishedName(publishedName))
         {
             return (false, $"Refusing: '{publishedName}' is not a valid oem*.inf name.");
         }
 
-        var args = force
-            ? new[] { "/delete-driver", publishedName, "/uninstall", "/force" }
-            : new[] { "/delete-driver", publishedName };
-        var output = await RunPnpUtilAsync(args, ct);
-        var ok = output.IndexOf("deleted successfully", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                 output.IndexOf("Driver package deleted", StringComparison.OrdinalIgnoreCase) >= 0;
-        return (ok, output);
+        var result = await DeleteAsync(
+            new DriverPackage { PublishedName = publishedName },
+            force,
+            dryRun: false,
+            ct).ConfigureAwait(false);
+        return (result.Outcome == DriverMutationOutcome.Deleted, result.Output);
     }
 
     // ═══════════════════════════════════════════════════════
 
-    private static Task<string> RunPnpUtilAsync(string args, CancellationToken ct)
+    private Task<string> RunPnpUtilAsync(string args, CancellationToken ct)
         => RunPnpUtilAsync(args.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), ct);
 
-    private static async Task<string> RunPnpUtilAsync(IReadOnlyList<string> args, CancellationToken ct)
+    private async Task<string> RunPnpUtilAsync(IReadOnlyList<string> args, CancellationToken ct)
     {
-        try
+        var result = await _tool.RunAsync(args, ct).ConfigureAwait(false);
+        return result.CombinedOutput;
+    }
+
+    private static void ApplySafetyPolicy(IEnumerable<DriverPackage> packages)
+    {
+        foreach (var package in packages)
         {
-            var encoding = System.Text.Encoding.GetEncoding(System.Text.Encoding.Default.CodePage);
-            var result = await ExternalProcessRunner.RunAsync(new ExternalProcessCommand("pnputil.exe")
+            if (!RegexValidPublishedName(package.PublishedName))
             {
-                Arguments = args,
-                Timeout = TimeSpan.FromSeconds(60),
-                StandardOutputEncoding = encoding,
-                StandardErrorEncoding = encoding,
-                OutputLimitChars = 512 * 1024,
-                ErrorLimitChars = 128 * 1024,
-            }, ct: ct).ConfigureAwait(false);
-            return result.CombinedOutput;
-        }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
-        {
-            Log.Warn($"pnputil failed: {ex.Message}");
-            return "";
+                package.IsProtected = true;
+                package.SafetyReason = "The published package identity is invalid.";
+            }
+            else if (string.IsNullOrWhiteSpace(package.OriginalName))
+            {
+                package.IsProtected = true;
+                package.SafetyReason = "The original INF identity is missing.";
+            }
+            else if (package.ClassName.Equals("Firmware", StringComparison.OrdinalIgnoreCase) ||
+                     package.ClassName.Equals("System", StringComparison.OrdinalIgnoreCase) ||
+                     package.ClassName.Equals("Boot", StringComparison.OrdinalIgnoreCase))
+            {
+                package.IsProtected = true;
+                package.SafetyReason = $"{package.ClassName} driver packages remain pinned by safety policy.";
+            }
         }
     }
+
+    private static bool RegexValidPublishedName(string? name)
+        => !string.IsNullOrWhiteSpace(name) &&
+           System.Text.RegularExpressions.Regex.IsMatch(
+               name,
+               @"^oem\d+\.inf$",
+               System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
     private static List<DriverPackage> ParseXml(string xml)
     {

@@ -36,6 +36,15 @@ public static class DataPaths
         "DeepPurge",
         "RegistryBackups");
     /// <summary>
+    /// Administrator-owned driver packages exported before a pnputil removal.
+    /// Driver rollback is an elevated operation, so the artifact root stays
+    /// outside per-user/portable state and is validated as a protected scope.
+    /// </summary>
+    public static string DriverBackups => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+        "DeepPurge",
+        "DriverBackups");
+    /// <summary>
     /// Administrator-owned, read-only-to-the-desktop-user copies of the CLI
     /// used by highest-privilege scheduled tasks.
     /// </summary>

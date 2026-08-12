@@ -22,6 +22,9 @@ All notable changes to DeepPurge will be documented in this file.
 ### Changed (P1 duplicate safety)
 - **Explicit duplicate keepers and identity revalidation** - Duplicate groups now retain their full content hash and scan-time file identity. The GUI requires one keeper per group; CLI removal accepts a protected reference folder. Pending candidates are re-statted and fully re-hashed immediately before removal, a changed group aborts safely, and typed summaries preserve exact deleted, skipped, failed, and cancelled counts.
 
+### Changed (P1 driver safety)
+- **Export-first driver rollback** - Driver removal now exports each package to administrator-owned storage, hashes every exported file and the INF identity into an append-only operation ledger, blocks removal when export or audit recording fails, pins protected firmware/system packages, and exposes verified reinstall/rollback actions in the WPF and CLI surfaces.
+
 ### Changed (design)
 - **DeepPurge Slate operations console** - The WPF shell now uses a bespoke graphite/cyan default theme, denser navigation, explicit local-data posture, searchable program inventory metrics, clearer uninstall hierarchy, responsive panel toolbars, trust/source badges, and calmer loading/status surfaces. Filled action buttons retain WCAG normal-text contrast across every bundled theme.
 - **Accurate navigation and empty states** - Collection-backed empty states now update from observable counts, unavailable leftover deletion stays hidden until a scan enables it, and `--target` launches select the Forced Uninstall navigation item that matches the visible workspace.

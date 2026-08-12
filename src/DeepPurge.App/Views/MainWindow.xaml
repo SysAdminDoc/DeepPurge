@@ -1553,7 +1553,7 @@
                     <DataGrid x:Name="dgDrivers" Visibility="Collapsed" AutoGenerateColumns="False"
                               ItemsSource="{Binding DriverPackages}"
                               AutomationProperties.Name="Driver Store packages"
-                              AutomationProperties.HelpText="Third-party driver packages. Old versions can be removed to reclaim disk space.">
+                              AutomationProperties.HelpText="Third-party driver packages. A selected package is exported and hashed before removal; protected packages remain pinned and verified backups can be rolled back.">
                         <DataGrid.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Header="Copy All to Clipboard" Tag="&#xE8C8;" Command="{Binding CopyDriversToClipboardCommand}"/>
@@ -1567,6 +1567,8 @@
                             <DataGridTextColumn Binding="{Binding DriverVersion}" Header="VERSION / DATE" Width="220"/>
                             <DataGridTextColumn Binding="{Binding SizeBytes, Converter={StaticResource BytesToSizeConverter}}" Header="SIZE" Width="90"/>
                             <DataGridTextColumn Binding="{Binding IsOldVersion, Converter={StaticResource BoolToOldBadgeConverter}}" Header="STATUS" Width="80"/>
+                            <DataGridTextColumn Binding="{Binding SafetyStatus}" Header="SAFETY" Width="110"/>
+                            <DataGridTextColumn Binding="{Binding RollbackStatus}" Header="ROLLBACK" Width="120"/>
                         </DataGrid.Columns>
                     </DataGrid>
                     <Border Style="{StaticResource EmptyStateCard}" Panel.ZIndex="5"

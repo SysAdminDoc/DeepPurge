@@ -1225,9 +1225,9 @@ public partial class MainViewModel
     private void CopyDriversToClipboard()
     {
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine("Published\tOriginal\tProvider\tVersion\tSize\tOld");
+        sb.AppendLine("Published\tOriginal\tProvider\tVersion\tSize\tOld\tSafety\tRollback");
         foreach (var d in DriverPackages)
-            sb.AppendLine($"{d.PublishedName}\t{d.OriginalName}\t{d.ProviderName}\t{d.DriverVersion}\t{FormatBytes(d.SizeBytes)}\t{d.IsOldVersion}");
+            sb.AppendLine($"{d.PublishedName}\t{d.OriginalName}\t{d.ProviderName}\t{d.DriverVersion}\t{FormatBytes(d.SizeBytes)}\t{d.IsOldVersion}\t{d.SafetyStatus}\t{d.RollbackStatus}");
         SetClipboard(sb.ToString());
     }
 

@@ -335,7 +335,38 @@ public static class Program
 
     private static async Task<int> CmdDriversAsync(ParsedArgs a, CancellationToken ct)
     {
-        var pkgs = await new DriverStoreScanner().EnumerateAsync(ct);
+        var scanner = new DriverStoreScanner();
+        var rollbackId = a.GetOption("rollback");
+        if (!string.IsNullOrWhiteSpace(rollbackId))
+        {
+            var restored = await scanner.RollbackAsync(rollbackId, ct);
+            PrintDriverMutation(restored, a.HasFlag("json"));
+            return restored.Outcome == DriverMutationOutcome.Restored ? 0 : 1;
+        }
+
+        var pkgs = await scanner.EnumerateAsync(ct);
+        var removeName = a.GetOption("remove");
+        if (!string.IsNullOrWhiteSpace(removeName))
+        {
+            var package = pkgs.FirstOrDefault(p =>
+                string.Equals(p.PublishedName, removeName, StringComparison.OrdinalIgnoreCase));
+            if (package is null)
+            {
+                Console.Error.WriteLine($"Driver package not found: {removeName}");
+                return 1;
+            }
+
+            var removed = await scanner.DeleteAsync(
+                package,
+                force: a.HasFlag("force"),
+                dryRun: a.HasFlag("dry-run"),
+                ct);
+            PrintDriverMutation(removed, a.HasFlag("json"));
+            return removed.Outcome is DriverMutationOutcome.Deleted or DriverMutationOutcome.Preview
+                ? 0
+                : 1;
+        }
+
         var oldOnly = a.HasFlag("old");
         var filtered = pkgs.Where(p => !oldOnly || p.IsOldVersion).ToList();
 
@@ -353,7 +384,10 @@ public static class Program
         {
             WriteJson(filtered.Select(p => new {
                 p.PublishedName, p.OriginalName, p.ProviderName, p.DriverVersion,
-                p.DriverDate, p.SizeBytes, p.IsOldVersion
+                p.DriverDate, p.SizeBytes, p.IsOldVersion, p.IsProtected,
+                p.IsExcluded, p.SafetyReason, Safety = p.SafetyStatus,
+                p.LastOperationId, p.BackupDirectory, p.PackageSha256,
+                Rollback = p.RollbackStatus
             }));
             return 0;
         }
@@ -361,10 +395,46 @@ public static class Program
         foreach (var p in filtered)
         {
             var tag = p.IsOldVersion ? "OLD" : "   ";
-            Console.WriteLine($"[{tag}] {p.PublishedName,-12} {p.OriginalName,-28} {p.ProviderName,-22} {p.DriverVersion,-30} {FormatBytes(p.SizeBytes)}");
+            Console.WriteLine($"[{tag}] {p.PublishedName,-12} {p.OriginalName,-28} {p.ProviderName,-22} {p.DriverVersion,-30} {p.SafetyStatus,-10} {FormatBytes(p.SizeBytes)}");
         }
         Console.WriteLine($"# {pkgs.Count(p => p.IsOldVersion)} old / {pkgs.Count} total");
         return 0;
+    }
+
+    private static void PrintDriverMutation(DriverMutationResult result, bool json)
+    {
+        if (json)
+        {
+            WriteJson(new
+            {
+                result.OperationId,
+                result.PublishedName,
+                Outcome = result.Outcome.ToString(),
+                result.Reason,
+                result.Output,
+                result.RollbackAvailable,
+                result.BackupDirectory,
+                result.PackageSha256,
+                Artifact = result.Artifact is null ? null : new
+                {
+                    result.Artifact.InfPath,
+                    result.Artifact.InfSha256,
+                    result.Artifact.PackageSha256,
+                    Files = result.Artifact.Files.Count,
+                },
+            });
+            return;
+        }
+
+        Console.WriteLine($"[{result.Outcome}] {result.PublishedName} operation={result.OperationId}");
+        if (!string.IsNullOrWhiteSpace(result.Reason))
+            Console.WriteLine($"  {result.Reason}");
+        if (!string.IsNullOrWhiteSpace(result.BackupDirectory))
+            Console.WriteLine($"  Backup: {result.BackupDirectory}");
+        if (!string.IsNullOrWhiteSpace(result.PackageSha256))
+            Console.WriteLine($"  Package SHA256: {result.PackageSha256}");
+        if (!string.IsNullOrWhiteSpace(result.Output))
+            Console.WriteLine(result.Output.Trim());
     }
 
     private static int CmdStartupImpact(ParsedArgs a)
@@ -1331,6 +1401,8 @@ if ($app) {{
         Console.WriteLine("  clean [junk|evidence ...] [--dry-run] [--secure] [--keep-cookies domain1,domain2]");
         Console.WriteLine("  repair <sfc|dism-scan|dism-restore|dism-cleanup|dism-resetbase|chkdsk|fontcache|iconcache>");
         Console.WriteLine("  drivers [--old] [--export file --format csv|json]");
+        Console.WriteLine("  drivers --remove <oem#.inf> [--force] [--dry-run] [--json]");
+        Console.WriteLine("  drivers --rollback <operation-id> [--json]");
         Console.WriteLine("  startup-impact [--export file --format csv|json]");
         Console.WriteLine("  shortcuts [--recycle] [--all] [--export file --format csv|json]");
         Console.WriteLine("  duplicates [roots...] [--delete --reference-folder <dir>] [--dry-run] [--secure] [--export file --format csv|json]");
@@ -1390,6 +1462,7 @@ public sealed class ParsedArgs
     {
         "name", "freq", "time", "day", "args", "export", "format", "program", "timeout",
         "keep-cookies", "date", "min-age", "path", "output",
+        "remove", "rollback",
     };
 
     public bool HasFlag(string name) => Flags.Contains(name);
