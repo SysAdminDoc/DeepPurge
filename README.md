@@ -1,6 +1,6 @@
-# DeepPurge v0.9.0
+# DeepPurge v0.9.1
 
-![Version](https://img.shields.io/badge/version-v0.9.0-blue) ![License](https://img.shields.io/badge/license-MIT-green) ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey) ![CLI](https://img.shields.io/badge/CLI-headless-8A3FFC)
+![Version](https://img.shields.io/badge/version-v0.9.1-blue) ![License](https://img.shields.io/badge/license-MIT-green) ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey) ![CLI](https://img.shields.io/badge/CLI-headless-8A3FFC)
 
 A thorough, open-source Windows uninstaller that goes deep. Removes programs completely, hunts down every leftover, and cleans system cruft that other tools miss. Ships a GUI and a headless CLI for scripting / Task Scheduler / Intune / SCCM.
 

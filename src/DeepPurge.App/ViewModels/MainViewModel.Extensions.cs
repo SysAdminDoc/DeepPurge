@@ -23,7 +23,7 @@ using DeepPurge.Core.Updates;
 namespace DeepPurge.App.ViewModels;
 
 /// <summary>
-/// v0.9.0 feature surface. The main <see cref="MainViewModel"/> stays focused
+/// v0.9.1 feature surface. The main <see cref="MainViewModel"/> stays focused
 /// on the pre-v0.9 feature set; this partial exposes the ten new Core services
 /// through observable collections and async RelayCommand methods for the
 /// corresponding XAML panels (and for anything that wants to dispatch the same logic
@@ -942,7 +942,7 @@ public partial class MainViewModel
     //  ABOUT PANEL
     // ═══════════════════════════════════════════════════════
     public string AppVersionDisplay =>
-        (typeof(MainViewModel).Assembly.GetName().Version ?? new Version(0, 9, 0)).ToString(3);
+        (typeof(MainViewModel).Assembly.GetName().Version ?? new Version(0, 9, 1)).ToString(3);
 
     public string DataRootDisplay => DataPaths.Root;
 
@@ -1150,7 +1150,7 @@ public partial class MainViewModel
     {
         try
         {
-            var cur = (typeof(MainViewModel).Assembly.GetName().Version ?? new Version(0, 9, 0)).ToString(3);
+            var cur = (typeof(MainViewModel).Assembly.GetName().Version ?? new Version(0, 9, 1)).ToString(3);
             var info = await new UpdateChecker().CheckAsync(cur);
             _dispatcher.Invoke(() =>
             {

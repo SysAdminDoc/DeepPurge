@@ -1,18 +1,18 @@
 {
   "$schema": "https://raw.githubusercontent.com/ScoopInstaller/Scoop/master/schema.json",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "Thorough open-source Windows uninstaller + system cleaner. Ships GUI and headless CLI.",
   "homepage": "https://github.com/SysAdminDoc/DeepPurge",
   "license": "MIT",
   "architecture": {
     "64bit": {
       "url": [
-        "https://github.com/SysAdminDoc/DeepPurge/releases/download/v0.9.0/DeepPurge.exe#/DeepPurge.exe",
-        "https://github.com/SysAdminDoc/DeepPurge/releases/download/v0.9.0/DeepPurgeCli.exe#/DeepPurgeCli.exe"
+        "https://github.com/SysAdminDoc/DeepPurge/releases/download/v0.9.1/DeepPurge.exe#/DeepPurge.exe",
+        "https://github.com/SysAdminDoc/DeepPurge/releases/download/v0.9.1/DeepPurgeCli.exe#/DeepPurgeCli.exe"
       ],
       "hash": [
-        "20E7223224BFF57C9EF1C9F8C4255788A4D10E8E1DB87E09F9ED147C73CB714E",
-        "8AC1C08CC616D503F2BD301EDA5505649A3E5524542E72CD3F016A02886E4AAF"
+        "091B8624CE739B076A6196223C88E8E72F8094F66CA4367FDF1E4539CE0122C6",
+        "AEE102F22423E093D539DC7338B078A14114D25238E7D0B4FC5175B410773AE9"
       ]
     }
   },

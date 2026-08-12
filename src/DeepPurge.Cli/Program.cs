@@ -103,7 +103,7 @@ public static class Program
 
     private static int CmdVersion()
     {
-        var asm = typeof(Program).Assembly.GetName().Version ?? new Version(0, 9, 0);
+        var asm = typeof(Program).Assembly.GetName().Version ?? new Version(0, 9, 1);
         Console.WriteLine($"DeepPurge CLI v{asm.ToString(3)}");
         Console.WriteLine(DataPaths.IsPortable ? "[portable mode]" : "[installed mode]");
         Console.WriteLine($"Data:     {DataPaths.Root}");
@@ -1239,7 +1239,7 @@ if ($app) {{
 
     private static async Task<int> CmdCheckUpdateAsync(CancellationToken ct)
     {
-        var cur = (typeof(Program).Assembly.GetName().Version ?? new Version(0, 9, 0)).ToString(3);
+        var cur = (typeof(Program).Assembly.GetName().Version ?? new Version(0, 9, 1)).ToString(3);
         var info = await new UpdateChecker().CheckAsync(cur, ct);
         if (info == null) { Console.WriteLine("(update check failed)"); return 1; }
         Console.WriteLine($"Current: v{info.CurrentVersion}");

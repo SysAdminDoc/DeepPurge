@@ -5,8 +5,8 @@ namespace DeepPurge.Tests;
 
 public class ReleaseReadinessTests
 {
-    private const string GuiHash = "20E7223224BFF57C9EF1C9F8C4255788A4D10E8E1DB87E09F9ED147C73CB714E";
-    private const string CliHash = "8AC1C08CC616D503F2BD301EDA5505649A3E5524542E72CD3F016A02886E4AAF";
+    private const string GuiHash = "091B8624CE739B076A6196223C88E8E72F8094F66CA4367FDF1E4539CE0122C6";
+    private const string CliHash = "AEE102F22423E093D539DC7338B078A14114D25238E7D0B4FC5175B410773AE9";
 
     [Fact]
     public void Build_script_exposes_release_readiness_validation()
@@ -65,7 +65,7 @@ public class ReleaseReadinessTests
 
         using var doc = JsonDocument.Parse(scoop);
         var rootElement = doc.RootElement;
-        Assert.Equal("0.9.0", rootElement.GetProperty("version").GetString());
+        Assert.Equal("0.9.1", rootElement.GetProperty("version").GetString());
         var x64 = rootElement.GetProperty("architecture").GetProperty("64bit");
         Assert.Equal(GuiHash, x64.GetProperty("hash")[0].GetString());
         Assert.Equal(CliHash, x64.GetProperty("hash")[1].GetString());

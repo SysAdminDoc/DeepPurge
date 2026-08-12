@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    DeepPurge Build Script v0.9.0
+    DeepPurge Build Script v0.9.1
     Compiles the project into single portable .exe files (GUI + CLI)
 
 .DESCRIPTION
@@ -52,7 +52,7 @@ $TestsProject = Join-Path $ProjectRoot "tests\DeepPurge.Tests\DeepPurge.Tests.cs
 
 Write-Host ""
 Write-Host "  ============================================" -ForegroundColor Cyan
-Write-Host "    DeepPurge Build Script v0.9.0" -ForegroundColor Cyan
+Write-Host "    DeepPurge Build Script v0.9.1" -ForegroundColor Cyan
 Write-Host "  ============================================" -ForegroundColor Cyan
 Write-Host ""
 
