@@ -443,8 +443,13 @@ public partial class MainWindow : Window
     private void DeleteDuplicates_Click(object s, RoutedEventArgs e)
     {
         if (_vm.DuplicateGroups.Count == 0) { WarnStatus("Run a duplicate scan first."); return; }
+        if (_vm.DuplicateGroups.Any(g => !g.HasExplicitKeeper))
+        {
+            WarnStatus("Select a retained keeper in every duplicate group first.");
+            return;
+        }
         var wasted = _vm.DuplicateGroups.Sum(g => g.WastedBytes);
-        _vm.StatusText = $"Deleting oldest copy from {_vm.DuplicateGroups.Count} group(s), {DeepPurge.Core.Diagnostics.SizeFormatter.Format(wasted)} reclaimable" +
+        _vm.StatusText = $"Deleting selected copies from {_vm.DuplicateGroups.Count} group(s), {DeepPurge.Core.Diagnostics.SizeFormatter.Format(wasted)} reclaimable" +
                          (_vm.DryRunEnabled ? " (dry-run)" : "") + "...";
         _vm.DeleteDuplicatesCommand.Execute(null);
     }

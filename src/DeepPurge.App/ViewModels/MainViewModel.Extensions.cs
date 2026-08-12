@@ -165,18 +165,37 @@ public partial class MainViewModel
                 DryRun: DryRunEnabled,
                 SecureDelete: SecureDeleteEnabled,
                 UseRecycleBin: !SecureDeleteEnabled);
+            if (DuplicateGroups.Any(g => !g.HasExplicitKeeper))
+            {
+                StatusText = "Select one retained keeper in every duplicate group before deleting.";
+                return;
+            }
+            var groups = DuplicateGroups.ToList();
             var summary = new DuplicateFinder().DeleteDuplicatesDetailed(
-                DuplicateGroups.ToList(),
-                opt);
+                groups,
+                opt,
+                new DuplicateKeeperPolicy());
+            if (!opt.DryRun)
+            {
+                foreach (var result in summary.Results.Where(r => r.IsConfirmed))
+                {
+                    var group = groups.FirstOrDefault(g =>
+                        g.Paths.Contains(result.Path, StringComparer.OrdinalIgnoreCase));
+                    group?.RemovePath(result.Path);
+                }
+                foreach (var group in groups.Where(g => g.Paths.Count < 2).ToList())
+                    DuplicateGroups.Remove(group);
+            }
             ActivityLog.Record(
                 "duplicates",
                 $"{(opt.DryRun ? "Would delete" : "Deleted")} {summary.ItemsDeleted} duplicate file(s)",
                 bytesFreed: summary.BytesFreed,
                 itemCount: summary.ItemsDeleted,
                 dryRun: opt.DryRun);
-            StatusText = $"{(opt.DryRun ? "Would delete" : "Deleted")} " +
-                         $"{summary.ItemsDeleted} duplicate file(s)" +
-                         (summary.ItemsSkipped > 0 ? $" ({summary.ItemsSkipped} skipped)." : ".");
+            StatusText = (opt.DryRun ? "Would delete" : "Deleted") + " " +
+                         summary.ItemsDeleted + " duplicate file(s)" +
+                         (summary.ItemsSkipped > 0 ? " (" + summary.ItemsSkipped + " skipped" : "") +
+                         (summary.ItemsFailed > 0 ? ", " + summary.ItemsFailed + " failed)." : summary.ItemsSkipped > 0 ? ")." : ".");
         }
         catch (Exception ex) { Log.Error("DeleteDuplicates", ex); StatusText = $"Duplicate delete failed: {ex.Message}"; }
     }

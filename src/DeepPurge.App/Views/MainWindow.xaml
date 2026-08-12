@@ -1656,7 +1656,7 @@
                     <DataGrid x:Name="dgDuplicates" Visibility="Collapsed" AutoGenerateColumns="False"
                               ItemsSource="{Binding DuplicateGroups}"
                               AutomationProperties.Name="Duplicate file groups"
-                              AutomationProperties.HelpText="Files with identical content grouped by hash. Delete copies to reclaim wasted space.">
+                              AutomationProperties.HelpText="Files with identical content grouped by hash. Select one retained keeper in each group before deleting copies.">
                         <DataGrid.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Header="Copy All to Clipboard" Tag="&#xE8C8;" Command="{Binding CopyDuplicatesToClipboardCommand}"/>
@@ -1666,6 +1666,16 @@
                             <DataGridTextColumn Binding="{Binding FileSize, Converter={StaticResource BytesToSizeConverter}}" Header="SIZE" Width="90"/>
                             <DataGridTextColumn Binding="{Binding Paths, Converter={StaticResource CountConverter}}" Header="COPIES" Width="70"/>
                             <DataGridTextColumn Binding="{Binding WastedBytes, Converter={StaticResource BytesToSizeConverter}}" Header="WASTED" Width="100"/>
+                            <DataGridTemplateColumn Header="KEEPER" Width="2*">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <ComboBox ItemsSource="{Binding KeeperOptions}"
+                                                  SelectedItem="{Binding KeeperPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                  ToolTip="Select the copy to retain."
+                                                  AutomationProperties.Name="Retained duplicate copy"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
                             <DataGridTextColumn Header="PATHS" Width="*">
                                 <DataGridTextColumn.Binding>
                                     <Binding Path="Paths" Converter="{StaticResource PathListJoinConverter}"/>
