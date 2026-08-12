@@ -25,6 +25,9 @@ All notable changes to DeepPurge will be documented in this file.
 ### Changed (P1 driver safety)
 - **Export-first driver rollback** - Driver removal now exports each package to administrator-owned storage, hashes every exported file and the INF identity into an append-only operation ledger, blocks removal when export or audit recording fails, pins protected firmware/system packages, and exposes verified reinstall/rollback actions in the WPF and CLI surfaces.
 
+### Changed (P1 cleaner safety)
+- **Diffable, provenance-bound cleaner updates** - Custom cleaner reports now expose schema/origin/SHA-256/trust facts, invalid definitions move to quarantine while valid versions are retained under LastKnownGood, and winapp2 updates record expanded file/registry target diffs, reject protected Windows package-manager state, and restore the previous database if the metadata commit fails.
+
 ### Changed (design)
 - **DeepPurge Slate operations console** - The WPF shell now uses a bespoke graphite/cyan default theme, denser navigation, explicit local-data posture, searchable program inventory metrics, clearer uninstall hierarchy, responsive panel toolbars, trust/source badges, and calmer loading/status surfaces. Filled action buttons retain WCAG normal-text contrast across every bundled theme.
 - **Accurate navigation and empty states** - Collection-backed empty states now update from observable counts, unavailable leftover deletion stays hidden until a scan enables it, and `--target` launches select the Forced Uninstall navigation item that matches the visible workspace.

@@ -56,8 +56,8 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 - Manifests persisted in `%LocalAppData%\DeepPurge\Snapshots\<name>.manifest.json` (or `./Data/Snapshots/` in portable mode)
 
 ### Community Cleaner Definitions
-- **winapp2.ini integration** - Parses the community-maintained [winapp2.ini](https://github.com/MoscaDotTo/Winapp2) database (2,500+ third-party cleaners). Auto-downloads on first run with commit/date/SHA256 provenance and a previous-file backup, honours `Detect=` / `DetectFile=` gating so only applicable rules fire, and gates every path through SafetyGuard.
-- **Validated custom JSON cleaners** - Define versioned `*.cleaner.json` documents with schema linting, risk labels, provenance, expanded target previews, registry scope checks, and estimates. Use `deeppurgecli cleaners schema` and `deeppurgecli cleaners validate <file>` before `list|preview|run [--dry-run]`.
+- **winapp2.ini integration** - Parses the community-maintained [winapp2.ini](https://github.com/MoscaDotTo/Winapp2) database (2,500+ third-party cleaners). Updates record schema/source/commit/SHA256/trust provenance, show expanded file/registry target diffs, retain a last-known-good backup, restore it if the metadata commit fails, and protect Windows package-manager state such as the WinGet pin database.
+- **Validated custom JSON cleaners** - Define versioned `*.cleaner.json` documents with schema linting, risk labels, origin/SHA256/trust facts, expanded target previews, registry scope checks, and estimates. Invalid or unsafe files are quarantined; valid definitions are copied to LastKnownGood. Use `deeppurgecli cleaners schema` and `deeppurgecli cleaners validate <file>` before `list|preview|run [--dry-run]`.
 
 ### Duplicate Finder
 - **Three-stage hash** - Group by exact byte-size → XXH3 first-MB head-hash → XXH3 full-file for remaining collisions. Skips reparse points / junctions to avoid infinite loops. *(algorithm from Czkawka / fdupes)*
@@ -149,6 +149,7 @@ DeepPurgeCli duplicates C:\Users\you        # Duplicate file groups
 DeepPurgeCli duplicates C:\Users\you --delete --reference-folder C:\Users\you\Documents\Keep --dry-run  # Preview guarded removal
 DeepPurgeCli snapshot trace "MyApp" setup.exe  # Record install delta
 DeepPurgeCli update-winapp2 --check-only       # Show local/remote database provenance
+DeepPurgeCli update-winapp2                    # Update with an expanded-target diff and rollback backup
 DeepPurgeCli winapp2 .\winapp2.ini --dry-run   # Run community cleaner database
 DeepPurgeCli schedule add --name Nightly --freq weekly --time 03:00 --day Mon --args "clean junk evidence"
 DeepPurgeCli schedule list

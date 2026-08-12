@@ -114,6 +114,95 @@ public class CleanerDefinitionTests
     }
 
     [Fact]
+    public void ValidateFile_records_hash_trust_and_blocks_winget_pinning_state()
+    {
+        var file = WriteCleanerJson($$"""
+{
+  "SchemaVersion": 1,
+  "Provenance": "unit-test",
+  "Rules": [
+    {
+      "Name": "Do not touch package manager state",
+      "Files": [
+        { "Path": "%LOCALAPPDATA%\\Packages\\Microsoft.DesktopAppInstaller_8wekyb3d8bbwe\\LocalState", "Pattern": "pinning.db" }
+      ]
+    }
+  ]
+}
+""");
+
+        try
+        {
+            var report = CleanerDefinitionRunner.ValidateFile(file);
+
+            Assert.False(report.IsValid);
+            Assert.Equal(CleanerTrustState.LocalReview, report.TrustState);
+            Assert.Equal("unit-test", report.Origin);
+            Assert.Matches("^[0-9a-f]{64}$", report.ContentSha256);
+            Assert.Contains(report.Issues, issue => issue.Message.Contains("package-manager", StringComparison.OrdinalIgnoreCase));
+        }
+        finally { TryDelete(file); }
+    }
+
+    [Fact]
+    public void CompareTargets_reports_expanded_file_and_registry_scope_changes()
+    {
+        var previous = new CleanerRule
+        {
+            Name = "Previous",
+            Files = [new CleanerFileRule { Path = "%TEMP%\\old", Pattern = "*.tmp" }],
+            Registry = ["HKCU\\Software\\DeepPurgeOld"],
+        };
+        var candidate = new CleanerRule
+        {
+            Name = "Candidate",
+            Files = [new CleanerFileRule { Path = "%TEMP%\\new", Pattern = "*.tmp" }],
+            Registry = ["HKCU\\Software\\DeepPurgeNew"],
+        };
+
+        var diff = CleanerDefinitionRunner.CompareTargets([previous], [candidate]);
+
+        Assert.True(diff.HasChanges);
+        Assert.Contains(Path.Combine(Path.GetTempPath(), "old"), diff.RemovedTargets[0]);
+        Assert.Contains(Path.Combine(Path.GetTempPath(), "new"), diff.AddedTargets[0]);
+        Assert.Contains(@"HKCU\Software\DeepPurgeOld", diff.RemovedRegistryTargets);
+        Assert.Contains(@"HKCU\Software\DeepPurgeNew", diff.AddedRegistryTargets);
+    }
+
+    [Fact]
+    public void ValidateAll_quarantines_invalid_definition_and_preserves_valid_copy()
+    {
+        var name = $"invalid-{Guid.NewGuid():N}.cleaner.json";
+        var file = Path.Combine(DeepPurge.Core.App.DataPaths.Cleaners, name);
+        File.WriteAllText(file, "{ \"SchemaVersion\": 1, \"Rules\": [ { \"Name\": \"bad\", \"Unknown\": true } ] }");
+
+        try
+        {
+            var report = CleanerDefinitionRunner.ValidateAll().Single(r => r.FilePath.Equals(file, StringComparison.OrdinalIgnoreCase));
+
+            Assert.Equal(CleanerTrustState.Quarantined, report.TrustState);
+            Assert.False(File.Exists(file));
+            Assert.False(string.IsNullOrWhiteSpace(report.QuarantinePath));
+            Assert.True(File.Exists(report.QuarantinePath));
+        }
+        finally
+        {
+            TryDelete(file);
+            if (File.Exists(Path.Combine(DeepPurge.Core.App.DataPaths.Cleaners, "LastKnownGood", name)))
+                TryDelete(Path.Combine(DeepPurge.Core.App.DataPaths.Cleaners, "LastKnownGood", name));
+            if (reportQuarantine(name) is { } quarantine) TryDelete(quarantine);
+        }
+
+        string? reportQuarantine(string leaf)
+        {
+            var directory = Path.Combine(DeepPurge.Core.App.DataPaths.Cleaners, "Quarantine");
+            return Directory.Exists(directory)
+                ? Directory.GetFiles(directory, $"{Path.GetFileNameWithoutExtension(leaf)}-*.cleaner.json").SingleOrDefault()
+                : null;
+        }
+    }
+
+    [Fact]
     public void ValidateFile_warns_for_legacy_root_array()
     {
         var file = WriteCleanerJson("""

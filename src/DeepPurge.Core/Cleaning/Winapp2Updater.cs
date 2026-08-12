@@ -2,6 +2,7 @@ using DeepPurge.Core.App;
 using DeepPurge.Core.Diagnostics;
 using DeepPurge.Core.Safety;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 namespace DeepPurge.Core.Cleaning;
@@ -29,6 +30,10 @@ public sealed record Winapp2Metadata(
 {
     public string ShortCommit => CommitSha.Length <= 12 ? CommitSha : CommitSha[..12];
     public string ShortSha256 => Sha256.Length <= 12 ? Sha256 : Sha256[..12];
+    public int SchemaVersion { get; init; } = 1;
+    public CleanerTargetDiff? TargetDiff { get; init; }
+    public string Origin => SourceUrl;
+    public string TrustState => "Remote commit metadata verified";
 }
 
 public sealed record Winapp2Provenance(
@@ -61,7 +66,10 @@ public sealed record Winapp2UpdateResult(
     bool Success,
     string? ErrorMessage,
     Winapp2Metadata? Metadata,
-    string? BackupPath);
+    string? BackupPath)
+{
+    public CleanerTargetDiff? Diff { get; init; }
+}
 
 public static class Winapp2Updater
 {
@@ -199,6 +207,18 @@ public static class Winapp2Updater
         if (content.Length < minimumBytes)
             return new Winapp2UpdateResult(false, "Downloaded winapp2.ini was suspiciously small.", null, null);
 
+        List<Winapp2Entry> candidateEntries;
+        try
+        {
+            candidateEntries = Winapp2Parser.Parse(new StringReader(Encoding.UTF8.GetString(content)));
+            if (!TryValidateDownloadedEntries(candidateEntries, out var candidateError))
+                return new Winapp2UpdateResult(false, candidateError, null, null);
+        }
+        catch (Exception ex)
+        {
+            return new Winapp2UpdateResult(false, $"Downloaded winapp2.ini could not be parsed: {ex.Message}", null, null);
+        }
+
         var localDir = Path.GetDirectoryName(localPath);
         var metadataDir = Path.GetDirectoryName(metadataPath);
         if (string.IsNullOrWhiteSpace(localDir) || string.IsNullOrWhiteSpace(metadataDir))
@@ -209,6 +229,11 @@ public static class Winapp2Updater
         string? backupPath = null;
         string? previousSha = null;
         long? previousBytes = null;
+        var previousLocalContent = Array.Empty<byte>();
+        var hadPreviousLocal = File.Exists(localPath);
+        string? previousMetadataContent = null;
+        var previousEntries = new List<Winapp2Entry>();
+        CleanerTargetDiff? diff = null;
 
         try
         {
@@ -219,11 +244,18 @@ public static class Winapp2Updater
             {
                 var previous = new FileInfo(localPath);
                 previousBytes = previous.Length;
+                previousLocalContent = File.ReadAllBytes(localPath);
                 previousSha = ComputeFileSha256(localPath);
+                previousMetadataContent = File.Exists(metadataPath)
+                    ? File.ReadAllText(metadataPath)
+                    : null;
                 Directory.CreateDirectory(backupDirectory);
                 backupPath = UniqueBackupPath(backupDirectory, previousSha, downloadedAt);
                 File.Copy(localPath, backupPath, overwrite: false);
+                previousEntries = Winapp2Parser.Parse(new StringReader(Encoding.UTF8.GetString(previousLocalContent)));
             }
+
+            diff = CleanerDefinitionRunner.CompareWinapp2Targets(previousEntries, candidateEntries);
 
             var metadata = new Winapp2Metadata(
                 remote.SourceUrl,
@@ -235,17 +267,80 @@ public static class Winapp2Updater
                 backupPath,
                 previousSha,
                 previousBytes,
-                remote.CommitUrl);
+                remote.CommitUrl)
+            {
+                TargetDiff = diff,
+            };
 
             await WriteBytesAtomicAsync(localPath, content, ct);
             await WriteTextAtomicAsync(metadataPath, JsonSerializer.Serialize(metadata, JsonOptions), ct);
 
-            return new Winapp2UpdateResult(true, null, metadata, backupPath);
+            return new Winapp2UpdateResult(true, null, metadata, backupPath) { Diff = diff };
         }
         catch (Exception ex)
         {
+            try
+            {
+                if (hadPreviousLocal && backupPath is not null)
+                    File.Copy(backupPath, localPath, overwrite: true);
+                else if (!hadPreviousLocal)
+                    TryDelete(localPath);
+
+                if (previousMetadataContent is not null)
+                    File.WriteAllText(metadataPath, previousMetadataContent, Encoding.UTF8);
+                else if (File.Exists(metadataPath))
+                    TryDelete(metadataPath);
+            }
+            catch (Exception restoreEx)
+            {
+                Log.Error("Winapp2 update rollback", restoreEx);
+            }
             return new Winapp2UpdateResult(false, ex.Message, null, backupPath);
         }
+    }
+
+    private static bool TryValidateDownloadedEntries(
+        IReadOnlyList<Winapp2Entry> entries,
+        out string reason)
+    {
+        if (entries.Count == 0)
+        {
+            reason = "Downloaded winapp2.ini contained no cleaner entries.";
+            return false;
+        }
+
+        foreach (var entry in entries)
+        {
+            foreach (var fileKey in entry.FileKeys)
+            {
+                var path = fileKey.Split('|', 2)[0].Trim();
+                var expanded = Environment.ExpandEnvironmentVariables(path);
+                if (string.IsNullOrWhiteSpace(path) || expanded.Contains("..", StringComparison.Ordinal) ||
+                    !Path.IsPathFullyQualified(expanded))
+                {
+                    reason = $"Downloaded cleaner entry '{entry.Section}' contains an invalid file target.";
+                    return false;
+                }
+                if (CleanerDefinitionRunner.IsProtectedCleanerPath(expanded))
+                {
+                    reason = $"Downloaded cleaner entry '{entry.Section}' targets protected Windows package-manager state.";
+                    return false;
+                }
+            }
+
+            foreach (var registryKey in entry.RegKeys)
+            {
+                if (!Registry.RegistryDeletion.TryParseKeyPath(registryKey, out var target) ||
+                    !SafetyGuard.IsRegistryPathSafeToDelete(target.CanonicalPath))
+                {
+                    reason = $"Downloaded cleaner entry '{entry.Section}' contains an unsafe registry target.";
+                    return false;
+                }
+            }
+        }
+
+        reason = "";
+        return true;
     }
 
     private static async Task<Winapp2RemoteInfo> FetchRemoteInfoAsync(CancellationToken ct)
