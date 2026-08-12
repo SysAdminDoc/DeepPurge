@@ -9,6 +9,7 @@ public class RegistryLeftoverScanner
 {
     private readonly HashSet<string> _exclusions;
     private readonly List<string> _searchTerms = new();
+    private readonly List<InstalledProgram> _otherInstalledPrograms = new();
 
     // System-critical keys that must NEVER be deleted
     private static readonly HashSet<string> SystemProtectedKeys = new(StringComparer.OrdinalIgnoreCase)
@@ -54,6 +55,7 @@ public class RegistryLeftoverScanner
     public List<LeftoverItem> ScanForLeftovers(InstalledProgram program, ScanMode mode)
     {
         var leftovers = new List<LeftoverItem>();
+        BuildOwnershipReference(program);
 
         var sigMatch = LeftoverSignatureDb.FindMatch(program.DisplayName);
         if (sigMatch != null)
@@ -118,7 +120,84 @@ public class RegistryLeftoverScanner
         if (program.IsWindowsInstaller)
             ScanMsiData(program, leftovers);
 
+        ApplyOwnershipGates(program, leftovers);
         return leftovers;
+    }
+
+    private void BuildOwnershipReference(InstalledProgram targetProgram)
+    {
+        _otherInstalledPrograms.Clear();
+        try
+        {
+            foreach (var installed in InstalledProgramScanner.GetAllInstalledPrograms())
+            {
+                if (installed.RegistryPath.Equals(
+                        targetProgram.RegistryPath,
+                        StringComparison.OrdinalIgnoreCase))
+                    continue;
+                _otherInstalledPrograms.Add(installed);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Failed to build registry ownership reference: {ex.Message}");
+        }
+    }
+
+    private void ApplyOwnershipGates(
+        InstalledProgram targetProgram,
+        List<LeftoverItem> leftovers)
+    {
+        foreach (var item in leftovers)
+        {
+            var decision = LeftoverOwnershipGate.Evaluate(
+                targetProgram,
+                item.Path,
+                _otherInstalledPrograms,
+                BuildEvidence(item));
+            item.Evidence = decision.Evidence.ToList();
+            item.OwnershipConflicts = decision.Conflicts.ToList();
+            item.IsAutoRemovalEligible = decision.AutoRemovalEligible;
+
+            if (decision.AutoRemovalEligible) continue;
+
+            item.IsSelected = false;
+            item.Confidence = decision.ProtectedBySystem || decision.Conflicts.Count > 0
+                ? LeftoverConfidence.Risky
+                : item.Confidence == LeftoverConfidence.Safe
+                    ? LeftoverConfidence.Moderate
+                    : item.Confidence;
+            item.Details = string.IsNullOrWhiteSpace(decision.ReviewReason)
+                ? item.Details
+                : $"{item.Details}; review-only: {decision.ReviewReason}";
+        }
+    }
+
+    private IEnumerable<LeftoverEvidence> BuildEvidence(LeftoverItem item)
+    {
+        var evidence = new List<LeftoverEvidence>();
+        if (item.Details.Contains("signature match", StringComparison.OrdinalIgnoreCase))
+            evidence.Add(new LeftoverEvidence("Signature", item.Details, EvidenceStrength.Strong));
+        if (item.Details.Contains("uninstall registry", StringComparison.OrdinalIgnoreCase))
+            evidence.Add(new LeftoverEvidence("UninstallIdentity", item.Path, EvidenceStrength.Strong));
+
+        var name = Path.GetFileName(item.Path);
+        var confidence = ClassifyConfidence(item.Path);
+        if (confidence == LeftoverConfidence.Safe)
+            evidence.Add(new LeftoverEvidence("RegistryIdentity", name, EvidenceStrength.Strong));
+        else if (confidence == LeftoverConfidence.Moderate)
+            evidence.Add(new LeftoverEvidence("RegistryName", name, EvidenceStrength.Supporting));
+
+        if (item.Details.Contains("startup", StringComparison.OrdinalIgnoreCase) ||
+            item.Details.Contains("registration", StringComparison.OrdinalIgnoreCase) ||
+            item.Details.Contains("cache", StringComparison.OrdinalIgnoreCase))
+        {
+            evidence.Add(new LeftoverEvidence("ScannerContext", item.Details, EvidenceStrength.Supporting));
+        }
+
+        if (evidence.Count == 0)
+            evidence.Add(new LeftoverEvidence("Scanner", item.Details, EvidenceStrength.Weak));
+        return evidence;
     }
 
     private void BuildSearchTerms(InstalledProgram program)

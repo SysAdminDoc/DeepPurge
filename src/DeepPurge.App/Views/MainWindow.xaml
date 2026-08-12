@@ -2260,6 +2260,7 @@
                                                                     HeaderTemplate="{StaticResource MasterCheckboxHeader}"/>
                                             <DataGridTextColumn Binding="{Binding DisplayPath}" Header="REGISTRY PATH" Width="*"/>
                                             <DataGridTextColumn Binding="{Binding Details}" Header="DETAILS" Width="260"/>
+                                            <DataGridTextColumn Binding="{Binding OwnershipDisplay}" Header="OWNERSHIP" Width="145"/>
                                             <DataGridTextColumn Binding="{Binding Confidence}" Header="SAFETY" Width="85"/>
                                         </DataGrid.Columns>
                                     </DataGrid>
@@ -2277,6 +2278,7 @@
                                             <DataGridTextColumn Binding="{Binding DisplayPath}" Header="PATH" Width="*"/>
                                             <DataGridTextColumn Binding="{Binding SizeDisplay}" Header="SIZE" Width="95"/>
                                             <DataGridTextColumn Binding="{Binding Details}" Header="DETAILS" Width="220"/>
+                                            <DataGridTextColumn Binding="{Binding OwnershipDisplay}" Header="OWNERSHIP" Width="145"/>
                                             <DataGridTextColumn Binding="{Binding Confidence}" Header="SAFETY" Width="85"/>
                                         </DataGrid.Columns>
                                     </DataGrid>

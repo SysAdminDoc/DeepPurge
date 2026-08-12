@@ -86,6 +86,7 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 - Recycle Bin for ordinary file cleanup through `IFileOperation` where supported, with explicit permanent-delete and secure-delete outcomes
 - Typed cleanup results distinguish preview, recycled, permanent, secure, queued, skipped, failed, and cancelled items; only confirmed mutations enter recovery manifests
 - Confidence-based leftover classification (Safe / Moderate / Risky)
+- Leftover ownership evidence and conflict review: another product's install root, protected Windows scope, and weak single-source matches are never auto-removable
 - Centralized `SafetyGuard` blocks every destructive call against Windows, Program Files, System32, and protected registry hives
 - Windows-owned helpers resolve only from protected absolute system paths; unknown relative executables and ambiguous registered-uninstaller command lines fail closed
 
