@@ -1,3 +1,5 @@
+using System.IO.Hashing;
+
 namespace DeepPurge.Core.Safety;
 
 /// <summary>
@@ -42,6 +44,10 @@ public sealed class DeletionExecutor
             : File.Exists(request.Path);
         if (!actualTypeMatches)
             return Skipped(request, "The target type changed.");
+
+        var identityFailure = ValidateExpectedIdentity(request);
+        if (identityFailure != null)
+            return Skipped(request, identityFailure);
 
         var size = GetSize(request);
         if (options.DryRun)
@@ -225,13 +231,65 @@ public sealed class DeletionExecutor
         try { return new FileInfo(request.Path).Length; }
         catch { return 0; }
     }
+
+    private static string? ValidateExpectedIdentity(DeletionRequest request)
+    {
+        if (request.IsDirectory ||
+            (!request.ExpectedContentHash.HasValue &&
+             !request.ExpectedLastWriteUtcTicks.HasValue))
+            return null;
+
+        try
+        {
+            var before = new FileInfo(request.Path);
+            if (!before.Exists)
+                return "File identity changed: the file is missing.";
+            if (request.ExpectedSizeBytes > 0 &&
+                before.Length != request.ExpectedSizeBytes)
+                return "File identity changed: size no longer matches the scan.";
+            if (request.ExpectedLastWriteUtcTicks.HasValue &&
+                before.LastWriteTimeUtc.Ticks != request.ExpectedLastWriteUtcTicks.Value)
+                return "File identity changed: write time no longer matches the scan.";
+
+            var hash = new XxHash3();
+            using (var stream = new FileStream(
+                request.Path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read | FileShare.Delete,
+                bufferSize: 256 * 1024,
+                options: FileOptions.SequentialScan))
+            {
+                var buffer = new byte[256 * 1024];
+                int read;
+                while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
+                    hash.Append(buffer.AsSpan(0, read));
+            }
+
+            var after = new FileInfo(request.Path);
+            if (!after.Exists ||
+                before.Length != after.Length ||
+                before.LastWriteTimeUtc.Ticks != after.LastWriteTimeUtc.Ticks)
+                return "File identity changed while it was being revalidated.";
+            if (request.ExpectedContentHash.HasValue &&
+                hash.GetCurrentHashAsUInt64() != request.ExpectedContentHash.Value)
+                return "File identity changed: full content hash no longer matches the scan.";
+            return null;
+        }
+        catch (Exception ex)
+        {
+            return $"File identity could not be revalidated: {ex.Message}";
+        }
+    }
 }
 
 public sealed record DeletionRequest(
     string Path,
     bool IsDirectory = false,
     long ExpectedSizeBytes = 0,
-    string Operation = "delete");
+    string Operation = "delete",
+    ulong? ExpectedContentHash = null,
+    long? ExpectedLastWriteUtcTicks = null);
 
 public sealed record DeletionBatchResult(
     IReadOnlyList<DeletionResult> Results,

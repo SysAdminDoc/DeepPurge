@@ -1,5 +1,7 @@
 using System.Buffers;
+using System.ComponentModel;
 using System.IO.Hashing;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using DeepPurge.Core.App;
 using DeepPurge.Core.Diagnostics;
@@ -7,11 +9,102 @@ using DeepPurge.Core.Safety;
 
 namespace DeepPurge.Core.FileSystem;
 
-public class DuplicateGroup
+public sealed record DuplicateFileIdentity(
+    long SizeBytes,
+    long LastWriteUtcTicks,
+    ulong FullHash);
+
+public sealed class DuplicateGroup : INotifyPropertyChanged
 {
+    private string _keeperPath = string.Empty;
+
     public long FileSize { get; set; }
     public List<string> Paths { get; set; } = new();
+    public ulong ContentHash { get; set; }
+    public Dictionary<string, DuplicateFileIdentity> ScannedIdentities { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The copy explicitly retained for this group. An empty value means the
+    /// group is review-only until a user selects one or supplies a protected
+    /// reference folder to the deletion policy.
+    /// </summary>
+    public string KeeperPath
+    {
+        get => _keeperPath;
+        set
+        {
+            _keeperPath = value ?? string.Empty;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasExplicitKeeper));
+            OnPropertyChanged(nameof(KeeperDisplay));
+        }
+    }
+
+    public IReadOnlyList<string> KeeperOptions => Paths;
+    public bool HasExplicitKeeper => Paths.Contains(
+        KeeperPath,
+        StringComparer.OrdinalIgnoreCase);
+    public string KeeperDisplay => HasExplicitKeeper
+        ? KeeperPath
+        : "Select a keeper";
     public long WastedBytes => Paths.Count <= 1 ? 0 : FileSize * (Paths.Count - 1);
+
+    public bool RemovePath(string path)
+    {
+        var removed = Paths.Remove(path);
+        if (!removed) return false;
+        if (path.Equals(KeeperPath, StringComparison.OrdinalIgnoreCase))
+            KeeperPath = string.Empty;
+        OnPropertyChanged(nameof(KeeperOptions));
+        OnPropertyChanged(nameof(HasExplicitKeeper));
+        OnPropertyChanged(nameof(KeeperDisplay));
+        OnPropertyChanged(nameof(WastedBytes));
+        return true;
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+    private void OnPropertyChanged([CallerMemberName] string? name = null)
+        => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+}
+
+/// <summary>
+/// Deletion may use a per-group keeper selected in <see cref="DuplicateGroup.KeeperPath"/>
+/// or a directory whose files are protected from duplicate removal. No
+/// timestamp-based keeper is selected by this policy.
+/// </summary>
+public sealed class DuplicateKeeperPolicy
+{
+    public DuplicateKeeperPolicy(string? referenceFolder = null)
+    {
+        if (string.IsNullOrWhiteSpace(referenceFolder)) return;
+        if (!Path.IsPathFullyQualified(referenceFolder))
+            throw new ArgumentException(
+                "The duplicate reference folder must be an absolute path.",
+                nameof(referenceFolder));
+        ReferenceFolder = Path.TrimEndingDirectorySeparator(
+            Path.GetFullPath(referenceFolder));
+    }
+
+    public string? ReferenceFolder { get; }
+
+    public bool HasReferenceFolder => !string.IsNullOrWhiteSpace(ReferenceFolder);
+
+    public bool IsProtectedReferencePath(string path)
+        => HasReferenceFolder && IsUnder(path, ReferenceFolder!);
+
+    private static bool IsUnder(string path, string root)
+    {
+        try
+        {
+            var normalizedPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+            var normalizedRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
+            return normalizedPath.Equals(normalizedRoot, StringComparison.OrdinalIgnoreCase) ||
+                   normalizedPath.StartsWith(
+                       normalizedRoot + Path.DirectorySeparatorChar,
+                       StringComparison.OrdinalIgnoreCase);
+        }
+        catch { return false; }
+    }
 }
 
 public class DuplicateDirectoryGroup
@@ -84,14 +177,21 @@ public class DuplicateFinder
             }
 
             // Stage 3: full hash only for head-collision clusters ≥ 2.
-            foreach (var headCluster in byHead.Values)
+            foreach (var headEntry in byHead)
             {
+                var headCluster = headEntry.Value;
                 if (headCluster.Count < 2) continue;
 
                 // Files ≤ head-chunk size are already fully hashed by stage 2.
                 if (size <= FirstChunkBytes)
                 {
-                    finalGroups.Add(new DuplicateGroup { FileSize = size, Paths = headCluster });
+                    finalGroups.Add(new DuplicateGroup
+                    {
+                        FileSize = size,
+                        ContentHash = headEntry.Key,
+                        Paths = headCluster,
+                        ScannedIdentities = CaptureScanIdentities(headCluster, size, headEntry.Key),
+                    });
                     continue;
                 }
 
@@ -106,8 +206,14 @@ public class DuplicateFinder
                     list.Add(f);
                 }
 
-                foreach (var fullCluster in byFull.Values.Where(c => c.Count >= 2))
-                    finalGroups.Add(new DuplicateGroup { FileSize = size, Paths = fullCluster });
+                foreach (var fullEntry in byFull.Where(kv => kv.Value.Count >= 2))
+                    finalGroups.Add(new DuplicateGroup
+                    {
+                        FileSize = size,
+                        ContentHash = fullEntry.Key,
+                        Paths = fullEntry.Value,
+                        ScannedIdentities = CaptureScanIdentities(fullEntry.Value, size, fullEntry.Key),
+                    });
             }
         }
 
@@ -118,82 +224,362 @@ public class DuplicateFinder
     }
 
     /// <summary>
-    /// Delete all-but-one file in each group. Returns count deleted.
-    /// Sorting on <see cref="FileInfo.LastWriteTimeUtc"/> is wrapped so a
-    /// file that disappears between scan and delete doesn't throw.
+    /// Compatibility wrapper for callers that explicitly choose the old
+    /// timestamp policy. New callers should select <see cref="DuplicateGroup.KeeperPath"/>
+    /// and use <see cref="DuplicateKeeperPolicy"/> so age is never an
+    /// accidental keeper decision.
     /// </summary>
-    public int DeleteDuplicates(IEnumerable<DuplicateGroup> groups, DeleteOptions opt, bool keepNewest = true)
-        => DeleteDuplicatesDetailed(groups, opt, keepNewest).ItemsDeleted;
+    public int DeleteDuplicates(
+        IEnumerable<DuplicateGroup> groups,
+        DeleteOptions opt,
+        bool keepNewest)
+    {
+        var selectedGroups = groups.ToList();
+        foreach (var group in selectedGroups.Where(g => g.Paths.Count >= 2 && !g.HasExplicitKeeper))
+            group.KeeperPath = SelectTimestampKeeper(group.Paths, keepNewest);
+        return DeleteDuplicatesDetailed(selectedGroups, opt, new DuplicateKeeperPolicy()).ItemsDeleted;
+    }
 
+    /// <summary>
+    /// Compatibility overload for the former timestamp-based API. The
+    /// timestamp choice is materialized as an explicit keeper before the
+    /// safety validation begins.
+    /// </summary>
     public DeleteSummary DeleteDuplicatesDetailed(
         IEnumerable<DuplicateGroup> groups,
         DeleteOptions opt,
-        bool keepNewest = true,
+        bool? keepNewest = null,
         IProgress<DeleteProgress>? progress = null,
         CancellationToken ct = default)
     {
         var selectedGroups = groups.ToList();
-        var candidates = selectedGroups
-            .Where(g => g.Paths.Count >= 2)
-            .SelectMany(g => g.Paths.Skip(1))
-            .ToList();
+        if (keepNewest.HasValue)
+        {
+            foreach (var group in selectedGroups.Where(g => g.Paths.Count >= 2 && !g.HasExplicitKeeper))
+                group.KeeperPath = SelectTimestampKeeper(group.Paths, keepNewest.Value);
+        }
+        return DeleteDuplicatesDetailed(selectedGroups, opt, new DuplicateKeeperPolicy(), progress, ct);
+    }
+
+    /// <summary>
+    /// Removes duplicate candidates only after resolving an explicit keeper
+    /// and revalidating every remaining path's size, timestamp, and full
+    /// content hash. A changed group aborts its remaining removals.
+    /// </summary>
+    public DeleteSummary DeleteDuplicatesDetailed(
+        IEnumerable<DuplicateGroup> groups,
+        DeleteOptions opt,
+        DuplicateKeeperPolicy policy,
+        IProgress<DeleteProgress>? progress = null,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(policy);
+
+        var selectedGroups = groups.ToList();
+        var estimatedTotal = selectedGroups.Sum(g => Math.Max(g.Paths.Count, 1));
         var executor = new DeletionExecutor();
-        var results = new List<DeletionResult>(candidates.Count);
+        var results = new List<DeletionResult>();
         var processed = 0;
 
-        foreach (var group in selectedGroups)
+        void AddResult(DeletionResult result)
         {
-            if (ct.IsCancellationRequested) break;
-            if (group.Paths.Count < 2) continue;
+            results.Add(result);
+            processed++;
+            progress?.Report(new DeleteProgress(
+                processed,
+                estimatedTotal,
+                opt.DryRun
+                    ? results.Where(r => r.IsPreview).Sum(r => r.SizeBytes)
+                    : results.Where(r => r.IsConfirmed).Sum(r => r.SizeBytes),
+                result.Path,
+                !result.IsConfirmed && !result.IsPreview));
+        }
 
-            var annotated = new List<(string Path, DateTime Stamp)>(group.Paths.Count);
-            foreach (var p in group.Paths)
+        void AddSkipped(IEnumerable<string> paths, DuplicateGroup group, string reason)
+        {
+            foreach (var path in paths.Distinct(StringComparer.OrdinalIgnoreCase))
+                AddResult(new DeletionResult(
+                    path,
+                    DeletionOutcomeKind.Skipped,
+                    group.FileSize,
+                    "duplicate-clean",
+                    reason));
+        }
+
+        for (var groupIndex = 0; groupIndex < selectedGroups.Count; groupIndex++)
+        {
+            var group = selectedGroups[groupIndex];
+            var paths = group.Paths
+                .Where(p => !string.IsNullOrWhiteSpace(p))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (paths.Count < 2) continue;
+
+            if (ct.IsCancellationRequested)
             {
-                DateTime stamp;
-                try { stamp = new FileInfo(p).LastWriteTimeUtc; }
-                catch { stamp = DateTime.MinValue; }  // missing files sort to "keep last"
-                annotated.Add((p, stamp));
+                AddCancelled(paths, group, AddResult);
+                foreach (var remainingGroup in selectedGroups.Skip(groupIndex + 1))
+                    AddCancelled(remainingGroup.Paths, remainingGroup, AddResult);
+                break;
             }
 
-            var sorted = keepNewest
-                ? annotated.OrderByDescending(x => x.Stamp).Select(x => x.Path).ToList()
-                : annotated.OrderBy(x => x.Stamp).Select(x => x.Path).ToList();
+            var protectedPaths = paths
+                .Where(policy.IsProtectedReferencePath)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var keeper = group.HasExplicitKeeper
+                ? group.KeeperPath
+                : protectedPaths.OrderBy(p => p, StringComparer.OrdinalIgnoreCase).FirstOrDefault();
 
-            foreach (var victim in sorted.Skip(1))
+            if (string.IsNullOrWhiteSpace(keeper) ||
+                !paths.Contains(keeper, StringComparer.OrdinalIgnoreCase))
             {
-                processed++;
+                AddSkipped(
+                    paths,
+                    group,
+                    policy.HasReferenceFolder
+                        ? "No duplicate is inside the protected reference folder and no explicit keeper was selected."
+                        : "No explicit keeper was selected for this duplicate group.");
+                continue;
+            }
+
+            var victims = paths
+                .Where(p => !p.Equals(keeper, StringComparison.OrdinalIgnoreCase) &&
+                            !protectedPaths.Contains(p))
+                .ToList();
+            AddSkipped(
+                protectedPaths.Where(p => !p.Equals(keeper, StringComparison.OrdinalIgnoreCase)),
+                group,
+                "Protected reference-folder copy retained.");
+
+            if (!TryCaptureGroup(paths, group, out var expected, out var expectedHash, out var validationReason))
+            {
+                AddSkipped(paths.Where(p => !protectedPaths.Contains(p) || p.Equals(keeper, StringComparison.OrdinalIgnoreCase)), group, validationReason);
+                continue;
+            }
+
+            if (group.ContentHash == 0)
+                group.ContentHash = expectedHash;
+
+            var pendingVictims = new HashSet<string>(victims, StringComparer.OrdinalIgnoreCase);
+            foreach (var victim in victims)
+            {
                 if (ct.IsCancellationRequested)
                 {
-                    results.Add(new DeletionResult(
-                        victim,
-                        DeletionOutcomeKind.Cancelled,
-                        group.FileSize,
-                        "duplicate-clean",
-                        "Cancellation requested."));
+                    AddCancelled(pendingVictims, group, AddResult);
                     break;
                 }
 
+                var pendingPaths = paths.Where(p =>
+                    p.Equals(keeper, StringComparison.OrdinalIgnoreCase) ||
+                    pendingVictims.Contains(p) ||
+                    protectedPaths.Contains(p)).ToList();
+                if (!TryValidateGroup(pendingPaths, expected, out validationReason))
+                {
+                    AddSkipped(pendingVictims, group, validationReason);
+                    break;
+                }
+
+                var identity = expected[victim];
                 var result = executor.Execute(
                     new DeletionRequest(
                         victim,
                         IsDirectory: false,
                         ExpectedSizeBytes: group.FileSize,
-                        Operation: "duplicate-clean"),
+                        Operation: "duplicate-clean",
+                        ExpectedContentHash: identity.FullHash,
+                        ExpectedLastWriteUtcTicks: identity.LastWriteUtcTicks),
                     opt,
                     ct);
-                results.Add(result);
-                progress?.Report(new DeleteProgress(
-                    processed,
-                    candidates.Count,
-                    opt.DryRun
-                        ? results.Where(r => r.IsPreview).Sum(r => r.SizeBytes)
-                        : results.Where(r => r.IsConfirmed).Sum(r => r.SizeBytes),
-                    victim,
-                    !result.IsConfirmed && !result.IsPreview));
+                AddResult(result);
+
+                if (result.IsConfirmed)
+                {
+                    pendingVictims.Remove(victim);
+                    expected.Remove(victim);
+                }
+                else if (!result.IsPreview)
+                {
+                    pendingVictims.Remove(victim);
+                    AddSkipped(pendingVictims, group, "Duplicate group stopped after a removal failed or was skipped.");
+                    break;
+                }
             }
         }
 
         return DeleteSummary.FromResults(results, opt.DryRun);
+    }
+
+    private static void AddCancelled(
+        IEnumerable<string> paths,
+        DuplicateGroup group,
+        Action<DeletionResult> addResult)
+    {
+        foreach (var path in paths.Distinct(StringComparer.OrdinalIgnoreCase))
+            addResult(new DeletionResult(
+                path,
+                DeletionOutcomeKind.Cancelled,
+                group.FileSize,
+                "duplicate-clean",
+                "Cancellation requested."));
+    }
+
+    private static string SelectTimestampKeeper(IEnumerable<string> paths, bool keepNewest)
+    {
+        var annotated = paths.Select(path =>
+        {
+            try { return (Path: path, Stamp: new FileInfo(path).LastWriteTimeUtc); }
+            catch { return (Path: path, Stamp: DateTime.MinValue); }
+        });
+        return (keepNewest
+                ? annotated.OrderByDescending(x => x.Stamp)
+                : annotated.OrderBy(x => x.Stamp))
+            .Select(x => x.Path)
+            .First();
+    }
+
+    private static bool TryCaptureGroup(
+        IReadOnlyList<string> paths,
+        DuplicateGroup group,
+        out Dictionary<string, DuplicateFileIdentity> identities,
+        out ulong expectedHash,
+        out string reason)
+    {
+        identities = new Dictionary<string, DuplicateFileIdentity>(StringComparer.OrdinalIgnoreCase);
+        expectedHash = group.ContentHash;
+        foreach (var path in paths)
+        {
+            if (!TryReadFullIdentity(path, out var identity, out reason))
+                return false;
+            if (identity.SizeBytes != group.FileSize)
+            {
+                reason = "Duplicate group changed size since it was scanned.";
+                return false;
+            }
+            if (group.ScannedIdentities.TryGetValue(path, out var scannedIdentity) &&
+                identity != scannedIdentity)
+            {
+                reason = "Duplicate candidate changed identity since it was scanned.";
+                return false;
+            }
+            if (expectedHash == 0)
+                expectedHash = identity.FullHash;
+            if (identity.FullHash != expectedHash)
+            {
+                reason = "Duplicate group no longer has one full content identity.";
+                return false;
+            }
+            identities[path] = identity;
+        }
+
+        reason = string.Empty;
+        return true;
+    }
+
+    private static Dictionary<string, DuplicateFileIdentity> CaptureScanIdentities(
+        IEnumerable<string> paths,
+        long size,
+        ulong fullHash)
+    {
+        var identities = new Dictionary<string, DuplicateFileIdentity>(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in paths)
+        {
+            try
+            {
+                var info = new FileInfo(path);
+                if (info.Exists)
+                    identities[path] = new DuplicateFileIdentity(
+                        size,
+                        info.LastWriteTimeUtc.Ticks,
+                        fullHash);
+            }
+            catch { /* the delete boundary will report a precise skip */ }
+        }
+        return identities;
+    }
+
+    private static bool TryValidateGroup(
+        IEnumerable<string> paths,
+        IReadOnlyDictionary<string, DuplicateFileIdentity> expected,
+        out string reason)
+    {
+        reason = string.Empty;
+        foreach (var path in paths.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (!expected.TryGetValue(path, out var expectedIdentity) ||
+                !TryReadFullIdentity(path, out var actual, out reason))
+                return false;
+            if (actual != expectedIdentity)
+            {
+                reason = "Duplicate group changed after hashing; no further copies were removed.";
+                return false;
+            }
+        }
+
+        reason = string.Empty;
+        return true;
+    }
+
+    private static bool TryReadFullIdentity(
+        string path,
+        out DuplicateFileIdentity identity,
+        out string reason)
+    {
+        identity = new DuplicateFileIdentity(0, 0, 0);
+        reason = string.Empty;
+        try
+        {
+            if (!File.Exists(path))
+            {
+                reason = "Duplicate candidate is missing.";
+                return false;
+            }
+            if (SafetyGuard.IsReparsePoint(path))
+            {
+                reason = "Duplicate candidate became a reparse point.";
+                return false;
+            }
+
+            var before = new FileInfo(path);
+            var hash = new XxHash3();
+            using (var stream = new FileStream(
+                path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read | FileShare.Delete,
+                bufferSize: 256 * 1024,
+                options: FileOptions.SequentialScan))
+            {
+                var buffer = ArrayPool<byte>.Shared.Rent(256 * 1024);
+                try
+                {
+                    int read;
+                    while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
+                        hash.Append(buffer.AsSpan(0, read));
+                }
+                finally { ArrayPool<byte>.Shared.Return(buffer); }
+            }
+
+            var after = new FileInfo(path);
+            if (!after.Exists ||
+                before.Length != after.Length ||
+                before.LastWriteTimeUtc.Ticks != after.LastWriteTimeUtc.Ticks)
+            {
+                reason = "Duplicate candidate changed while it was being hashed.";
+                return false;
+            }
+
+            identity = new DuplicateFileIdentity(
+                after.Length,
+                after.LastWriteTimeUtc.Ticks,
+                hash.GetCurrentHashAsUInt64());
+            return true;
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            reason = $"Duplicate candidate could not be revalidated: {ex.Message}";
+            return false;
+        }
     }
 
     // ═══════════════════════════════════════════════════════

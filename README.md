@@ -61,6 +61,7 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 
 ### Duplicate Finder
 - **Three-stage hash** - Group by exact byte-size → XXH3 first-MB head-hash → XXH3 full-file for remaining collisions. Skips reparse points / junctions to avoid infinite loops. *(algorithm from Czkawka / fdupes)*
+- **Explicit keeper and identity revalidation** - Select the retained copy in each GUI group, or pass `--reference-folder` to protect a known-good directory from CLI duplicate removal. Every pending candidate is re-statted and fully re-hashed before deletion; changed groups abort safely and report exact skipped/failed counts.
 
 ### Health Dashboard
 - **System health score** - Assesses 4 categories (Junk Files, Privacy, Startup Impact, Disk Space) with 0-100 scores and A-F grade
@@ -142,6 +143,7 @@ DeepPurgeCli repair sfc                     # sfc /scannow
 DeepPurgeCli drivers --old                  # Old driver packages ready to remove
 DeepPurgeCli startup-impact                 # High/Medium/Low per autorun process
 DeepPurgeCli duplicates C:\Users\you        # Duplicate file groups
+DeepPurgeCli duplicates C:\Users\you --delete --reference-folder C:\Users\you\Documents\Keep --dry-run  # Preview guarded removal
 DeepPurgeCli snapshot trace "MyApp" setup.exe  # Record install delta
 DeepPurgeCli update-winapp2 --check-only       # Show local/remote database provenance
 DeepPurgeCli winapp2 .\winapp2.ini --dry-run   # Run community cleaner database

@@ -454,6 +454,34 @@ public static class Program
 
         var groups = await finder.FindAsync(roots, progress: new Progress<string>(Console.Error.WriteLine), ct: ct);
 
+        if (a.HasFlag("delete"))
+        {
+            var referenceFolder = a.GetOption("reference-folder");
+            if (string.IsNullOrWhiteSpace(referenceFolder))
+                return Fail("duplicates --delete requires --reference-folder <absolute-folder> or an explicit keeper policy in the GUI");
+            if (!Path.IsPathFullyQualified(referenceFolder) || !Directory.Exists(referenceFolder))
+                return Fail($"reference folder not found or not absolute: {referenceFolder}");
+            if (SafetyGuard.IsReparsePoint(referenceFolder))
+                return Fail("reference folder cannot be a reparse point");
+
+            var policy = new DuplicateKeeperPolicy(referenceFolder);
+            var options = new DeleteOptions(
+                DryRun: a.HasFlag("dry-run"),
+                SecureDelete: a.HasFlag("secure"),
+                UseRecycleBin: !a.HasFlag("secure") && !a.HasFlag("permanent"));
+            var summary = finder.DeleteDuplicatesDetailed(
+                groups,
+                options,
+                policy,
+                progress: new Progress<DeleteProgress>(p =>
+                    Console.Error.WriteLine($"[{p.ItemsProcessed}/{p.ItemsTotal}] {p.CurrentItem}")),
+                ct: ct);
+            Console.WriteLine($"{(options.DryRun ? "Would delete" : "Deleted")} {summary.ItemsDeleted} duplicate file(s), {summary.ItemsSkipped} skipped, {summary.ItemsFailed} failed");
+            foreach (var reason in summary.SkippedReasons.Distinct().Take(10))
+                Console.Error.WriteLine($"  skipped: {reason}");
+            return summary.ItemsSkipped > 0 || summary.ItemsFailed > 0 ? 1 : 0;
+        }
+
         var exportPath = ValidateExportPath(a.GetOption("export"));
         if (a.GetOption("export") != null && exportPath == null) return 2;
         if (exportPath != null)
@@ -1305,7 +1333,7 @@ if ($app) {{
         Console.WriteLine("  drivers [--old] [--export file --format csv|json]");
         Console.WriteLine("  startup-impact [--export file --format csv|json]");
         Console.WriteLine("  shortcuts [--recycle] [--all] [--export file --format csv|json]");
-        Console.WriteLine("  duplicates [roots...] [--export file --format csv|json]");
+        Console.WriteLine("  duplicates [roots...] [--delete --reference-folder <dir>] [--dry-run] [--secure] [--export file --format csv|json]");
         Console.WriteLine("  snapshot trace <name> <installer> [--args \"...\"]");
         Console.WriteLine("  winapp2 <path.ini> [--dry-run]           Run community cleaner definitions");
         Console.WriteLine("  schedule list");

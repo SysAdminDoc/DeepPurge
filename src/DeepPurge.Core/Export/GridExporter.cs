@@ -66,19 +66,24 @@ public static class GridExporter
         {
             var data = list.Select(g => new
             {
-                g.FileSize, g.WastedBytes, FileCount = g.Paths.Count, g.Paths
+                g.FileSize,
+                g.WastedBytes,
+                FileCount = g.Paths.Count,
+                Keeper = g.KeeperPath,
+                ContentHash = g.ContentHash.ToString("X16"),
+                g.Paths,
             });
             File.WriteAllText(filePath, JsonSerializer.Serialize(data, JsonOpts), Encoding.UTF8);
         }
         else
         {
             var sb = new StringBuilder();
-            sb.AppendLine("\"Group\",\"File Size\",\"Wasted Bytes\",\"Path\"");
+            sb.AppendLine("\"Group\",\"File Size\",\"Wasted Bytes\",\"Keeper\",\"Content Hash\",\"Path\"");
             for (int i = 0; i < list.Count; i++)
             {
                 var g = list[i];
                 foreach (var p in g.Paths)
-                    sb.AppendLine($"\"{i + 1}\",\"{g.FileSize}\",\"{g.WastedBytes}\",\"{Esc(p)}\"");
+                    sb.AppendLine($"\"{i + 1}\",\"{g.FileSize}\",\"{g.WastedBytes}\",\"{Esc(g.KeeperPath)}\",\"{g.ContentHash:X16}\",\"{Esc(p)}\"");
             }
             File.WriteAllText(filePath, sb.ToString(), Encoding.UTF8);
         }

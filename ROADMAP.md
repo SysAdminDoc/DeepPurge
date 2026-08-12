@@ -4,13 +4,6 @@ Actionable work only. Historical and completed roadmap material is archived in C
 
 ## Actionable Items
 
-- [ ] P1 — Revalidate duplicate identity and require an explicit keeper policy
-  Why: Duplicate groups can drift between hashing and deletion, and the implicit age-based keeper gives users no per-group or reference-folder control.
-  Evidence: `src/DeepPurge.Core/FileSystem/DuplicateFinder.cs`; Czkawka reference-folder, keeper, and saved-selection patterns.
-  Touches: duplicate models/scanner/deleter, duplicate WPF/CLI, operation results, tests
-  Acceptance: Every candidate is re-statted and fully re-hashed immediately before removal; any changed group aborts safely; users can select the keeper or a protected reference folder; no group is deleted without one retained identity; failed/skipped counts are exact.
-  Complexity: M
-
 - [ ] P1 — Export and bind a rollback package before driver deletion
   Why: DeepPurge removes driver-store packages without the export/backup workflow exposed by Windows and DriverStoreExplorer.
   Evidence: `src/DeepPurge.Core/Drivers/DriverStoreScanner.cs`; DriverStoreExplorer; Microsoft PnPUtil and DISM driver-export documentation.

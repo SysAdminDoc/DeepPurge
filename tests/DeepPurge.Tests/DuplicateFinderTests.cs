@@ -134,4 +134,97 @@ public class DuplicateFinderTests : IDisposable
         Assert.Equal(0, deleted);
         Assert.True(File.Exists(realFile)); // real file untouched
     }
+
+    [Fact]
+    public async Task Delete_requires_an_explicit_keeper()
+    {
+        var payload = new byte[12 * 1024];
+        new Random(81).NextBytes(payload);
+        Write("a.bin", payload);
+        Write("b.bin", payload);
+
+        var finder = new DuplicateFinder();
+        var groups = await finder.FindAsync(new[] { _root }, minBytes: 0);
+        var summary = finder.DeleteDuplicatesDetailed(
+            groups,
+            new DeleteOptions(UseRecycleBin: false),
+            new DuplicateKeeperPolicy());
+
+        Assert.Equal(0, summary.ItemsDeleted);
+        Assert.Equal(2, summary.ItemsSkipped);
+        Assert.All(groups[0].Paths, path => Assert.True(File.Exists(path)));
+    }
+
+    [Fact]
+    public async Task Changed_content_aborts_the_entire_group()
+    {
+        var payload = new byte[12 * 1024];
+        new Random(82).NextBytes(payload);
+        var keeper = Write("a.bin", payload);
+        var victim = Write("b.bin", payload);
+
+        var finder = new DuplicateFinder();
+        var groups = await finder.FindAsync(new[] { _root }, minBytes: 0);
+        var group = Assert.Single(groups);
+        group.KeeperPath = keeper;
+
+        payload[0] ^= 0xFF;
+        File.WriteAllBytes(victim, payload);
+
+        var summary = finder.DeleteDuplicatesDetailed(
+            groups,
+            new DeleteOptions(UseRecycleBin: false),
+            new DuplicateKeeperPolicy());
+
+        Assert.Equal(0, summary.ItemsDeleted);
+        Assert.True(summary.ItemsSkipped >= 1);
+        Assert.True(File.Exists(keeper));
+        Assert.True(File.Exists(victim));
+    }
+
+    [Fact]
+    public async Task Explicit_keeper_remains_while_other_copy_is_removed()
+    {
+        var payload = new byte[12 * 1024];
+        new Random(83).NextBytes(payload);
+        var keeper = Write("a.bin", payload);
+        var victim = Write("b.bin", payload);
+
+        var finder = new DuplicateFinder();
+        var groups = await finder.FindAsync(new[] { _root }, minBytes: 0);
+        var group = Assert.Single(groups);
+        group.KeeperPath = keeper;
+
+        var summary = finder.DeleteDuplicatesDetailed(
+            groups,
+            new DeleteOptions(UseRecycleBin: false),
+            new DuplicateKeeperPolicy());
+
+        Assert.Equal(1, summary.ItemsDeleted);
+        Assert.Equal(0, summary.ItemsFailed);
+        Assert.True(File.Exists(keeper));
+        Assert.False(File.Exists(victim));
+    }
+
+    [Fact]
+    public async Task Reference_folder_protects_a_copy_without_group_selection()
+    {
+        var reference = Path.Combine(_root, "reference");
+        Directory.CreateDirectory(reference);
+        var payload = new byte[12 * 1024];
+        new Random(84).NextBytes(payload);
+        var keeper = Write("reference/a.bin", payload);
+        var victim = Write("other/b.bin", payload);
+
+        var finder = new DuplicateFinder();
+        var groups = await finder.FindAsync(new[] { _root }, minBytes: 0);
+        var summary = finder.DeleteDuplicatesDetailed(
+            groups,
+            new DeleteOptions(UseRecycleBin: false),
+            new DuplicateKeeperPolicy(reference));
+
+        Assert.Equal(1, summary.ItemsDeleted);
+        Assert.True(File.Exists(keeper));
+        Assert.False(File.Exists(victim));
+    }
 }
