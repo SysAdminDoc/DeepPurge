@@ -4,13 +4,6 @@ Actionable work only. Historical and completed roadmap material is archived in C
 
 ## Actionable Items
 
-- [ ] P1 — Centralize deletion policy, outcomes, and success-only provenance
-  Why: `UseRecycleBin`, dry-run, secure mode, result counts, and manifests mean different things across pipelines, so permanent or failed operations can be reported as recoverable success.
-  Evidence: `DeleteOptions`; `UninstallEngine`; `DuplicateFinder`; `EmptyFolderScanner`; `SystemSlimmer`; `CleanerDefinition`; `Winapp2Parser`; `MainWindow.xaml.cs`; Sifty/Mole recoverable-default and audit designs.
-  Touches: `src/DeepPurge.Core/Safety/`, every destructive Core pipeline, WPF/CLI result surfaces, activity/recovery manifests, tests
-  Acceptance: One typed executor exposes preview, Recycle Bin, permanent, secure, queued, skipped, failed, and cancelled outcomes; ordinary user-file cleanup defaults to `IFileOperation` recycling where supported; only confirmed operations enter manifests/counts; all existing deletion callers and per-item cleanup-failure details use the same contract.
-  Complexity: XL
-
 - [ ] P1 — Add ownership-conflict gates to leftover attribution
   Why: Name/publisher/install-location heuristics can attribute shared or adversarial paths to the wrong program and offer unrelated data for deletion.
   Evidence: `src/DeepPurge.Core/FileSystem/FileLeftoverScanner.cs`; `src/DeepPurge.Core/Registry/RegistryLeftoverScanner.cs`; `src/DeepPurge.Core/Uninstall/UninstallEngine.cs`; cited academic uninstaller/remover study.

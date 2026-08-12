@@ -350,11 +350,17 @@ public static class CleanerDefinitionRunner
         if (!validation.IsValid)
         {
             Log.Warn($"Cleaner rule blocked '{rule.Name}': {validation.IssuesDisplay}");
-            return new DeleteSummary(0, 1, 0, options.DryRun);
+            return DeleteSummary.FromResults(
+                new[]
+                {
+                    DeletionExecutor.FailedExternal(
+                        rule.Name,
+                        "cleaner-rule",
+                        validation.IssuesDisplay),
+                },
+                options.DryRun);
         }
 
-        long freed = 0;
-        int cleaned = 0, skipped = 0;
         var files = new List<string>();
 
         foreach (var fr in rule.Files)
@@ -372,56 +378,81 @@ public static class CleanerDefinitionRunner
             catch { /* skip */ }
         }
 
+        var executor = new DeletionExecutor();
+        var results = new List<DeletionResult>(files.Count + rule.Files.Count);
         for (int i = 0; i < files.Count; i++)
         {
-            ct.ThrowIfCancellationRequested();
             var f = files[i];
-
-            if (!SafetyGuard.IsPathSafeToDelete(f)) { skipped++; continue; }
-
-            try
-            {
-                var fi = new FileInfo(f);
-                var sz = fi.Length;
-
-                if (!options.DryRun)
-                {
-                    if (options.SecureDelete) SecureDelete.Wipe(f);
-                    else SafetyGuard.SafeDeleteFile(f);
-                }
-
-                freed += sz;
-                cleaned++;
-            }
-            catch { skipped++; }
-
-            progress?.Report(new DeleteProgress(i + 1, files.Count, freed, f, false));
+            long size = 0;
+            try { size = new FileInfo(f).Length; } catch { /* executor reports the exact failure */ }
+            var result = executor.Execute(
+                new DeletionRequest(f, ExpectedSizeBytes: size, Operation: "cleaner-file"),
+                options,
+                ct);
+            results.Add(result);
+            progress?.Report(new DeleteProgress(
+                i + 1,
+                files.Count,
+                CurrentBytes(results, options.DryRun),
+                f,
+                !result.IsConfirmed && !result.IsPreview));
         }
 
         foreach (var fr in rule.Files.Where(f => f.RemoveSelf))
         {
             var expanded = Environment.ExpandEnvironmentVariables(fr.Path);
-            if (!options.DryRun && Directory.Exists(expanded) && SafetyGuard.IsPathSafeToDelete(expanded))
-            {
-                try { SafetyGuard.SafeDeleteDirectory(expanded); }
-                catch (Exception ex) { Log.Warn($"RemoveSelf '{expanded}': {ex.Message}"); }
-            }
+            results.Add(executor.Execute(
+                new DeletionRequest(expanded, IsDirectory: true, Operation: "cleaner-remove-self"),
+                options,
+                ct));
         }
 
         foreach (var regPath in rule.Registry)
         {
             var result = RegistryDeletion.DeleteKeyTree(regPath, "cleaner-regkey", options.DryRun);
-            if (result.Status is RegistryDeletionStatus.Deleted or RegistryDeletionStatus.DryRun or RegistryDeletionStatus.SkippedMissing)
-                continue;
-
-            Log.Warn($"Cleaner registry delete '{regPath}' skipped: {result.Status} {result.ErrorMessage}");
+            results.Add(ToDeletionResult(result));
+            if (result.Status is not RegistryDeletionStatus.Deleted and
+                not RegistryDeletionStatus.DryRun)
+                Log.Warn($"Cleaner registry delete '{regPath}' skipped: {result.Status} {result.ErrorMessage}");
         }
 
-        if (!options.DryRun && cleaned > 0)
-            ActivityLog.Record("cleaner", $"{rule.Name}: {cleaned} items", freed, cleaned);
+        var summary = DeleteSummary.FromResults(results, options.DryRun);
+        if (!options.DryRun && summary.ItemsConfirmed > 0)
+            ActivityLog.Record("cleaner", $"{rule.Name}: {summary.ItemsConfirmed} items", summary.BytesConfirmed, summary.ItemsConfirmed);
 
-        return new DeleteSummary(cleaned, skipped, freed, options.DryRun);
+        return summary;
     }
+
+    private static DeletionResult ToDeletionResult(RegistryDeletionResult result)
+    {
+        var outcome = result.Status switch
+        {
+            RegistryDeletionStatus.DryRun => DeletionOutcomeKind.Preview,
+            RegistryDeletionStatus.Deleted => DeletionOutcomeKind.PermanentlyDeleted,
+            RegistryDeletionStatus.SkippedMissing or
+            RegistryDeletionStatus.SkippedMalformedPath or
+            RegistryDeletionStatus.SkippedUnsafePath or
+            RegistryDeletionStatus.SkippedSymlink or
+            RegistryDeletionStatus.SkippedDrift => DeletionOutcomeKind.Skipped,
+            _ => DeletionOutcomeKind.Failed,
+        };
+        return new DeletionResult(
+            result.Path,
+            outcome,
+            0,
+            "cleaner-regkey",
+            result.Deleted || result.Status == RegistryDeletionStatus.DryRun
+                ? null
+                : result.ErrorMessage ?? result.Status.ToString(),
+            Recoverable: result.Deleted);
+    }
+
+    private static long CurrentBytes(
+        IReadOnlyList<DeletionResult> results,
+        bool dryRun)
+        => dryRun
+            ? results.Where(r => r.IsPreview).Sum(r => r.SizeBytes)
+            : results.Where(r => r.IsConfirmed).Sum(r => r.SizeBytes);
 
     private sealed record ParsedCleanerDocument(
         List<CleanerRule> Rules,

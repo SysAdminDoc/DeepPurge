@@ -385,7 +385,16 @@ public static class AutorunScanner
                     if (File.Exists(entry.Command) && SafetyGuard.IsPathSafeToDelete(entry.Command))
                     {
                         var disabledPath = entry.Command + ".disabled";
-                        if (File.Exists(disabledPath)) SafetyGuard.SafeDeleteFile(disabledPath);
+                        if (File.Exists(disabledPath))
+                        {
+                            var stale = new DeletionExecutor().Execute(
+                                new DeletionRequest(
+                                    disabledPath,
+                                    Operation: "autorun-stale-disabled"),
+                                DeleteOptions.Default);
+                            if (!stale.IsConfirmed)
+                                return false;
+                        }
                         File.Move(entry.Command, disabledPath);
                         entry.IsEnabled = false;
                     }
@@ -418,10 +427,18 @@ public static class AutorunScanner
 
                 case AutorunType.StartupFolder:
                     if (File.Exists(entry.Command) && SafetyGuard.IsPathSafeToDelete(entry.Command))
-                        return SafetyGuard.SafeDeleteFile(entry.Command);
+                        return new DeletionExecutor().Execute(
+                            new DeletionRequest(
+                                entry.Command,
+                                Operation: "autorun-delete"),
+                            DeleteOptions.Default).IsConfirmed;
                     var disabled = entry.Command + ".disabled";
                     if (File.Exists(disabled) && SafetyGuard.IsPathSafeToDelete(disabled))
-                        return SafetyGuard.SafeDeleteFile(disabled);
+                        return new DeletionExecutor().Execute(
+                            new DeletionRequest(
+                                disabled,
+                                Operation: "autorun-delete-disabled"),
+                            DeleteOptions.Default).IsConfirmed;
                     return false;
 
                 case AutorunType.Service:

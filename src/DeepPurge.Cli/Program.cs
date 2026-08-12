@@ -166,7 +166,11 @@ public static class Program
         long BytesFreed,
         int ItemsDeleted,
         int ItemsSkipped,
-        IReadOnlyList<string> SkippedReasons);
+        int ItemsConfirmed,
+        int ItemsPreviewed,
+        int ItemsFailed,
+        IReadOnlyList<string> SkippedReasons,
+        IReadOnlyList<DeletionResult> Results);
 
     private static async Task<int> CmdCleanAsync(ParsedArgs a, CancellationToken ct)
     {
@@ -220,7 +224,9 @@ public static class Program
                     return 2;
             }
             Console.WriteLine();
-            Console.WriteLine($"[{cat}] {(dryRun ? "would free" : "freed")} {FormatBytes(summary.BytesFreed)} ({summary.ItemsDeleted} items, {summary.ItemsSkipped} skipped)");
+            Console.WriteLine($"[{cat}] {(dryRun ? "would free" : "freed")} {FormatBytes(summary.BytesFreed)} " +
+                              $"({summary.ItemsDeleted} {(dryRun ? "planned" : "confirmed")}, " +
+                              $"{summary.ItemsSkipped} skipped, {summary.ItemsFailed} failed)");
             foreach (var reason in summary.SkippedReasons.Take(10))
                 Console.Error.WriteLine($"  skipped: {reason}");
 
@@ -229,7 +235,11 @@ public static class Program
                 summary.BytesFreed,
                 summary.ItemsDeleted,
                 summary.ItemsSkipped,
-                summary.SkippedReasons));
+                summary.ItemsConfirmed,
+                summary.ItemsPreviewed,
+                summary.ItemsFailed,
+                summary.SkippedReasons,
+                summary.Results));
             total += summary.BytesFreed;
             skippedTotal += summary.ItemsSkipped;
         }
@@ -507,7 +517,9 @@ public static class Program
             new Progress<DeleteProgress>(p => Console.Error.Write($"\r{Truncate(p.CurrentItem, 60),-60} ({p.ItemsProcessed}/{p.ItemsTotal})")),
             ct);
         Console.WriteLine();
-        Console.WriteLine($"{(dryRun ? "Would free" : "Freed")}: {FormatBytes(summary.BytesFreed)} ({summary.ItemsDeleted} entries, {summary.ItemsSkipped} skipped)");
+        Console.WriteLine($"{(dryRun ? "Would free" : "Freed")}: {FormatBytes(summary.BytesFreed)} " +
+                          $"({summary.ItemsDeleted} {(dryRun ? "planned" : "confirmed")} entries, " +
+                          $"{summary.ItemsSkipped} skipped, {summary.ItemsFailed} failed)");
         return 0;
     }
 
@@ -788,12 +800,14 @@ if ($app) {{
             case "run":
                 if (applicable.Count == 0) { Console.WriteLine("No applicable cleaners."); return 0; }
                 bool dryRun = a.HasFlag("dry-run");
-                var opt = new DeleteOptions(DryRun: dryRun, SecureDelete: false, UseRecycleBin: false);
+                var opt = new DeleteOptions(DryRun: dryRun, SecureDelete: false, UseRecycleBin: !dryRun);
                 foreach (var r in applicable)
                 {
                     var result = CleanerDefinitionRunner.Execute(r, opt);
                     var verb = dryRun ? "Would clean" : "Cleaned";
-                    Console.WriteLine($"{verb} {r.Name}: {result.ItemsDeleted} items, {result.BytesFreed / 1024} KB freed");
+                    Console.WriteLine($"{verb} {r.Name}: {result.ItemsDeleted} items, " +
+                                      $"{result.BytesFreed / 1024} KB, " +
+                                      $"{result.ItemsSkipped} skipped/{result.ItemsFailed} failed");
                 }
                 return 0;
 

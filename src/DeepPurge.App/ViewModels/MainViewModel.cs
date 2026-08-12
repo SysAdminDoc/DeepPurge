@@ -612,10 +612,24 @@ public partial class MainViewModel : ObservableObject
         IsBusy = true; StatusText = "Deleting empty folders...";
         try
         {
-            var deleted = await Task.Run(() => EmptyFolderScanner.DeleteEmptyFolders(list));
-            foreach (var f in list) EmptyFolders.Remove(f);
+            var options = new DeleteOptions(
+                DryRun: DryRunEnabled,
+                SecureDelete: SecureDeleteEnabled,
+                UseRecycleBin: !SecureDeleteEnabled);
+            var summary = await Task.Run(() => EmptyFolderScanner.DeleteEmptyFolders(
+                list,
+                options,
+                progress: null,
+                ct: default));
+            for (var i = 0; i < list.Count && i < summary.Results.Count; i++)
+            {
+                if (summary.Results[i].IsConfirmed)
+                    EmptyFolders.Remove(list[i]);
+            }
             EmptyFoldersBadge = EmptyFolders.Count > 0 ? EmptyFolders.Count.ToString() : "";
-            StatusText = $"Deleted {deleted} empty folders";
+            StatusText = $"{(options.DryRun ? "Would delete" : "Deleted")} " +
+                         $"{summary.ItemsDeleted} empty folders" +
+                         (summary.ItemsSkipped > 0 ? $" ({summary.ItemsSkipped} skipped)" : "");
         }
         finally { IsBusy = false; }
     }
@@ -773,10 +787,18 @@ public partial class MainViewModel : ObservableObject
 
             if (!summary.DryRun)
             {
+                var confirmedPaths = summary.Results
+                    .Where(r => r.IsConfirmed)
+                    .Select(r => r.Path)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
                 CurrentScanResult.RegistryLeftovers.RemoveAll(
-                    i => i.IsSelected && i.Confidence != LeftoverConfidence.Risky);
+                    i => i.IsSelected &&
+                         i.Confidence != LeftoverConfidence.Risky &&
+                         confirmedPaths.Contains(i.Path));
                 CurrentScanResult.FileLeftovers.RemoveAll(
-                    i => i.IsSelected && i.Confidence != LeftoverConfidence.Risky);
+                    i => i.IsSelected &&
+                         i.Confidence != LeftoverConfidence.Risky &&
+                         confirmedPaths.Contains(i.Path));
                 RefreshLeftoverCollections();
                 UpdateLeftoverStats();
             }

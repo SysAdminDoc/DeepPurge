@@ -96,21 +96,42 @@ public static class JunkFilesCleaner
             .SelectMany(c => c.Files)
             .ToList();
 
-        long freed = 0;
-        int cleaned = 0, skipped = 0;
-        var skippedReasons = new List<string>();
+        var executor = new DeletionExecutor();
+        var results = new List<DeletionResult>(all.Count);
 
         for (int i = 0; i < all.Count; i++)
         {
-            ct.ThrowIfCancellationRequested();
             var file = all[i];
+            var request = new DeletionRequest(
+                file.Path,
+                file.IsDirectory,
+                file.Size,
+                "junk-clean");
 
             void Skip(string reason)
             {
-                skipped++;
-                skippedReasons.Add(FormatSkippedReason(reason, file.Path));
+                var result = DeletionExecutor.Skipped(
+                    request,
+                    FormatSkippedReason(reason, file.Path));
+                results.Add(result);
                 progress?.Report(new DeleteProgress(
-                    i + 1, all.Count, freed, file.Path, Skipped: true));
+                    i + 1,
+                    all.Count,
+                    options.DryRun ? results.Where(r => r.IsPreview).Sum(r => r.SizeBytes) :
+                        results.Where(r => r.IsConfirmed).Sum(r => r.SizeBytes),
+                    file.Path,
+                    Skipped: true));
+            }
+
+            if (ct.IsCancellationRequested)
+            {
+                results.Add(new DeletionResult(
+                    file.Path,
+                    DeletionOutcomeKind.Cancelled,
+                    file.Size,
+                    request.Operation,
+                    "Cancellation requested."));
+                break;
             }
 
             if (!SafetyGuard.IsJunkPathSafeToDelete(file.Path))
@@ -132,77 +153,33 @@ public static class JunkFilesCleaner
                 continue;
             }
 
-            if (options.DryRun)
+            var result = executor.Execute(request, options, ct);
+            if (!result.IsConfirmed && !result.IsPreview)
             {
-                var exists = file.IsDirectory
-                    ? Directory.Exists(file.Path)
-                    : File.Exists(file.Path);
-                if (!exists)
+                var reason = result.Outcome == DeletionOutcomeKind.Skipped &&
+                             result.Reason?.StartsWith("Missing", StringComparison.OrdinalIgnoreCase) == true
+                    ? "Missing"
+                    : result.Outcome == DeletionOutcomeKind.Failed
+                        ? $"Delete failed: {result.Reason}"
+                        : result.Reason ?? result.Outcome.ToString();
+                result = result with
                 {
-                    Skip("Missing");
-                    continue;
-                }
-
-                freed += file.Size;
-                cleaned++;
-                progress?.Report(new DeleteProgress(
-                    i + 1, all.Count, freed, file.Path, Skipped: false));
-                continue;
+                    Reason = FormatSkippedReason(reason, file.Path),
+                };
             }
-
-            try
-            {
-                if (file.IsDirectory)
-                {
-                    if (!Directory.Exists(file.Path))
-                    {
-                        Skip("Missing");
-                        continue;
-                    }
-                    var deleted = options.SecureDelete
-                        ? SecureDelete.WipeDirectory(file.Path)
-                        : Safety.SafetyGuard.SafeDeleteDirectory(file.Path);
-                    if (!deleted)
-                    {
-                        Skip("Delete failed");
-                        continue;
-                    }
-
-                    freed += file.Size;
-                    cleaned++;
-                }
-                else
-                {
-                    if (!File.Exists(file.Path))
-                    {
-                        Skip("Missing");
-                        continue;
-                    }
-
-                    var deleted = options.SecureDelete
-                        ? SecureDelete.Wipe(file.Path)
-                        : Safety.SafetyGuard.SafeDeleteFile(file.Path);
-                    if (!deleted)
-                    {
-                        Skip("Delete failed");
-                        continue;
-                    }
-
-                    freed += file.Size;
-                    cleaned++;
-                }
-            }
-            catch (Exception ex)
-            {
-                Skip($"Error: {ex.Message}");
-                continue;
-            }
-
+            results.Add(result);
+            var bytes = options.DryRun
+                ? results.Where(r => r.IsPreview).Sum(r => r.SizeBytes)
+                : results.Where(r => r.IsConfirmed).Sum(r => r.SizeBytes);
             progress?.Report(new DeleteProgress(
-                i + 1, all.Count, freed, file.Path, Skipped: false));
+                i + 1,
+                all.Count,
+                bytes,
+                file.Path,
+                Skipped: !result.IsConfirmed && !result.IsPreview));
         }
 
-        return new DeleteSummary(cleaned, skipped, freed, options.DryRun, skippedReasons);
+        return DeleteSummary.FromResults(results, options.DryRun);
     }
 
     // ─── SYSTEM TEMP ───

@@ -300,6 +300,7 @@ public class InstallSnapshotEngine
         long freed = 0;
         int total = delta.AddedFiles.Count, i = 0;
         var skippedReasons = new ConcurrentBag<string>();
+        var executor = new DeletionExecutor();
 
         await Task.Run(() =>
         {
@@ -339,21 +340,24 @@ public class InstallSnapshotEngine
                         continue;
                     }
 
-                    long size = fi.Length;
-                    if (opt.IsDestructive)
+                    var result = executor.Execute(
+                        new DeletionRequest(
+                            f.Path,
+                            ExpectedSizeBytes: fi.Length,
+                            Operation: "install-replay"),
+                        opt,
+                        ct);
+                    if (result.IsConfirmed || result.IsPreview)
                     {
-                        var deleted = opt.SecureDelete
-                            ? SecureDelete.Wipe(f.Path)
-                            : SafetyGuard.SafeDeleteFile(f.Path);
-                        if (!deleted)
-                        {
-                            skipped++;
-                            skippedReasons.Add($"Delete failed: {f.Path}");
-                            continue;
-                        }
+                        freed += result.SizeBytes;
+                        removed++;
                     }
-                    freed += size;
-                    removed++;
+                    else
+                    {
+                        skipped++;
+                        skippedReasons.Add(
+                            $"{result.Reason ?? result.Outcome.ToString()}: {f.Path}");
+                    }
                 }
                 catch (Exception ex)
                 {

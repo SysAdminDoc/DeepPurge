@@ -54,57 +54,76 @@ public static class SystemSlimmer
         IProgress<DeleteProgress>? progress = null, CancellationToken ct = default)
     {
         var selected = components.Where(c => c.IsSelected).ToList();
-        long freed = 0;
-        int cleaned = 0, skipped = 0;
+        var executor = new DeletionExecutor();
+        var results = new List<DeletionResult>(selected.Count);
 
         for (int i = 0; i < selected.Count; i++)
         {
-            ct.ThrowIfCancellationRequested();
             var comp = selected[i];
+            var request = new DeletionRequest(
+                comp.Path,
+                IsDirectory: true,
+                ExpectedSizeBytes: comp.SizeBytes,
+                Operation: "system-slim");
+
+            if (ct.IsCancellationRequested)
+            {
+                results.Add(new DeletionResult(
+                    comp.Path,
+                    DeletionOutcomeKind.Cancelled,
+                    comp.SizeBytes,
+                    request.Operation,
+                    "Cancellation requested."));
+                break;
+            }
 
             if (!SafetyGuard.IsPathSafeToDelete(comp.Path))
             {
-                skipped++;
-                progress?.Report(new DeleteProgress(i + 1, selected.Count, freed, comp.Path, true));
+                results.Add(DeletionExecutor.Skipped(request, "The path is protected or invalid."));
+                progress?.Report(new DeleteProgress(
+                    i + 1,
+                    selected.Count,
+                    CurrentBytes(results, options.DryRun),
+                    comp.Path,
+                    true));
                 continue;
             }
 
-            if (options.DryRun)
+            if (Directory.Exists(comp.Path) && SafetyGuard.IsReparsePoint(comp.Path))
             {
-                freed += comp.SizeBytes;
-                cleaned++;
-                progress?.Report(new DeleteProgress(i + 1, selected.Count, freed, comp.Path, false));
+                results.Add(DeletionExecutor.Skipped(request, "Reparse point."));
+                progress?.Report(new DeleteProgress(
+                    i + 1,
+                    selected.Count,
+                    CurrentBytes(results, options.DryRun),
+                    comp.Path,
+                    true));
                 continue;
             }
 
-            bool wasSkipped = false;
-            try
-            {
-                if (Directory.Exists(comp.Path))
-                {
-                    if (SafetyGuard.IsReparsePoint(comp.Path)) { skipped++; wasSkipped = true; }
-                    else
-                    {
-                        SafetyGuard.SafeDeleteDirectory(comp.Path);
-                        freed += comp.SizeBytes;
-                        cleaned++;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Warn($"System slimming failed for '{comp.Name}': {ex.Message}");
-                skipped++;
-                wasSkipped = true;
-            }
-            progress?.Report(new DeleteProgress(i + 1, selected.Count, freed, comp.Path, wasSkipped));
+            var result = executor.Execute(request, options, ct);
+            results.Add(result);
+            progress?.Report(new DeleteProgress(
+                i + 1,
+                selected.Count,
+                CurrentBytes(results, options.DryRun),
+                comp.Path,
+                !result.IsConfirmed && !result.IsPreview));
         }
 
-        if (!options.DryRun && cleaned > 0)
-            ActivityLog.Record("slim", $"Removed {cleaned} Windows components", freed, cleaned);
+        var summary = DeleteSummary.FromResults(results, options.DryRun);
+        if (!options.DryRun && summary.ItemsConfirmed > 0)
+            ActivityLog.Record("slim", $"Removed {summary.ItemsConfirmed} Windows components", summary.BytesConfirmed, summary.ItemsConfirmed);
 
-        return new DeleteSummary(cleaned, skipped, freed, options.DryRun);
+        return summary;
     }
+
+    private static long CurrentBytes(
+        IReadOnlyList<DeletionResult> results,
+        bool dryRun)
+        => dryRun
+            ? results.Where(r => r.IsPreview).Sum(r => r.SizeBytes)
+            : results.Where(r => r.IsConfirmed).Sum(r => r.SizeBytes);
 
     private static void ScanLogFolders(List<SlimmableComponent> items)
     {

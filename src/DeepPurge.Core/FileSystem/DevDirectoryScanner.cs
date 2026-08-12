@@ -34,51 +34,76 @@ public static class DevDirectoryScanner
         IProgress<DeleteProgress>? progress = null, CancellationToken ct = default)
     {
         var selected = directories.Where(d => d.IsSelected).ToList();
-        long freed = 0;
-        int cleaned = 0, skipped = 0;
+        var executor = new DeletionExecutor();
+        var results = new List<DeletionResult>(selected.Count);
 
         for (int i = 0; i < selected.Count; i++)
         {
-            ct.ThrowIfCancellationRequested();
             var dir = selected[i];
+            var request = new DeletionRequest(
+                dir.Path,
+                IsDirectory: true,
+                ExpectedSizeBytes: dir.SizeBytes,
+                Operation: "dev-clean");
+
+            if (ct.IsCancellationRequested)
+            {
+                results.Add(new DeletionResult(
+                    dir.Path,
+                    DeletionOutcomeKind.Cancelled,
+                    dir.SizeBytes,
+                    request.Operation,
+                    "Cancellation requested."));
+                break;
+            }
 
             if (!SafetyGuard.IsPathSafeToDelete(dir.Path))
             {
-                skipped++;
-                progress?.Report(new DeleteProgress(i + 1, selected.Count, freed, dir.Path, true));
+                results.Add(DeletionExecutor.Skipped(request, "The path is protected or invalid."));
+                progress?.Report(new DeleteProgress(
+                    i + 1,
+                    selected.Count,
+                    CurrentBytes(results, options.DryRun),
+                    dir.Path,
+                    true));
                 continue;
             }
 
-            if (options.DryRun)
+            if (Directory.Exists(dir.Path) && SafetyGuard.IsReparsePoint(dir.Path))
             {
-                freed += dir.SizeBytes;
-                cleaned++;
-                progress?.Report(new DeleteProgress(i + 1, selected.Count, freed, dir.Path, false));
+                results.Add(DeletionExecutor.Skipped(request, "Reparse point."));
+                progress?.Report(new DeleteProgress(
+                    i + 1,
+                    selected.Count,
+                    CurrentBytes(results, options.DryRun),
+                    dir.Path,
+                    true));
                 continue;
             }
 
-            try
-            {
-                if (Directory.Exists(dir.Path) && !SafetyGuard.IsReparsePoint(dir.Path))
-                {
-                    SafetyGuard.SafeDeleteDirectory(dir.Path);
-                    freed += dir.SizeBytes;
-                    cleaned++;
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Warn($"Dev directory cleanup failed for '{dir.Path}': {ex.Message}");
-                skipped++;
-            }
-            progress?.Report(new DeleteProgress(i + 1, selected.Count, freed, dir.Path, false));
+            var result = executor.Execute(request, options, ct);
+            results.Add(result);
+            progress?.Report(new DeleteProgress(
+                i + 1,
+                selected.Count,
+                CurrentBytes(results, options.DryRun),
+                dir.Path,
+                !result.IsConfirmed && !result.IsPreview));
         }
 
-        if (!options.DryRun && cleaned > 0)
-            ActivityLog.Record("dev-clean", $"Removed {cleaned} dev directories", freed, cleaned);
+        var summary = DeleteSummary.FromResults(results, options.DryRun);
+        if (!options.DryRun && summary.ItemsConfirmed > 0)
+            ActivityLog.Record("dev-clean", $"Removed {summary.ItemsConfirmed} dev directories", summary.BytesConfirmed, summary.ItemsConfirmed);
 
-        return new DeleteSummary(cleaned, skipped, freed, options.DryRun);
+        return summary;
     }
+
+    private static long CurrentBytes(
+        IReadOnlyList<DeletionResult> results,
+        bool dryRun)
+        => dryRun
+            ? results.Where(r => r.IsPreview).Sum(r => r.SizeBytes)
+            : results.Where(r => r.IsConfirmed).Sum(r => r.SizeBytes);
 
     private static void ScanRecursive(string dir, List<DevDirectory> results, CancellationToken ct, int depth, int maxDepth)
     {

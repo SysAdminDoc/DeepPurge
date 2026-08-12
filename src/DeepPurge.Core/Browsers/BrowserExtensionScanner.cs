@@ -420,17 +420,17 @@ public static class BrowserExtensionScanner
                 packageKind = ExtensionPackageKind.Directory;
             }
 
-            var removed = packageKind switch
-            {
-                ExtensionPackageKind.Directory =>
-                    SafetyGuard.SafeDeleteDirectory(packagePath),
-                ExtensionPackageKind.Xpi =>
-                    SafetyGuard.SafeDeleteFile(packagePath),
-                _ => false,
-            };
+            var result = new DeletionExecutor().Execute(
+                new DeletionRequest(
+                    packagePath,
+                    packageKind == ExtensionPackageKind.Directory,
+                    Operation: "browser-extension-remove"),
+                DeleteOptions.Default);
+            var removed = result.IsConfirmed;
             reason = removed
                 ? ""
-                : "The exact extension package could not be deleted; rescan after closing the browser.";
+                : result.Reason ??
+                  "The exact extension package could not be deleted; rescan after closing the browser.";
             return removed;
         }
         catch (Exception ex)

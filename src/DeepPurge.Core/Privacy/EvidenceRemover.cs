@@ -92,22 +92,41 @@ public static class EvidenceRemover
             .SelectMany(c => c.Items.Select(i => (cat: c, item: i)))
             .ToList();
 
-        long freed = 0;
-        int cleaned = 0, skipped = 0;
-        var skippedReasons = new List<string>();
+        var executor = new DeletionExecutor();
+        var results = new List<DeletionResult>(all.Count);
 
         for (int i = 0; i < all.Count; i++)
         {
-            ct.ThrowIfCancellationRequested();
             var (_, item) = all[i];
             var label = string.IsNullOrEmpty(item.Path) ? item.Command : item.Path;
+            var request = new DeletionRequest(
+                item.Path,
+                item.IsDirectory,
+                item.SizeBytes,
+                item.IsCommand ? "trace-command" : "trace-clean");
 
             void Skip(string reason)
             {
-                skipped++;
-                skippedReasons.Add(FormatSkippedReason(reason, label));
+                results.Add(DeletionExecutor.Skipped(
+                    request,
+                    FormatSkippedReason(reason, label)));
                 progress?.Report(new DeleteProgress(
-                    i + 1, all.Count, freed, label, Skipped: true));
+                    i + 1,
+                    all.Count,
+                    CurrentBytes(results, options.DryRun),
+                    label,
+                    Skipped: true));
+            }
+
+            if (ct.IsCancellationRequested)
+            {
+                results.Add(new DeletionResult(
+                    label,
+                    DeletionOutcomeKind.Cancelled,
+                    item.SizeBytes,
+                    request.Operation,
+                    "Cancellation requested."));
+                break;
             }
 
             if (!item.IsCommand && !string.IsNullOrEmpty(item.Path) &&
@@ -120,12 +139,40 @@ public static class EvidenceRemover
                 }
                 else
                 {
-                    freed += cookieResult.DeletedCookies > 0 ? item.SizeBytes / Math.Max(cookieResult.TotalCookies, 1) * cookieResult.DeletedCookies : 0;
-                    cleaned += cookieResult.DeletedCookies > 0 ? 1 : 0;
+                    if (cookieResult.DeletedCookies > 0)
+                    {
+                        var bytes = item.SizeBytes / Math.Max(cookieResult.TotalCookies, 1) *
+                                    cookieResult.DeletedCookies;
+                        var cookieOutcome = options.DryRun
+                            ? DeletionOutcomeKind.Preview
+                            : DeletionOutcomeKind.PermanentlyDeleted;
+                        results.Add(new DeletionResult(
+                            item.Path,
+                            cookieOutcome,
+                            bytes,
+                            "cookie-clean",
+                            options.DryRun ? "Would remove non-whitelisted cookies." : null));
+                        if (!options.DryRun)
+                        {
+                            DeletionManifest.Record(
+                                item.Path,
+                                "database",
+                                bytes,
+                                "cookie-clean",
+                                outcome: "PermanentlyDeleted");
+                        }
+                    }
+                    else
+                    {
+                        Skip("No cookies matched");
+                    }
+
                     progress?.Report(new DeleteProgress(
-                        i + 1, all.Count, freed,
+                        i + 1,
+                        all.Count,
+                        CurrentBytes(results, options.DryRun),
                         $"{item.Path} ({cookieResult.PreservedCookies} kept, {cookieResult.DeletedCookies} removed)",
-                        Skipped: false));
+                        Skipped: cookieResult.DeletedCookies == 0));
                 }
                 continue;
             }
@@ -155,30 +202,18 @@ public static class EvidenceRemover
                 continue;
             }
 
-            if (options.DryRun)
+            if (item.IsCommand && !string.IsNullOrEmpty(item.Command))
             {
-                if (!item.IsCommand && !string.IsNullOrEmpty(item.Path))
+                if (options.DryRun)
                 {
-                    var exists = item.IsDirectory
-                        ? Directory.Exists(item.Path)
-                        : File.Exists(item.Path);
-                    if (!exists)
-                    {
-                        Skip("Missing");
-                        continue;
-                    }
+                    results.Add(new DeletionResult(
+                        label,
+                        DeletionOutcomeKind.Preview,
+                        item.SizeBytes,
+                        request.Operation,
+                        "Would run command."));
                 }
-
-                freed += item.SizeBytes;
-                cleaned++;
-                progress?.Report(new DeleteProgress(
-                    i + 1, all.Count, freed, label, Skipped: false));
-                continue;
-            }
-
-            try
-            {
-                if (item.IsCommand && !string.IsNullOrEmpty(item.Command))
+                else
                 {
                     var commandFailure = RunCommand(item.Command, item.CommandArgs);
                     if (commandFailure != null)
@@ -186,62 +221,35 @@ public static class EvidenceRemover
                         Skip(commandFailure);
                         continue;
                     }
-
-                    freed += item.SizeBytes;
-                    cleaned++;
-                }
-                else if (item.IsDirectory)
-                {
-                    if (!Directory.Exists(item.Path))
-                    {
-                        Skip("Missing");
-                        continue;
-                    }
-                    var deleted = options.SecureDelete
-                        ? SecureDelete.WipeDirectory(item.Path)
-                        : Safety.SafetyGuard.SafeDeleteDirectory(item.Path);
-                    if (!deleted)
-                    {
-                        Skip("Delete failed");
-                        continue;
-                    }
-
-                    freed += item.SizeBytes;
-                    cleaned++;
-                }
-                else
-                {
-                    if (!File.Exists(item.Path))
-                    {
-                        Skip("Missing");
-                        continue;
-                    }
-
-                    var deleted = options.SecureDelete
-                        ? SecureDelete.Wipe(item.Path)
-                        : Safety.SafetyGuard.SafeDeleteFile(item.Path);
-                    if (!deleted)
-                    {
-                        Skip("Delete failed");
-                        continue;
-                    }
-
-                    freed += item.SizeBytes;
-                    cleaned++;
+                    results.Add(DeletionExecutor.ConfirmedExternal(
+                        label,
+                        item.SizeBytes,
+                        request.Operation));
                 }
             }
-            catch (Exception ex)
+            else
             {
-                Skip($"Error: {ex.Message}");
-                continue;
+                var result = executor.Execute(request, options, ct);
+                results.Add(result);
             }
 
             progress?.Report(new DeleteProgress(
-                i + 1, all.Count, freed, label, Skipped: false));
+                i + 1,
+                all.Count,
+                CurrentBytes(results, options.DryRun),
+                label,
+                Skipped: !results[^1].IsConfirmed && !results[^1].IsPreview));
         }
 
-        return new DeleteSummary(cleaned, skipped, freed, options.DryRun, skippedReasons);
+        return DeleteSummary.FromResults(results, options.DryRun);
     }
+
+    private static long CurrentBytes(
+        IReadOnlyList<DeletionResult> results,
+        bool dryRun)
+        => dryRun
+            ? results.Where(r => r.IsPreview).Sum(r => r.SizeBytes)
+            : results.Where(r => r.IsConfirmed).Sum(r => r.SizeBytes);
 
     // ═══════════════════════════════════════════════════════
     //  Scanners

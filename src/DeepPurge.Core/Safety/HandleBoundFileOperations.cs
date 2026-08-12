@@ -278,6 +278,13 @@ internal static class HandleBoundFileOperations
     private const int ErrorPathNotFound = 3;
 
     internal static bool DeleteFile(string path, out string reason)
+        => DeleteFile(path, "delete", out reason, idempotentMissing: true);
+
+    internal static bool DeleteFile(
+        string path,
+        string operation,
+        out string reason,
+        bool idempotentMissing = true)
     {
         if (!SafetyGuard.IsPathSafeToDelete(path))
         {
@@ -302,7 +309,8 @@ internal static class HandleBoundFileOperations
                 out var target,
                 out reason,
                 out var error))
-            return error is ErrorFileNotFound or ErrorPathNotFound;
+            return idempotentMissing &&
+                (error is ErrorFileNotFound or ErrorPathNotFound);
 
         var recordedPath = target!.CurrentPath;
         var size = target.SizeBytes;
@@ -311,12 +319,23 @@ internal static class HandleBoundFileOperations
             deleted = target.TryDelete(out reason);
 
         if (deleted)
-            Diagnostics.DeletionManifest.Record(recordedPath, "file", size, "delete");
+            Diagnostics.DeletionManifest.Record(
+                recordedPath,
+                "file",
+                size,
+                operation,
+                outcome: "PermanentlyDeleted");
         return deleted;
     }
 
     internal static bool DeleteDirectoryTree(string path, out string reason)
-        => DeleteDirectoryTree(path, secure: false, out reason);
+        => DeleteDirectoryTree(path, "delete", out reason);
+
+    internal static bool DeleteDirectoryTree(
+        string path,
+        string operation,
+        out string reason)
+        => DeleteDirectoryTree(path, secure: false, operation: operation, out reason);
 
     /// <summary>
     /// Deletes an app-owned or explicitly approved file without applying the
@@ -519,10 +538,17 @@ internal static class HandleBoundFileOperations
                 secure: false,
                 recordManifest: false,
                 requireGlobalSafety: false,
+                operation: "delete",
                 out reason);
     }
 
     internal static bool SecureDeleteFile(string path, out string reason)
+        => SecureDeleteFile(path, "secure-delete", out reason);
+
+    internal static bool SecureDeleteFile(
+        string path,
+        string operation,
+        out string reason)
     {
         if (!SafetyGuard.IsPathSafeToDelete(path))
         {
@@ -565,14 +591,29 @@ internal static class HandleBoundFileOperations
         }
 
         if (deleted)
-            Diagnostics.DeletionManifest.Record(recordedPath, "file", size, "secure-delete");
+            Diagnostics.DeletionManifest.Record(
+                recordedPath,
+                "file",
+                size,
+                operation,
+                outcome: "SecurelyDeleted");
         return deleted;
     }
 
     internal static bool SecureDeleteDirectoryTree(string path, out string reason)
-        => DeleteDirectoryTree(path, secure: true, out reason);
+        => SecureDeleteDirectoryTree(path, "secure-delete-recursive", out reason);
 
-    private static bool DeleteDirectoryTree(string path, bool secure, out string reason)
+    internal static bool SecureDeleteDirectoryTree(
+        string path,
+        string operation,
+        out string reason)
+        => DeleteDirectoryTree(path, secure: true, operation: operation, out reason);
+
+    private static bool DeleteDirectoryTree(
+        string path,
+        bool secure,
+        string operation,
+        out string reason)
     {
         if (!SafetyGuard.IsPathSafeToDelete(path))
         {
@@ -608,15 +649,17 @@ internal static class HandleBoundFileOperations
                 secure,
                 recordManifest: true,
                 requireGlobalSafety: true,
+                operation: operation,
                 out reason);
 
         if (deleted)
         {
-            Diagnostics.DeletionManifest.Record(
-                recordedPath,
-                "directory",
-                0,
-                secure ? "secure-delete-recursive" : "delete-recursive");
+                Diagnostics.DeletionManifest.Record(
+                    recordedPath,
+                    "directory",
+                    0,
+                    operation,
+                    outcome: secure ? "SecurelyDeleted" : "PermanentlyDeleted");
         }
         return deleted;
     }
@@ -627,6 +670,7 @@ internal static class HandleBoundFileOperations
         bool secure,
         bool recordManifest,
         bool requireGlobalSafety,
+        string operation,
         out string reason)
     {
         string[] entries;
@@ -673,6 +717,7 @@ internal static class HandleBoundFileOperations
                         secure,
                         recordManifest,
                         requireGlobalSafety,
+                        operation,
                         out reason);
                 }
                 else
@@ -697,7 +742,8 @@ internal static class HandleBoundFileOperations
                     recordedPath,
                     "file",
                     size,
-                    secure ? "secure-delete" : "delete");
+                    operation,
+                    outcome: secure ? "SecurelyDeleted" : "PermanentlyDeleted");
             }
         }
 
