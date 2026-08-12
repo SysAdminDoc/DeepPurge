@@ -274,6 +274,13 @@ public class Winapp2Runner
                 "The path is protected or invalid."));
             return results;
         }
+        if (CleanerDefinitionRunner.IsProtectedCleanerPath(dir))
+        {
+            results.Add(DeletionExecutor.Skipped(
+                new DeletionRequest(dir, IsDirectory: true, Operation: "winapp2-file-key"),
+                "Protected Windows package-manager state."));
+            return results;
+        }
 
         IEnumerable<string> files;
         try

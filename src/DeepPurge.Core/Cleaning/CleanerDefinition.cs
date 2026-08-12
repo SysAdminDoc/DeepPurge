@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Security.Cryptography;
 using DeepPurge.Core.App;
 using DeepPurge.Core.Diagnostics;
 using DeepPurge.Core.Registry;
@@ -38,18 +39,58 @@ public enum CleanerValidationSeverity { Info, Warning, Error }
 
 public enum CleanerRiskLevel { Low, Medium, High, Blocked }
 
+public enum CleanerTrustState
+{
+    TrustedBundled,
+    LocalReview,
+    LegacyReview,
+    Quarantined,
+    Blocked,
+}
+
+/// <summary>
+/// Machine-readable target diff used before a cleaner database is replaced.
+/// Targets are expanded/normalized before comparison so a source update cannot
+/// silently widen its deletion scope behind a changed variable or rule name.
+/// </summary>
+public sealed record CleanerTargetDiff(
+    int PreviousRuleCount,
+    int CandidateRuleCount,
+    IReadOnlyList<string> AddedTargets,
+    IReadOnlyList<string> RemovedTargets,
+    IReadOnlyList<string> AddedRegistryTargets,
+    IReadOnlyList<string> RemovedRegistryTargets)
+{
+    public bool HasChanges => AddedTargets.Count > 0 || RemovedTargets.Count > 0 ||
+                              AddedRegistryTargets.Count > 0 || RemovedRegistryTargets.Count > 0;
+    public int AddedTargetCount => AddedTargets.Count + AddedRegistryTargets.Count;
+    public int RemovedTargetCount => RemovedTargets.Count + RemovedRegistryTargets.Count;
+    public string Summary => HasChanges
+        ? $"+{AddedTargetCount} target(s), -{RemovedTargetCount} target(s)"
+        : "No target changes";
+
+    public static CleanerTargetDiff Empty(int previousRules = 0, int candidateRules = 0)
+        => new(previousRules, candidateRules, Array.Empty<string>(), Array.Empty<string>(),
+            Array.Empty<string>(), Array.Empty<string>());
+}
+
 public record CleanerValidationIssue(
     CleanerValidationSeverity Severity,
     string RuleName,
     string Field,
     string Message);
 
-public class CleanerValidationReport
+public record CleanerValidationReport
 {
     public string FilePath { get; init; } = "";
     public int SchemaVersion { get; init; } = CleanerDefinitionRunner.CurrentSchemaVersion;
     public string SchemaId { get; init; } = CleanerDefinitionRunner.SchemaId;
     public string Provenance { get; init; } = "";
+    public string Origin { get; init; } = "";
+    public string ContentSha256 { get; init; } = "";
+    public CleanerTrustState TrustState { get; init; } = CleanerTrustState.LocalReview;
+    public string? LastKnownGoodPath { get; init; }
+    public string? QuarantinePath { get; init; }
     public List<CleanerRule> Rules { get; init; } = new();
     public List<CleanerValidationIssue> Issues { get; init; } = new();
     public CleanerRiskLevel RiskLevel { get; init; } = CleanerRiskLevel.Low;
@@ -62,6 +103,18 @@ public class CleanerValidationReport
     public string Status => IsValid ? "Ready" : "Blocked";
     public string SchemaDisplay => SchemaVersion <= 0 ? "legacy array" : $"v{SchemaVersion}";
     public string ProvenanceDisplay => string.IsNullOrWhiteSpace(Provenance) ? "(none)" : Provenance;
+    public string OriginDisplay => string.IsNullOrWhiteSpace(Origin) ? "(unknown)" : Origin;
+    public string TrustDisplay => TrustState switch
+    {
+        CleanerTrustState.TrustedBundled => "Trusted bundled",
+        CleanerTrustState.LocalReview => "Local review",
+        CleanerTrustState.LegacyReview => "Legacy review",
+        CleanerTrustState.Quarantined => "Quarantined",
+        _ => "Blocked",
+    };
+    public string HashDisplay => string.IsNullOrWhiteSpace(ContentSha256)
+        ? "(unavailable)"
+        : ContentSha256.Length <= 12 ? ContentSha256 : ContentSha256[..12];
     public string RiskLabel => RiskLevel.ToString();
     public int ErrorCount => Issues.Count(i => i.Severity == CleanerValidationSeverity.Error);
     public int WarningCount => Issues.Count(i => i.Severity == CleanerValidationSeverity.Warning);
@@ -101,6 +154,86 @@ public static class CleanerDefinitionRunner
         "$schema", "Schema", "SchemaVersion", "Rules", "Provenance",
     };
 
+    public static CleanerTargetDiff CompareTargets(
+        IEnumerable<CleanerRule> previous,
+        IEnumerable<CleanerRule> candidate)
+    {
+        var oldRules = previous.ToList();
+        var newRules = candidate.ToList();
+        var oldTargets = oldRules.SelectMany(TargetsForRule)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var newTargets = newRules.SelectMany(TargetsForRule)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var oldRegistry = oldRules.SelectMany(r => r.Registry.Select(NormalizeTarget))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var newRegistry = newRules.SelectMany(r => r.Registry.Select(NormalizeTarget))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return new CleanerTargetDiff(
+            oldRules.Count,
+            newRules.Count,
+            newTargets.Except(oldTargets, StringComparer.OrdinalIgnoreCase).OrderBy(v => v, StringComparer.OrdinalIgnoreCase).ToList(),
+            oldTargets.Except(newTargets, StringComparer.OrdinalIgnoreCase).OrderBy(v => v, StringComparer.OrdinalIgnoreCase).ToList(),
+            newRegistry.Except(oldRegistry, StringComparer.OrdinalIgnoreCase).OrderBy(v => v, StringComparer.OrdinalIgnoreCase).ToList(),
+            oldRegistry.Except(newRegistry, StringComparer.OrdinalIgnoreCase).OrderBy(v => v, StringComparer.OrdinalIgnoreCase).ToList());
+    }
+
+    public static CleanerTargetDiff CompareWinapp2Targets(
+        IEnumerable<Winapp2Entry> previous,
+        IEnumerable<Winapp2Entry> candidate)
+    {
+        var oldEntries = previous.ToList();
+        var newEntries = candidate.ToList();
+        var oldTargets = oldEntries.SelectMany(TargetsForWinapp2Entry)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var newTargets = newEntries.SelectMany(TargetsForWinapp2Entry)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var oldRegistry = oldEntries.SelectMany(RegistryTargetsForWinapp2Entry)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var newRegistry = newEntries.SelectMany(RegistryTargetsForWinapp2Entry)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return new CleanerTargetDiff(
+            oldEntries.Count,
+            newEntries.Count,
+            newTargets.Except(oldTargets, StringComparer.OrdinalIgnoreCase).OrderBy(v => v, StringComparer.OrdinalIgnoreCase).ToList(),
+            oldTargets.Except(newTargets, StringComparer.OrdinalIgnoreCase).OrderBy(v => v, StringComparer.OrdinalIgnoreCase).ToList(),
+            newRegistry.Except(oldRegistry, StringComparer.OrdinalIgnoreCase).OrderBy(v => v, StringComparer.OrdinalIgnoreCase).ToList(),
+            oldRegistry.Except(newRegistry, StringComparer.OrdinalIgnoreCase).OrderBy(v => v, StringComparer.OrdinalIgnoreCase).ToList());
+    }
+
+    internal static bool IsProtectedCleanerPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return false;
+        var normalized = path.Replace('/', '\\');
+        return (normalized.Contains("\\Microsoft.DesktopAppInstaller_", StringComparison.OrdinalIgnoreCase) &&
+                normalized.Contains("\\LocalState", StringComparison.OrdinalIgnoreCase)) ||
+               normalized.Contains("\\Microsoft\\WinGet\\", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static IEnumerable<string> TargetsForRule(CleanerRule rule)
+        => rule.Files.Select(file => NormalizeTarget(
+                $"{Environment.ExpandEnvironmentVariables(file.Path)}|{file.Pattern}|recurse={file.Recurse}|removeSelf={file.RemoveSelf}"))
+            .Concat(rule.DetectFile.Select(path => NormalizeTarget(Environment.ExpandEnvironmentVariables(path))));
+
+    private static IEnumerable<string> TargetsForWinapp2Entry(Winapp2Entry entry)
+        => entry.FileKeys.Select(NormalizeWinapp2FileTarget)
+            .Concat(entry.DetectFile.Select(path => NormalizeTarget(Environment.ExpandEnvironmentVariables(path))));
+
+    private static IEnumerable<string> RegistryTargetsForWinapp2Entry(Winapp2Entry entry)
+        => entry.RegKeys.Select(NormalizeTarget)
+            .Concat(entry.Detect.Select(NormalizeTarget));
+
+    private static string NormalizeWinapp2FileTarget(string raw)
+    {
+        var parts = raw.Split('|');
+        var path = parts.Length == 0 ? raw : Environment.ExpandEnvironmentVariables(parts[0]);
+        return NormalizeTarget(string.Join('|', new[] { path }.Concat(parts.Skip(1))));
+    }
+
+    private static string NormalizeTarget(string value)
+        => value.Trim().Replace('/', '\\');
+
     public static List<CleanerRule> LoadAll()
     {
         var rules = new List<CleanerRule>();
@@ -131,7 +264,32 @@ public static class CleanerDefinitionRunner
             if (!Directory.Exists(dir)) return reports;
 
             foreach (var file in Directory.GetFiles(dir, "*.cleaner.json"))
-                reports.Add(ValidateFile(file));
+            {
+                var report = ValidateFile(file);
+                if (report.IsValid)
+                {
+                    reports.Add(report with { LastKnownGoodPath = PreserveLastKnownGood(file) });
+                    continue;
+                }
+
+                var quarantine = QuarantineInvalid(file, report.ContentSha256, out var quarantineReason);
+                reports.Add(report with
+                {
+                    TrustState = quarantine is null ? CleanerTrustState.Blocked : CleanerTrustState.Quarantined,
+                    QuarantinePath = quarantine,
+                    LastKnownGoodPath = ExistingLastKnownGood(file),
+                    Issues = quarantine is null
+                        ? report.Issues.Concat(new[]
+                        {
+                            new CleanerValidationIssue(
+                                CleanerValidationSeverity.Error,
+                                "(file)",
+                                "Quarantine",
+                                quarantineReason),
+                        }).ToList()
+                        : report.Issues,
+                });
+            }
         }
         catch (Exception ex) { Log.Warn($"Cleaner validation scan: {ex.Message}"); }
         return reports;
@@ -156,9 +314,11 @@ public static class CleanerDefinitionRunner
             };
         }
 
+        var contentSha256 = "";
         try
         {
             var json = File.ReadAllText(filePath);
+            contentSha256 = ComputeFileSha256(filePath);
             var document = ParseDocument(json);
             return ValidateRules(
                 document.Rules,
@@ -166,13 +326,19 @@ public static class CleanerDefinitionRunner
                 document.Issues,
                 document.SchemaVersion,
                 document.SchemaId,
-                document.Provenance);
+                document.Provenance,
+                OriginFor(filePath, document.Provenance),
+                TrustFor(document.SchemaVersion, document.Provenance),
+                contentSha256);
         }
         catch (JsonException ex)
         {
             return new CleanerValidationReport
             {
                 FilePath = filePath,
+                Origin = "Local file",
+                ContentSha256 = contentSha256,
+                TrustState = CleanerTrustState.Blocked,
                 RiskLevel = CleanerRiskLevel.Blocked,
                 Issues =
                 [
@@ -189,6 +355,9 @@ public static class CleanerDefinitionRunner
             return new CleanerValidationReport
             {
                 FilePath = filePath,
+                Origin = "Local file",
+                ContentSha256 = contentSha256,
+                TrustState = CleanerTrustState.Blocked,
                 RiskLevel = CleanerRiskLevel.Blocked,
                 Issues =
                 [
@@ -211,7 +380,10 @@ public static class CleanerDefinitionRunner
         List<CleanerValidationIssue>? initialIssues = null,
         int schemaVersion = CurrentSchemaVersion,
         string? schemaId = null,
-        string provenance = "")
+        string provenance = "",
+        string? origin = null,
+        CleanerTrustState? trustState = null,
+        string contentSha256 = "")
     {
         var ruleList = rules.ToList();
         var issues = initialIssues ?? new List<CleanerValidationIssue>();
@@ -271,6 +443,9 @@ public static class CleanerDefinitionRunner
             SchemaVersion = schemaVersion,
             SchemaId = string.IsNullOrWhiteSpace(schemaId) ? SchemaId : schemaId,
             Provenance = provenance,
+            Origin = origin ?? (source == "(memory)" ? "In-memory" : source),
+            ContentSha256 = contentSha256,
+            TrustState = trustState ?? TrustFor(schemaVersion, provenance),
             Rules = ruleList,
             Issues = issues,
             RiskLevel = risk,
@@ -736,6 +911,8 @@ public static class CleanerDefinitionRunner
             {
                 if (!SafetyGuard.IsPathSafeToDelete(expanded))
                     AddIssue(issues, CleanerValidationSeverity.Error, ruleName, field, "SafetyGuard blocks this file target.");
+                else if (IsProtectedCleanerPath(expanded))
+                    AddIssue(issues, CleanerValidationSeverity.Error, ruleName, field, "DeepPurge protects Windows package-manager state from cleaner rules.");
             }
             catch (Exception ex)
             {
@@ -825,6 +1002,77 @@ public static class CleanerDefinitionRunner
         }
 
         return $"rule[{index}]";
+    }
+
+    private static string OriginFor(string filePath, string provenance)
+        => provenance.StartsWith("DeepPurge bundled", StringComparison.OrdinalIgnoreCase)
+            ? "DeepPurge bundled"
+            : string.IsNullOrWhiteSpace(provenance) ? "Local file" : provenance;
+
+    private static CleanerTrustState TrustFor(int schemaVersion, string provenance)
+        => provenance.StartsWith("DeepPurge bundled", StringComparison.OrdinalIgnoreCase)
+            ? CleanerTrustState.TrustedBundled
+            : schemaVersion <= 0
+                ? CleanerTrustState.LegacyReview
+                : CleanerTrustState.LocalReview;
+
+    private static string? PreserveLastKnownGood(string filePath)
+    {
+        try
+        {
+            var directory = Path.Combine(DataPaths.Cleaners, "LastKnownGood");
+            Directory.CreateDirectory(directory);
+            var target = Path.Combine(directory, Path.GetFileName(filePath));
+            File.Copy(filePath, target, overwrite: true);
+            return target;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Cleaner last-known-good copy failed for '{filePath}': {ex.Message}");
+            return null;
+        }
+    }
+
+    private static string? ExistingLastKnownGood(string filePath)
+    {
+        var path = Path.Combine(DataPaths.Cleaners, "LastKnownGood", Path.GetFileName(filePath));
+        return File.Exists(path) ? path : null;
+    }
+
+    private static string? QuarantineInvalid(
+        string filePath,
+        string contentSha256,
+        out string reason)
+    {
+        try
+        {
+            if (SafetyGuard.IsReparsePoint(filePath))
+            {
+                reason = "The invalid cleaner file is a reparse point and cannot be quarantined safely.";
+                return null;
+            }
+
+            var directory = Path.Combine(DataPaths.Cleaners, "Quarantine");
+            Directory.CreateDirectory(directory);
+            var hash = string.IsNullOrWhiteSpace(contentSha256) ? Guid.NewGuid().ToString("N") : contentSha256[..Math.Min(12, contentSha256.Length)];
+            var target = Path.Combine(
+                directory,
+                $"{Path.GetFileNameWithoutExtension(filePath)}-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{hash}.cleaner.json");
+            File.Move(filePath, target, overwrite: false);
+            reason = "";
+            return target;
+        }
+        catch (Exception ex)
+        {
+            reason = $"Could not quarantine invalid cleaner definition: {ex.Message}";
+            return null;
+        }
+    }
+
+    private static string ComputeFileSha256(string path)
+    {
+        using var stream = File.OpenRead(path);
+        return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
     }
 
     private static void EnsureBundledCleaners()

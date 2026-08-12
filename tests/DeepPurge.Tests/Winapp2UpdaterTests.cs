@@ -87,6 +87,100 @@ public class Winapp2UpdaterTests
     }
 
     [Fact]
+    public async Task CommitDownloadedDatabaseAsync_reports_expanded_target_diff()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var ct = TestContext.Current.CancellationToken;
+            var localPath = Path.Combine(root, "winapp2.ini");
+            var metadataPath = Path.Combine(root, "winapp2.metadata.json");
+            var backupDirectory = Path.Combine(root, "Backups");
+            await File.WriteAllBytesAsync(localPath, Winapp2BytesWithTarget("Old"), ct);
+
+            var result = await Winapp2Updater.CommitDownloadedDatabaseAsync(
+                Winapp2BytesWithTarget("New"),
+                Remote("abcddiff12345678", DateTime.UtcNow),
+                localPath,
+                metadataPath,
+                backupDirectory,
+                minimumBytes: 100,
+                ct: ct);
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.NotNull(result.Diff);
+            Assert.True(result.Diff!.HasChanges);
+            Assert.Contains(Path.Combine(Path.GetTempPath(), "Old"), result.Diff.RemovedTargets[0]);
+            Assert.Contains(Path.Combine(Path.GetTempPath(), "New"), result.Diff.AddedTargets[0]);
+            Assert.Equal(result.Diff.Summary, Winapp2Updater.ReadMetadata(metadataPath)!.TargetDiff!.Summary);
+        }
+        finally { TryDeleteDirectory(root); }
+    }
+
+    [Fact]
+    public async Task CommitDownloadedDatabaseAsync_restores_previous_file_when_metadata_commit_fails()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var ct = TestContext.Current.CancellationToken;
+            var localPath = Path.Combine(root, "winapp2.ini");
+            var metadataPath = Path.Combine(root, "metadata-directory");
+            var backupDirectory = Path.Combine(root, "Backups");
+            var oldContent = Winapp2BytesWithTarget("Old");
+            await File.WriteAllBytesAsync(localPath, oldContent, ct);
+            Directory.CreateDirectory(metadataPath);
+
+            var result = await Winapp2Updater.CommitDownloadedDatabaseAsync(
+                Winapp2BytesWithTarget("New"),
+                Remote("abcrollback123456", DateTime.UtcNow),
+                localPath,
+                metadataPath,
+                backupDirectory,
+                minimumBytes: 100,
+                ct: ct);
+
+            Assert.False(result.Success);
+            Assert.Equal(oldContent, await File.ReadAllBytesAsync(localPath, ct));
+            Assert.False(File.Exists(metadataPath));
+        }
+        finally { TryDeleteDirectory(root); }
+    }
+
+    [Fact]
+    public async Task CommitDownloadedDatabaseAsync_rejects_winget_pinning_database_target()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var ct = TestContext.Current.CancellationToken;
+            var localPath = Path.Combine(root, "winapp2.ini");
+            var metadataPath = Path.Combine(root, "winapp2.metadata.json");
+            var backupDirectory = Path.Combine(root, "Backups");
+            var oldContent = Winapp2BytesWithTarget("Old");
+            await File.WriteAllBytesAsync(localPath, oldContent, ct);
+            var unsafeContent = Encoding.UTF8.GetBytes(
+                "[Winget pin state]\nLangSecRef=3021\n" +
+                "FileKey1=%LOCALAPPDATA%\\Packages\\Microsoft.DesktopAppInstaller_8wekyb3d8bbwe\\LocalState|pinning.db\n" +
+                new string('x', 1100));
+
+            var result = await Winapp2Updater.CommitDownloadedDatabaseAsync(
+                unsafeContent,
+                Remote("abcunsafe1234567", DateTime.UtcNow),
+                localPath,
+                metadataPath,
+                backupDirectory,
+                minimumBytes: 100,
+                ct: ct);
+
+            Assert.False(result.Success);
+            Assert.Contains("package-manager", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(oldContent, await File.ReadAllBytesAsync(localPath, ct));
+        }
+        finally { TryDeleteDirectory(root); }
+    }
+
+    [Fact]
     public void Provenance_marks_local_metadata_stale_against_newer_remote_commit()
     {
         var metadata = new Winapp2Metadata(
@@ -124,7 +218,10 @@ public class Winapp2UpdaterTests
         => new(sha, dateUtc, "https://raw.example/winapp2.ini", $"https://example/commit/{sha}");
 
     private static byte[] Winapp2Bytes(string marker)
-        => Encoding.UTF8.GetBytes("[DeepPurge Test *]\nLangSecRef=3021\nFileKey1=%TEMP%|*.tmp\n" +
+        => Winapp2BytesWithTarget("DeepPurge", marker);
+
+    private static byte[] Winapp2BytesWithTarget(string target, string marker = "marker")
+        => Encoding.UTF8.GetBytes($"[DeepPurge Test *]\nLangSecRef=3021\nFileKey1=%TEMP%\\{target}|*.tmp\n" +
                                   new string('x', 1100) + marker);
 
     private static string Sha256(byte[] content)

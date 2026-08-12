@@ -268,6 +268,7 @@ public partial class MainViewModel
     public ObservableCollection<Winapp2Entry> Winapp2Entries { get; } = new();
     public ObservableCollection<CleanerValidationReport> CleanerValidationReports { get; } = new();
     [ObservableProperty] public partial string Winapp2Source { get; set; } = "";
+    [ObservableProperty] public partial string CleanerUpdateDiff { get; set; } = "";
     [ObservableProperty] public partial string CleanerValidationSummary { get; set; } = "";
 
     [RelayCommand]
@@ -290,7 +291,12 @@ public partial class MainViewModel
                     StatusText = $"winapp2.ini download failed: {update.ErrorMessage}";
                     return;
                 }
+                CleanerUpdateDiff = update.Diff?.Summary ?? "No target diff available";
                 provenance = await Winapp2Updater.GetProvenanceAsync();
+            }
+            else
+            {
+                CleanerUpdateDiff = provenance.LocalMetadata?.TargetDiff?.Summary ?? "No recorded update diff";
             }
 
             Winapp2Source = FormatWinapp2Provenance(provenance);
@@ -334,7 +340,7 @@ public partial class MainViewModel
     {
         var local = provenance.LocalExists
             ? provenance.LocalMetadata is { } metadata
-                ? $"local {metadata.ShortCommit} ({metadata.CommitDateUtc:yyyy-MM-dd}), {FormatBytes(metadata.ByteCount)}, sha256 {metadata.ShortSha256}"
+                ? $"local {metadata.ShortCommit} ({metadata.CommitDateUtc:yyyy-MM-dd}), {FormatBytes(metadata.ByteCount)}, sha256 {metadata.ShortSha256}, schema v{metadata.SchemaVersion}, {metadata.TrustState}"
                 : $"local file {(provenance.LocalWriteTimeUtc.HasValue ? provenance.LocalWriteTimeUtc.Value.ToString("yyyy-MM-dd") : "date unknown")}, {FormatBytes(provenance.LocalByteCount ?? 0)}, sha256 {ShortHash(provenance.LocalSha256)}"
             : "not downloaded";
 
@@ -345,8 +351,11 @@ public partial class MainViewModel
         var backup = provenance.LocalMetadata?.BackupPath is { Length: > 0 } path
             ? $"; previous backup {Path.GetFileName(path)}"
             : "";
+        var diff = provenance.LocalMetadata?.TargetDiff is { } targetDiff
+            ? $"; last update {targetDiff.Summary}"
+            : "";
 
-        return $"{local}; {remote}{backup}";
+        return $"{local}; {remote}{backup}{diff}";
     }
 
     private static string ShortHash(string? hash)

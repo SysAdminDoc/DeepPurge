@@ -4,13 +4,6 @@ Actionable work only. Historical and completed roadmap material is archived in C
 
 ## Actionable Items
 
-- [ ] P1 — Make cleaner-definition updates diffable and rollback-safe
-  Why: Elevated user-writable winapp2/JSON rules can regress into deleting configuration or package-manager state, as demonstrated by the cited winapp2 corrections.
-  Evidence: `src/DeepPurge.Core/Cleaning/Winapp2Updater.cs`; `src/DeepPurge.Core/Cleaning/Winapp2Parser.cs`; `src/DeepPurge.Core/Cleaning/CleanerDefinition.cs`; Winapp2 PRs 1004 and 945; Kudu data-rule design.
-  Touches: cleaner schemas/loaders/updater, `DataPaths.Cleaners`, validation CLI, cleaner preview WPF, regression fixtures
-  Acceptance: Every rule set records schema, origin, version, SHA-256, and trust state; updates show expanded-target diffs, quarantine invalid/unsafe rules, preserve a last-known-good version, and pass fixtures proving protected app settings and the winget pin database survive.
-  Complexity: M
-
 - [ ] P1 — Propagate typed partial-scan and degraded-source results
   Why: Swallowed enumeration/process errors currently look identical to zero findings and make the GUI, CLI JSON, logs, and support data overstate confidence.
   Evidence: scheduled-task, firewall, PATH, autorun, context-menu, health, package-enrichment, and initial-scan code paths; UniGetUI source diagnostics and Mole JSON/result patterns.

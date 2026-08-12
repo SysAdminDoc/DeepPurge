@@ -1718,16 +1718,20 @@
                                            Text="{Binding Winapp2Source, StringFormat=winapp2 source: {0}}"/>
                                 <TextBlock Margin="0,4,0,0" FontSize="12" Foreground="{DynamicResource TextBrush}"
                                            Text="{Binding CleanerValidationSummary}"/>
+                                <TextBlock Margin="0,4,0,0" FontSize="12" Foreground="{DynamicResource SubtextBrush}"
+                                           Text="{Binding CleanerUpdateDiff, StringFormat=last update target diff: {0}}"/>
                             </StackPanel>
                         </Border>
                         <DataGrid Grid.Row="1" AutoGenerateColumns="False" ItemsSource="{Binding CleanerValidationReports}"
                                   AutomationProperties.Name="Custom JSON cleaner validation results">
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Binding="{Binding FileName}" Header="FILE" Width="160"/>
-                                <DataGridTextColumn Binding="{Binding SchemaDisplay}" Header="SCHEMA" Width="100"/>
-                                <DataGridTextColumn Binding="{Binding Status}" Header="STATUS" Width="80"/>
-                                <DataGridTextColumn Binding="{Binding RiskLabel}" Header="RISK" Width="80"/>
-                                <DataGridTextColumn Binding="{Binding ProvenanceDisplay}" Header="PROVENANCE" Width="150"/>
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Binding="{Binding FileName}" Header="FILE" Width="160"/>
+                                    <DataGridTextColumn Binding="{Binding SchemaDisplay}" Header="SCHEMA" Width="100"/>
+                                    <DataGridTextColumn Binding="{Binding Status}" Header="STATUS" Width="80"/>
+                                    <DataGridTextColumn Binding="{Binding RiskLabel}" Header="RISK" Width="80"/>
+                                    <DataGridTextColumn Binding="{Binding TrustDisplay}" Header="TRUST" Width="120"/>
+                                    <DataGridTextColumn Binding="{Binding HashDisplay}" Header="SHA256" Width="110"/>
+                                    <DataGridTextColumn Binding="{Binding ProvenanceDisplay}" Header="PROVENANCE" Width="150"/>
                                 <DataGridTextColumn Binding="{Binding EstimatedItems}" Header="ITEMS" Width="70"/>
                                 <DataGridTextColumn Binding="{Binding EstimatedBytes, Converter={StaticResource BytesToSizeConverter}}" Header="BYTES" Width="90"/>
                                 <DataGridTextColumn Binding="{Binding RegistryScopesDisplay}" Header="REGISTRY" Width="120"/>

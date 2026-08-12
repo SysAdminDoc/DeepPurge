@@ -940,6 +940,11 @@ if ($app) {{
         Console.WriteLine($"File:            {report.FilePath}");
         Console.WriteLine($"Schema:          {report.SchemaDisplay} ({report.SchemaId})");
         Console.WriteLine($"Provenance:      {report.ProvenanceDisplay}");
+        Console.WriteLine($"Origin:          {report.OriginDisplay}");
+        Console.WriteLine($"Trust:           {report.TrustDisplay}");
+        Console.WriteLine($"Content SHA256:  {report.HashDisplay}");
+        Console.WriteLine($"Last known good: {(string.IsNullOrWhiteSpace(report.LastKnownGoodPath) ? "(none)" : report.LastKnownGoodPath)}");
+        Console.WriteLine($"Quarantine:      {(string.IsNullOrWhiteSpace(report.QuarantinePath) ? "(none)" : report.QuarantinePath)}");
         Console.WriteLine($"Status:          {report.Status}");
         Console.WriteLine($"Risk:            {report.RiskLabel}");
         Console.WriteLine($"Rules:           {report.Rules.Count}");
@@ -1170,6 +1175,12 @@ if ($app) {{
             Console.WriteLine("done.");
             Console.WriteLine($"Downloaded: {result.Metadata!.ShortCommit} ({result.Metadata.CommitDateUtc:yyyy-MM-dd HH:mm UTC}), {FormatBytes(result.Metadata.ByteCount)}, sha256 {result.Metadata.ShortSha256}");
             Console.WriteLine($"Backup:     {(string.IsNullOrWhiteSpace(result.BackupPath) ? "(none)" : result.BackupPath)}");
+            Console.WriteLine($"Target diff: {result.Diff?.Summary ?? "(unavailable)"}");
+            if (result.Diff is { HasChanges: true } diff)
+            {
+                foreach (var target in diff.AddedTargets.Take(8)) Console.WriteLine($"  + {target}");
+                foreach (var target in diff.AddedRegistryTargets.Take(8)) Console.WriteLine($"  + [registry] {target}");
+            }
             return 0;
         }
         Console.WriteLine($"failed: {result.ErrorMessage}");
@@ -1185,6 +1196,8 @@ if ($app) {{
         else if (provenance.LocalMetadata is { } metadata)
         {
             Console.WriteLine($"Local:  {metadata.ShortCommit} ({metadata.CommitDateUtc:yyyy-MM-dd HH:mm UTC}), {FormatBytes(metadata.ByteCount)}, sha256 {metadata.ShortSha256}");
+            Console.WriteLine($"Trust:  {metadata.TrustState}; schema v{metadata.SchemaVersion}; origin {metadata.Origin}");
+            Console.WriteLine($"Diff:   {metadata.TargetDiff?.Summary ?? "(none recorded)"}");
             Console.WriteLine($"File:   {provenance.LocalPath}");
             Console.WriteLine($"Backup: {(string.IsNullOrWhiteSpace(metadata.BackupPath) ? "(none)" : metadata.BackupPath)}");
         }
