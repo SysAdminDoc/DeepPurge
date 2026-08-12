@@ -222,4 +222,86 @@ public class InstallSnapshotDiffTests
         try { if (Directory.Exists(path)) Directory.Delete(path, recursive: true); }
         catch { }
     }
+
+    [Fact]
+    public void Diff_classifies_existing_changed_file_as_modified_not_created()
+    {
+        var before = new InstallSnapshot
+        {
+            Files = new() { new SnapshotEntry(@"C:\app.exe", 10, DateTime.UtcNow) },
+        };
+        var after = new InstallSnapshot
+        {
+            Files = new() { new SnapshotEntry(@"C:\app.exe", 20, DateTime.UtcNow.AddSeconds(1)) },
+        };
+
+        var delta = new InstallSnapshotEngine().Diff(before, after);
+
+        Assert.Empty(delta.AddedFiles);
+        var modified = Assert.Single(delta.ModifiedFiles);
+        Assert.Equal(InstallObjectChangeKind.Modified, modified.ChangeKind);
+    }
+
+    [Fact]
+    public void Legacy_delta_manifest_is_diagnostic_only()
+    {
+        var name = $"legacy-{Guid.NewGuid():N}";
+        var path = Path.Combine(
+            DeepPurge.Core.App.DataPaths.Snapshots,
+            $"{name}.manifest.json");
+        try
+        {
+            File.WriteAllText(
+                path,
+                "{\"AddedFiles\":[{\"Path\":\"C:\\\\old.exe\",\"SizeBytes\":1,\"LastWriteUtc\":\"2026-01-01T00:00:00Z\"}]}");
+
+            var engine = new InstallSnapshotEngine();
+            var manifest = engine.LoadInstallManifest(name);
+
+            Assert.NotNull(manifest);
+            Assert.False(manifest.ReplayEligible);
+            Assert.Null(engine.LoadManifest(name));
+            Assert.Contains("Legacy", manifest.ReplayEligibilityReason);
+        }
+        finally
+        {
+            try { if (File.Exists(path)) File.Delete(path); }
+            catch { }
+        }
+    }
+
+    [Fact]
+    public async Task ReplayRemoveAsync_skips_entries_without_created_provenance()
+    {
+        var root = NewTempDir();
+        try
+        {
+            var file = Path.Combine(root, "modified.bin");
+            File.WriteAllText(file, "keep");
+            var info = new FileInfo(file);
+            var delta = new InstallDelta
+            {
+                AddedFiles = new()
+                {
+                    new SnapshotEntry(
+                        file,
+                        info.Length,
+                        info.LastWriteTimeUtc,
+                        ChangeKind: InstallObjectChangeKind.Modified),
+                },
+            };
+
+            var result = await new InstallSnapshotEngine().ReplayRemoveAsync(
+                delta,
+                new DeleteOptions(DryRun: false, UseRecycleBin: false),
+                ct: TestContext.Current.CancellationToken);
+
+            Assert.Equal(0, result.Removed);
+            Assert.Equal(1, result.Skipped);
+            Assert.Contains(result.SkippedReasons, reason =>
+                reason.Contains("Not created", StringComparison.OrdinalIgnoreCase));
+            Assert.True(File.Exists(file));
+        }
+        finally { TryDeleteDir(root); }
+    }
 }

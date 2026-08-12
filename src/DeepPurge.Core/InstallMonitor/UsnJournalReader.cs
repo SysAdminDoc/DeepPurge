@@ -333,7 +333,7 @@ public static class UsnJournalReader
             return $"<unresolved:{parentFileReference}>\\{leafName}";
 
         var root = Path.GetPathRoot(volumeRoot) ?? volumeRoot;
-        return Path.Combine(new[] { root }.Concat(parts));
+        return Path.Combine(new[] { root }.Concat(parts).ToArray());
     }
 
     private static Dictionary<UsnFileId, UsnPathNode> BuildMftIndex(

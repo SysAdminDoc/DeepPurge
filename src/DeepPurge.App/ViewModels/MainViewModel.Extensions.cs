@@ -366,7 +366,7 @@ public partial class MainViewModel
             var engine = new InstallSnapshotEngine();
             var useV2 = UsnJournalReader.IsSupported(Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles)) ?? @"C:\");
             SnapshotStatus = useV2
-                ? $"Tracing {programName} via USN journal..."
+                ? $"Tracing {programName} with pre/post snapshots + diagnostic journal evidence..."
                 : $"Capturing baseline for {programName}...";
             var delta = useV2
                 ? await engine.TraceInstallV2Async(programName, installerPath, args)
@@ -405,11 +405,17 @@ public partial class MainViewModel
         string programName, CancellationToken ct = default)
     {
         var engine = new InstallSnapshotEngine();
-        var delta = engine.LoadManifest(programName);
-        if (delta == null)
+        var manifest = engine.LoadInstallManifest(programName);
+        if (manifest == null)
         {
             SnapshotStatus = $"No install manifest recorded for '{programName}'. Run 'snapshot trace' first.";
             return (false, 0, 0, 0);
+        }
+
+        if (!manifest.ReplayEligible)
+        {
+            SnapshotStatus = $"Manifest replay blocked: {manifest.ReplayEligibilityReason}";
+            return (true, 0, manifest.Delta.AddedFiles.Count, 0);
         }
 
         var opt = new DeleteOptions(
@@ -426,7 +432,7 @@ public partial class MainViewModel
 
         try
         {
-            var (removed, skipped, freed) = await engine.ReplayRemoveAsync(delta, opt, progress, ct);
+            var (removed, skipped, freed) = await engine.ReplayRemoveAsync(manifest, opt, progress, ct);
             _dispatcher.Invoke(() =>
             {
                 OperationProgressVisible = false;

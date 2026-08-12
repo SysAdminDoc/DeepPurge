@@ -1,7 +1,6 @@
 using System.Diagnostics.Eventing.Reader;
 using System.Globalization;
 using System.Xml.Linq;
-using DeepPurge.Core.App;
 using DeepPurge.Core.Diagnostics;
 
 namespace DeepPurge.Core.InstallMonitor;
@@ -160,9 +159,7 @@ public static class SysmonReader
         var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var change in changes)
         {
-            var target = NormalizeRegistryPath(
-                change.TargetObject,
-                UserIdentity.RealUserSid);
+            var target = NormalizeRegistryPath(change.TargetObject);
             if (string.IsNullOrWhiteSpace(target) ||
                 !IsSoftwarePath(target))
                 continue;
@@ -238,9 +235,7 @@ public static class SysmonReader
         }
     }
 
-    internal static string NormalizeRegistryPath(
-        string target,
-        string realUserSid)
+    internal static string NormalizeRegistryPath(string target)
     {
         if (string.IsNullOrWhiteSpace(target)) return "";
 
@@ -265,15 +260,6 @@ public static class SysmonReader
             normalized,
             @"HKEY_CURRENT_USER\",
             @"HKCU\");
-
-        if (normalized.StartsWith(
-                @"HKCU\",
-                StringComparison.OrdinalIgnoreCase) &&
-            !string.IsNullOrWhiteSpace(realUserSid))
-        {
-            normalized =
-                $@"HKU\{realUserSid}\" + normalized[@"HKCU\".Length..];
-        }
 
         return normalized;
     }

@@ -65,6 +65,75 @@ public class SysmonReaderTests
     }
 
     [Fact]
+    public void NormalizeRegistryPath_preserves_hku_sid_and_hkcu_hive()
+    {
+        Assert.Equal(
+            @"HKU\S-1-5-21-100\Software\App",
+            SysmonReader.NormalizeRegistryPath(
+                @"\REGISTRY\USER\S-1-5-21-100\Software\App"));
+        Assert.Equal(
+            @"HKCU\Software\App",
+            SysmonReader.NormalizeRegistryPath(
+                @"HKEY_CURRENT_USER\Software\App"));
+    }
+
+    [Fact]
+    public void CorrelateRegistryChanges_requires_installer_process_tree()
+    {
+        var start = DateTime.UtcNow.AddMinutes(-1);
+        var end = DateTime.UtcNow.AddMinutes(1);
+        var rootGuid = "{root}";
+        var childGuid = "{child}";
+        var events = new List<SysmonEventData>
+        {
+            new(
+                1,
+                start,
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["ProcessId"] = "123",
+                    ["ProcessGuid"] = rootGuid,
+                    ["Image"] = @"C:\setup.exe",
+                }),
+            new(
+                1,
+                start.AddSeconds(1),
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["ProcessId"] = "456",
+                    ["ProcessGuid"] = childGuid,
+                    ["ParentProcessGuid"] = rootGuid,
+                    ["Image"] = @"C:\child.exe",
+                }),
+            new(
+                13,
+                start.AddSeconds(2),
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["ProcessId"] = "456",
+                    ["ProcessGuid"] = childGuid,
+                    ["EventType"] = "SetValue",
+                    ["TargetObject"] =
+                        @"\REGISTRY\USER\S-1-5-21-100\Software\App\Value",
+                }),
+        };
+
+        var changes = SysmonReader.CorrelateRegistryChanges(
+            events,
+            123,
+            @"C:\setup.exe",
+            start,
+            end,
+            out var correlated);
+
+        Assert.True(correlated);
+        var change = Assert.Single(changes);
+        Assert.Equal(
+            @"HKU\S-1-5-21-100\Software\App",
+            Assert.Single(SysmonReader.ExtractRegistryPaths(changes)));
+    }
+
+    [Fact]
     public void ReadRegistryChangesSince_handles_unavailable_sysmon()
     {
         if (SysmonReader.IsAvailable()) return;

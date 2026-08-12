@@ -25,8 +25,8 @@ namespace DeepPurge.Core.InstallMonitor;
 public class InstallSnapshotEngine
 {
     private const int MaxSnapshotsPerProgram = 3;
-    private const int MaxTotalSnapshots      = 30;
-    private const long MaxReplayHashBytes    = 256L * 1024 * 1024;
+    private const int MaxTotalSnapshots = 30;
+    private const long MaxReplayHashBytes = 256L * 1024 * 1024;
 
     private static readonly string[] FsRoots =
     {
@@ -62,7 +62,7 @@ public class InstallSnapshotEngine
         // Parallel across roots — the individual trees are independent and
         // Program Files is IO-bound. ConcurrentBag collects from workers.
         var filesBag = new ConcurrentBag<SnapshotEntry>();
-        var keysBag  = new ConcurrentBag<RegistryKeyEntry>();
+        var keysBag = new ConcurrentBag<RegistryKeyEntry>();
 
         var fsTasks = fsRoots
             .Where(r => !string.IsNullOrEmpty(r) && Directory.Exists(r))
@@ -86,7 +86,7 @@ public class InstallSnapshotEngine
 
         await Task.WhenAll(fsTasks.Concat(regTasks));
 
-        snap.Files        = filesBag.ToList();
+        snap.Files = filesBag.ToList();
         snap.RegistryKeys = keysBag.ToList();
 
         SaveSnapshot(snap);
@@ -96,20 +96,47 @@ public class InstallSnapshotEngine
 
     public InstallDelta Diff(InstallSnapshot before, InstallSnapshot after)
     {
-        var beforeFiles = new HashSet<string>(before.Files.Select(f => f.Path), StringComparer.OrdinalIgnoreCase);
-        var afterFiles  = new HashSet<string>(after.Files.Select(f => f.Path),  StringComparer.OrdinalIgnoreCase);
-        var beforeKeys  = new HashSet<string>(before.RegistryKeys.Select(k => k.Path), StringComparer.OrdinalIgnoreCase);
-        var afterKeys   = new HashSet<string>(after.RegistryKeys.Select(k => k.Path),  StringComparer.OrdinalIgnoreCase);
+        var beforeByPath = before.Files.ToDictionary(
+            f => f.Path,
+            StringComparer.OrdinalIgnoreCase);
+        var afterByPath = after.Files.ToDictionary(
+            f => f.Path,
+            StringComparer.OrdinalIgnoreCase);
+        var beforeKeys = new HashSet<string>(before.RegistryKeys.Select(k => k.Path), StringComparer.OrdinalIgnoreCase);
+        var afterKeys = new HashSet<string>(after.RegistryKeys.Select(k => k.Path), StringComparer.OrdinalIgnoreCase);
 
         var delta = new InstallDelta();
         foreach (var f in after.Files)
-            if (!beforeFiles.Contains(f.Path))
-                delta.AddedFiles.Add(StampReplayIdentity(f));
+        {
+            if (!beforeByPath.TryGetValue(f.Path, out var prior))
+            {
+                delta.AddedFiles.Add(StampReplayIdentity(
+                    f with { ChangeKind = InstallObjectChangeKind.Created }));
+            }
+            else if (HasChanged(prior, f))
+            {
+                delta.ModifiedFiles.Add(
+                    f with { ChangeKind = InstallObjectChangeKind.Modified });
+            }
+        }
         foreach (var k in after.RegistryKeys) if (!beforeKeys.Contains(k.Path)) delta.AddedRegistryKeys.Add(k.Path);
-        foreach (var f in before.Files) if (!afterFiles.Contains(f.Path)) delta.RemovedFiles.Add(f.Path);
+        foreach (var f in before.Files) if (!afterByPath.ContainsKey(f.Path)) delta.RemovedFiles.Add(f.Path);
         foreach (var k in before.RegistryKeys) if (!afterKeys.Contains(k.Path)) delta.RemovedRegistryKeys.Add(k.Path);
         return delta;
     }
+
+    private static bool HasChanged(SnapshotEntry before, SnapshotEntry after)
+        => before.SizeBytes != after.SizeBytes ||
+           before.LastWriteUtc != after.LastWriteUtc ||
+           (before.VolumeSerialNumber.HasValue &&
+            after.VolumeSerialNumber.HasValue &&
+            before.VolumeSerialNumber != after.VolumeSerialNumber) ||
+           (before.FileIndex.HasValue &&
+            after.FileIndex.HasValue &&
+            before.FileIndex != after.FileIndex) ||
+           (!string.IsNullOrWhiteSpace(before.Sha256) &&
+            !string.IsNullOrWhiteSpace(after.Sha256) &&
+            !string.Equals(before.Sha256, after.Sha256, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Snapshot → launch installer → wait for exit + idle → snapshot → diff.
@@ -128,45 +155,98 @@ public class InstallSnapshotEngine
         if (string.IsNullOrWhiteSpace(installerPath) || !File.Exists(installerPath))
             throw new FileNotFoundException("installer not found", installerPath);
 
+        var traceStartedUtc = DateTime.UtcNow;
         var before = await CaptureAsync(programName, installerPath, ct);
-
-        var psi = new ProcessStartInfo
-        {
-            FileName = installerPath,
-            Arguments = installerArgs ?? "",
-            UseShellExecute = true,
-        };
-
-        try
-        {
-            using var p = Process.Start(psi);
-            if (p != null)
-            {
-                await p.WaitForExitAsync(ct);
-                try { await Task.Delay(5000, ct); } catch (OperationCanceledException) { /* snapshot anyway */ }
-            }
-        }
-        catch (Exception ex) { Log.Warn($"Installer launch failed: {ex.Message}"); }
-
+        var installerIdentity = CaptureInstallerIdentity(installerPath);
+        var run = await RunInstallerAsync(installerPath, installerArgs, ct);
         var after = await CaptureAsync(programName, installerPath, ct);
         var delta = Diff(before, after);
-        SaveManifest(programName, delta);
+        SaveManifest(programName, BuildManifest(
+            programName,
+            installerIdentity,
+            delta,
+            InstallTraceMode.PrePostSnapshot,
+            traceStartedUtc,
+            run.EndedAtUtc,
+            run.ProcessId,
+            diagnostics: null));
         return delta;
     }
 
     public void SaveManifest(string programName, InstallDelta delta)
     {
+        SaveManifest(
+            programName,
+            BuildManifest(
+                programName,
+                installer: null,
+                delta,
+                InstallTraceMode.Unknown,
+                DateTime.MinValue,
+                DateTime.MinValue,
+                0,
+                diagnostics: null));
+    }
+
+    public void SaveManifest(string programName, InstallManifest manifest)
+    {
         var path = ManifestPath(programName);
-        var json = JsonSerializer.Serialize(delta, new JsonSerializerOptions { WriteIndented = true });
+        manifest.ProgramName = programName;
+        manifest.SchemaVersion = InstallManifestSchema.Current;
+        var json = JsonSerializer.Serialize(
+            manifest,
+            new JsonSerializerOptions { WriteIndented = true });
         AtomicWrite(path, json);
     }
 
     public InstallDelta? LoadManifest(string programName)
     {
+        var manifest = LoadInstallManifest(programName);
+        return manifest?.ReplayEligible == true ? manifest.Delta : null;
+    }
+
+    public InstallManifest? LoadInstallManifest(string programName)
+    {
         var path = ManifestPath(programName);
         if (!File.Exists(path)) return null;
-        try { return JsonSerializer.Deserialize<InstallDelta>(File.ReadAllText(path)); }
-        catch (Exception ex) { Log.Warn($"LoadManifest '{path}': {ex.Message}"); return null; }
+
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(path));
+            if (document.RootElement.TryGetProperty("SchemaVersion", out var schemaElement))
+            {
+                if (!schemaElement.TryGetInt32(out var schemaVersion) ||
+                    schemaVersion != InstallManifestSchema.Current)
+                {
+                    Log.Warn($"LoadManifest '{path}': unsupported schema version.");
+                    return null;
+                }
+                var manifest = document.RootElement.Deserialize<InstallManifest>();
+                if (manifest == null) return null;
+                manifest.LoadedFromTrustedStore = true;
+                return manifest;
+            }
+
+            // Legacy delta files are retained for inspection only. They lack
+            // launch identity, created-vs-modified provenance, and a replay
+            // eligibility decision, so they must never drive deletion.
+            var legacyDelta = document.RootElement.Deserialize<InstallDelta>();
+            if (legacyDelta == null) return null;
+            return new InstallManifest
+            {
+                SchemaVersion = 1,
+                ProgramName = programName,
+                TraceMode = InstallTraceMode.Unknown,
+                ReplayEligible = false,
+                ReplayEligibilityReason = "Legacy manifest lacks trusted trace provenance.",
+                Delta = legacyDelta,
+            };
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"LoadManifest '{path}': {ex.Message}");
+            return null;
+        }
     }
 
     /// <summary>
@@ -178,6 +258,43 @@ public class InstallSnapshotEngine
         DeleteOptions opt,
         IProgress<DeleteProgress>? progress = null,
         CancellationToken ct = default)
+        => await ReplayRemoveCoreAsync(
+            delta,
+            opt,
+            progress,
+            ct,
+            requireCreatedEvidence: true);
+
+    public async Task<InstallReplayResult> ReplayRemoveAsync(
+        InstallManifest manifest,
+        DeleteOptions opt,
+        IProgress<DeleteProgress>? progress = null,
+        CancellationToken ct = default)
+    {
+        if (!manifest.ReplayEligible)
+        {
+            return new InstallReplayResult(
+                0,
+                manifest.Delta.AddedFiles.Count,
+                0,
+                new[] { manifest.ReplayEligibilityReason },
+                manifest.ReplayEligibilityReason);
+        }
+
+        return await ReplayRemoveCoreAsync(
+            manifest.Delta,
+            opt,
+            progress,
+            ct,
+            requireCreatedEvidence: true);
+    }
+
+    private static async Task<InstallReplayResult> ReplayRemoveCoreAsync(
+        InstallDelta delta,
+        DeleteOptions opt,
+        IProgress<DeleteProgress>? progress,
+        CancellationToken ct,
+        bool requireCreatedEvidence)
     {
         int removed = 0, skipped = 0;
         long freed = 0;
@@ -195,6 +312,14 @@ public class InstallSnapshotEngine
                 {
                     skipped++;
                     skippedReasons.Add($"Unsafe path: {f.Path}");
+                    continue;
+                }
+                if (requireCreatedEvidence &&
+                    f.ChangeKind != InstallObjectChangeKind.Created)
+                {
+                    skipped++;
+                    skippedReasons.Add(
+                        $"Not created by the traced installer: {f.Path}");
                     continue;
                 }
                 try
@@ -217,8 +342,15 @@ public class InstallSnapshotEngine
                     long size = fi.Length;
                     if (opt.IsDestructive)
                     {
-                        if (opt.SecureDelete) SecureDelete.Wipe(f.Path);
-                        else SafetyGuard.SafeDeleteFile(f.Path);
+                        var deleted = opt.SecureDelete
+                            ? SecureDelete.Wipe(f.Path)
+                            : SafetyGuard.SafeDeleteFile(f.Path);
+                        if (!deleted)
+                        {
+                            skipped++;
+                            skippedReasons.Add($"Delete failed: {f.Path}");
+                            continue;
+                        }
                     }
                     freed += size;
                     removed++;
@@ -232,7 +364,11 @@ public class InstallSnapshotEngine
             }
         }, ct);
 
-        return new InstallReplayResult(removed, skipped, freed, skippedReasons.ToArray());
+        return new InstallReplayResult(
+            removed,
+            skipped,
+            freed,
+            skippedReasons.ToArray());
     }
 
     // ═══════════════════════════════════════════════════════
@@ -250,115 +386,283 @@ public class InstallSnapshotEngine
         if (string.IsNullOrWhiteSpace(installerPath) || !File.Exists(installerPath))
             throw new FileNotFoundException("installer not found", installerPath);
 
-        var volumeRoot = Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles)) ?? @"C:\";
+        var traceStartedUtc = DateTime.UtcNow;
+        var volumeRoot = Path.GetPathRoot(
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles)) ?? @"C:\";
+        var installerIdentity = CaptureInstallerIdentity(installerPath);
+        var before = await CaptureAsync(programName, installerPath, ct);
+        var startUsn = UsnJournalReader.GetCurrentUsn(volumeRoot);
+        var useUsn = startUsn >= 0;
+        var useSysmon = SysmonReader.IsAvailable();
+        var run = await RunInstallerAsync(installerPath, installerArgs, ct);
+        var after = await CaptureAsync(programName, installerPath, ct);
+        var delta = Diff(before, after);
 
-        UsnJournalReader.EnsureJournalSize(volumeRoot);
-        long startUsn = UsnJournalReader.GetCurrentUsn(volumeRoot);
-        bool useUsn = startUsn >= 0;
-        bool useSysmon = SysmonReader.IsAvailable();
-        var sysmonStart = DateTime.UtcNow;
+        var diagnostics = new InstallTraceDiagnostics
+        {
+            WindowStartedUtc = traceStartedUtc,
+            WindowEndedUtc = run.EndedAtUtc,
+            InstallerProcessId = run.ProcessId,
+            InstallerImage = installerPath,
+            InstallerIdentityCaptured = installerIdentity != null,
+            UsnAvailable = useUsn,
+            SysmonAvailable = useSysmon,
+            UsnAttribution =
+                "USN records are diagnostic-only; pre/post snapshots determine replay eligibility.",
+        };
 
-        var beforeReg = await CaptureRegistryOnlyAsync(ct);
+        if (useUsn)
+        {
+            try
+            {
+                diagnostics.FileChanges = UsnJournalReader
+                    .ReadChangesSince(volumeRoot, startUsn)
+                    .Where(c => c.TimestampUtc >= traceStartedUtc &&
+                                c.TimestampUtc <= run.EndedAtUtc)
+                    .ToList();
+                if (diagnostics.FileChanges.Any(c => !c.PathResolved))
+                {
+                    diagnostics.Warnings.Add(
+                        "Some USN records could not be resolved through their parent FRNs.");
+                }
+            }
+            catch (Exception ex)
+            {
+                diagnostics.Warnings.Add($"USN diagnostics unavailable: {ex.Message}");
+            }
+        }
+        else
+        {
+            diagnostics.Warnings.Add(
+                "USN journal unavailable; authoritative pre/post snapshot diff used.");
+        }
 
+        if (useSysmon && run.ProcessId > 0)
+        {
+            try
+            {
+                diagnostics.RegistryChanges = SysmonReader
+                    .ReadCorrelatedRegistryChanges(
+                        traceStartedUtc,
+                        run.EndedAtUtc,
+                        run.ProcessId,
+                        installerPath,
+                        out var correlated)
+                    .Where(c => c.TimeCreated >= traceStartedUtc &&
+                                c.TimeCreated <= run.EndedAtUtc)
+                    .ToList();
+                diagnostics.SysmonProcessTreeCorrelated = correlated;
+                if (!correlated)
+                {
+                    diagnostics.Warnings.Add(
+                        "Sysmon was present but the installer process tree could not be proven; registry events remain diagnostic-only.");
+                }
+            }
+            catch (Exception ex)
+            {
+                diagnostics.Warnings.Add($"Sysmon diagnostics unavailable: {ex.Message}");
+            }
+        }
+        else if (useSysmon)
+        {
+            diagnostics.Warnings.Add(
+                "Sysmon was present but no installer process identity was captured.");
+        }
+
+        SaveManifest(programName, BuildManifest(
+            programName,
+            installerIdentity,
+            delta,
+            InstallTraceMode.PrePostSnapshotWithDiagnostics,
+            traceStartedUtc,
+            run.EndedAtUtc,
+            run.ProcessId,
+            diagnostics));
+        return delta;
+    }
+
+    private sealed record InstallerRun(int ProcessId, DateTime EndedAtUtc);
+
+    private static async Task<InstallerRun> RunInstallerAsync(
+        string installerPath,
+        string? installerArgs,
+        CancellationToken ct)
+    {
+        var endedAtUtc = DateTime.UtcNow;
+        var processId = 0;
         var psi = new ProcessStartInfo
         {
             FileName = installerPath,
             Arguments = installerArgs ?? "",
             UseShellExecute = true,
         };
+
         try
         {
-            using var p = Process.Start(psi);
-            if (p != null)
+            using var process = Process.Start(psi);
+            if (process != null)
             {
-                await p.WaitForExitAsync(ct);
-                try { await Task.Delay(5000, ct); } catch (OperationCanceledException) { }
-            }
-        }
-        catch (Exception ex) { Log.Warn($"Installer launch failed: {ex.Message}"); }
-
-        var delta = new InstallDelta();
-
-        if (useUsn)
-        {
-            var usnChanges = UsnJournalReader.ReadChangesSince(volumeRoot, startUsn);
-            foreach (var c in usnChanges)
-            {
-                if (c.Reason == UsnChangeReason.Created || c.Reason == UsnChangeReason.Modified)
+                processId = process.Id;
+                await process.WaitForExitAsync(ct);
+                try
                 {
-                    try
-                    {
-                        var fi = new FileInfo(c.Path);
-                        if (fi.Exists) delta.AddedFiles.Add(StampReplayIdentity(
-                            new SnapshotEntry(c.Path, fi.Length, fi.LastWriteTimeUtc)));
-                    }
-                    catch (Exception ex) { Log.Warn($"USN file info '{c.Path}': {ex.Message}"); }
+                    await Task.Delay(TimeSpan.FromSeconds(5), ct);
                 }
-                else if (c.Reason == UsnChangeReason.Deleted)
+                catch (OperationCanceledException)
                 {
-                    delta.RemovedFiles.Add(c.Path);
+                    // Capture the post-state even when the caller cancels the
+                    // installer wait; the trace is explicitly partial.
                 }
             }
         }
-        else
+        catch (Exception ex)
         {
-            Log.Warn("USN journal unavailable — falling back to snapshot diff");
-            var before = await CaptureAsync(programName, installerPath, ct);
-            var after = await CaptureAsync(programName, installerPath, ct);
-            var fsDiff = Diff(before, after);
-            delta.AddedFiles = fsDiff.AddedFiles;
-            delta.RemovedFiles = fsDiff.RemovedFiles;
+            Log.Warn($"Installer launch failed: {ex.Message}");
         }
 
-        var afterReg = await CaptureRegistryOnlyAsync(ct);
-        var beforeKeys = new HashSet<string>(beforeReg.Select(k => k.Path), StringComparer.OrdinalIgnoreCase);
-        var afterKeys = new HashSet<string>(afterReg.Select(k => k.Path), StringComparer.OrdinalIgnoreCase);
-        foreach (var k in afterReg) if (!beforeKeys.Contains(k.Path)) delta.AddedRegistryKeys.Add(k.Path);
-        foreach (var k in beforeReg) if (!afterKeys.Contains(k.Path)) delta.RemovedRegistryKeys.Add(k.Path);
-
-        if (useSysmon)
-        {
-            try
-            {
-                var sysmonChanges = SysmonReader.ReadRegistryChangesSince(sysmonStart);
-                var sysmonPaths = SysmonReader.ExtractRegistryPaths(sysmonChanges);
-                var existing = new HashSet<string>(delta.AddedRegistryKeys, StringComparer.OrdinalIgnoreCase);
-                foreach (var p in sysmonPaths)
-                    if (!existing.Contains(p)) delta.AddedRegistryKeys.Add(p);
-            }
-            catch (Exception ex) { Log.Warn($"Sysmon enrichment failed: {ex.Message}"); }
-        }
-
-        SaveManifest(programName, delta);
-        return delta;
+        endedAtUtc = DateTime.UtcNow;
+        return new InstallerRun(processId, endedAtUtc);
     }
 
-    private async Task<List<RegistryKeyEntry>> CaptureRegistryOnlyAsync(CancellationToken ct)
+    private static InstallManifest BuildManifest(
+        string programName,
+        InstallerIdentity? installer,
+        InstallDelta delta,
+        InstallTraceMode traceMode,
+        DateTime traceStartedUtc,
+        DateTime traceEndedUtc,
+        int installerProcessId,
+        InstallTraceDiagnostics? diagnostics)
     {
-        var keysBag = new ConcurrentBag<RegistryKeyEntry>();
-        var regTasks = RegRoots
-            .Select(t => Task.Run(() => EnumerateRegKeys(t.Hive, t.Sub, keysBag, maxDepth: 3, ct), ct))
-            .ToArray();
-        await Task.WhenAll(regTasks);
-        return keysBag.ToList();
+        var replayable = installer != null &&
+                         traceMode != InstallTraceMode.Unknown &&
+                         delta.AddedFiles.All(IsReplayEligibleEntry);
+        var reason = replayable
+            ? "Only created files with captured replay identity are eligible."
+            : installer == null
+                ? "Installer identity was not captured before launch."
+                : traceMode == InstallTraceMode.Unknown
+                    ? "Manifest was not produced by an authoritative trace."
+                    : "One or more added files lack created-object identity.";
+
+        diagnostics ??= new InstallTraceDiagnostics
+        {
+            WindowStartedUtc = traceStartedUtc,
+            WindowEndedUtc = traceEndedUtc,
+            InstallerProcessId = installerProcessId,
+            InstallerImage = installer?.Path ?? "",
+            InstallerIdentityCaptured = installer != null,
+        };
+
+        return new InstallManifest
+        {
+            SchemaVersion = InstallManifestSchema.Current,
+            ProgramName = programName,
+            TraceMode = traceMode,
+            TraceStartedUtc = traceStartedUtc,
+            TraceEndedUtc = traceEndedUtc,
+            Installer = installer,
+            ReplayEligible = replayable,
+            ReplayEligibilityReason = reason,
+            Delta = delta,
+            Diagnostics = diagnostics,
+        };
+    }
+
+    private static bool IsReplayEligibleEntry(SnapshotEntry entry)
+        => entry.HasStableIdentity &&
+           !string.IsNullOrWhiteSpace(entry.Sha256) &&
+           entry.SizeBytes >= 0;
+
+    private static InstallerIdentity? CaptureInstallerIdentity(string path)
+    {
+        try
+        {
+            var file = new FileInfo(path);
+            if (!file.Exists) return null;
+            var hash = TryComputeSha256(file);
+            if (string.IsNullOrWhiteSpace(hash)) return null;
+
+            uint volumeSerial = 0;
+            ulong fileIndex = 0;
+            try
+            {
+                using var stream = file.Open(
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.ReadWrite | FileShare.Delete);
+                if (HandleBoundFileOperations.TryReadMetadata(
+                        stream.SafeFileHandle,
+                        out var objectIdentity,
+                        out _,
+                        out _,
+                        out _))
+                {
+                    volumeSerial = objectIdentity.VolumeSerialNumber;
+                    fileIndex = objectIdentity.FileIndex;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"Installer object identity '{path}': {ex.Message}");
+            }
+
+            return new InstallerIdentity(
+                file.FullName,
+                file.Length,
+                file.LastWriteTimeUtc,
+                hash,
+                volumeSerial,
+                fileIndex);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Installer identity '{path}': {ex.Message}");
+            return null;
+        }
     }
 
     // ═══════════════════════════════════════════════════════
 
     private static SnapshotEntry StampReplayIdentity(SnapshotEntry entry)
     {
-        if (!string.IsNullOrWhiteSpace(entry.Sha256)) return entry;
-
         try
         {
             var fi = new FileInfo(entry.Path);
             if (!fi.Exists) return entry;
-            return entry with
+            var stamped = entry with
             {
                 SizeBytes = fi.Length,
                 LastWriteUtc = fi.LastWriteTimeUtc,
                 Sha256 = TryComputeSha256(fi),
             };
+
+            try
+            {
+                using var stream = fi.Open(
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.ReadWrite | FileShare.Delete);
+                if (HandleBoundFileOperations.TryReadMetadata(
+                        stream.SafeFileHandle,
+                        out var identity,
+                        out _,
+                        out _,
+                        out _))
+                {
+                    stamped = stamped with
+                    {
+                        VolumeSerialNumber = identity.VolumeSerialNumber,
+                        FileIndex = identity.FileIndex,
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"Snapshot object identity '{entry.Path}': {ex.Message}");
+            }
+
+            return stamped;
         }
         catch (Exception ex)
         {
@@ -375,6 +679,34 @@ public class InstallSnapshotEngine
         {
             Log.Warn($"Replay skipped changed file '{expected.Path}': size changed from {expected.SizeBytes} to {current.Length}");
             return "Size changed";
+        }
+
+        if (expected.VolumeSerialNumber.HasValue &&
+            expected.FileIndex.HasValue)
+        {
+            try
+            {
+                using var stream = current.Open(
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.ReadWrite | FileShare.Delete);
+                if (!HandleBoundFileOperations.TryReadMetadata(
+                        stream.SafeFileHandle,
+                        out var identity,
+                        out _,
+                        out _,
+                        out _) ||
+                    identity.VolumeSerialNumber != expected.VolumeSerialNumber ||
+                    identity.FileIndex != expected.FileIndex)
+                {
+                    return "Filesystem identity changed";
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"Replay identity '{expected.Path}': {ex.Message}");
+                return "Filesystem identity unavailable";
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(expected.Sha256))
@@ -490,7 +822,7 @@ public class InstallSnapshotEngine
                 var attr = File.GetAttributes(cur);
                 if ((attr & FileAttributes.ReparsePoint) != 0) continue;
                 files = Directory.GetFiles(cur);
-                dirs  = Directory.GetDirectories(cur);
+                dirs = Directory.GetDirectories(cur);
             }
             catch (Exception ex) { Log.Warn($"Enumerate directory '{cur}': {ex.Message}"); continue; }
             foreach (var f in files) yield return f;
@@ -505,7 +837,7 @@ public class InstallSnapshotEngine
             using var hive = hiveName switch
             {
                 "HKLM" => Microsoft.Win32.RegistryKey.OpenBaseKey(Microsoft.Win32.RegistryHive.LocalMachine, Microsoft.Win32.RegistryView.Default),
-                "HKCU" => Microsoft.Win32.RegistryKey.OpenBaseKey(Microsoft.Win32.RegistryHive.CurrentUser,  Microsoft.Win32.RegistryView.Default),
+                "HKCU" => Microsoft.Win32.RegistryKey.OpenBaseKey(Microsoft.Win32.RegistryHive.CurrentUser, Microsoft.Win32.RegistryView.Default),
                 _ => throw new ArgumentException(hiveName),
             };
             using var start = hive.OpenSubKey(sub);

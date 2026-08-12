@@ -4,13 +4,6 @@ Actionable work only. Historical and completed roadmap material is archived in C
 
 ## Actionable Items
 
-- [ ] P0 — Quarantine Install Monitor V2 replay until provenance is trustworthy
-  Why: USN leaf names are converted to incorrect root paths, volume-wide modifications are treated as installer-created, fallback snapshots occur after installation, and Sysmon events are not safely attributed.
-  Evidence: `src/DeepPurge.Core/InstallMonitor/UsnJournalReader.cs`; `src/DeepPurge.Core/InstallMonitor/InstallSnapshotEngine.cs`; `src/DeepPurge.Core/InstallMonitor/SysmonReader.cs`; Windows `USN_RECORD_V3` documentation; cited academic uninstaller/remover study.
-  Touches: `src/DeepPurge.Core/InstallMonitor/`, manifest schemas, trace/replay WPF and CLI, injected install-monitor tests
-  Acceptance: Until a new eligible manifest is produced, tracing falls back to the pre/post V1 path and V2 data is diagnostic-only; the replacement resolves parent FRNs, captures pre-launch identity, correlates the installer process tree/time window, distinguishes create from modify, preserves HKU SID/hive, and permits replay only for created objects whose identity still matches.
-  Complexity: L
-
 - [ ] P1 — Centralize deletion policy, outcomes, and success-only provenance
   Why: `UseRecycleBin`, dry-run, secure mode, result counts, and manifests mean different things across pipelines, so permanent or failed operations can be reported as recoverable success.
   Evidence: `DeleteOptions`; `UninstallEngine`; `DuplicateFinder`; `EmptyFolderScanner`; `SystemSlimmer`; `CleanerDefinition`; `Winapp2Parser`; `MainWindow.xaml.cs`; Sifty/Mole recoverable-default and audit designs.

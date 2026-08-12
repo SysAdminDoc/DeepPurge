@@ -9,6 +9,11 @@ public enum InstallTraceMode
     PrePostSnapshotWithDiagnostics = 2,
 }
 
+public static class InstallManifestSchema
+{
+    public const int Current = 2;
+}
+
 public enum InstallObjectChangeKind
 {
     Unknown = 0,
@@ -115,6 +120,8 @@ public sealed class InstallTraceDiagnostics
     public bool UsnAvailable { get; set; }
     public bool SysmonAvailable { get; set; }
     public bool SysmonProcessTreeCorrelated { get; set; }
+    public bool InstallerIdentityCaptured { get; set; }
+    public string InstallerImage { get; set; } = "";
     public string UsnAttribution { get; set; } =
         "Volume-window diagnostic only; never replay eligible.";
     public List<UsnChange> FileChanges { get; set; } = new();
@@ -124,7 +131,7 @@ public sealed class InstallTraceDiagnostics
 
 public sealed class InstallManifest
 {
-    public int SchemaVersion { get; set; }
+    public int SchemaVersion { get; set; } = InstallManifestSchema.Current;
     public string ProgramName { get; set; } = "";
     public InstallTraceMode TraceMode { get; set; }
     public DateTime TraceStartedUtc { get; set; }
