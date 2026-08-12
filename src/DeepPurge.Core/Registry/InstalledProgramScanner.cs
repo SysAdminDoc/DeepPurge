@@ -228,6 +228,7 @@ public static class InstalledProgramScanner
                     Source = source,
                 };
 
+                RemovalCapabilityInspector.Populate(program);
                 programs.Add(program);
             }
             catch (Exception ex) { Log.Warn($"Failed to read registry subkey '{subKeyName}': {ex.Message}"); }

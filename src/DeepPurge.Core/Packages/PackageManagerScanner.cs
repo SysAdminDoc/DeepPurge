@@ -120,6 +120,9 @@ public static class PackageManagerScanner
 
         PortableAppScanner.InjectIntoPrograms(programs, portables);
         GamePlatformScanner.InjectIntoPrograms(programs, games);
+
+        foreach (var program in programs)
+            RemovalCapabilityInspector.Populate(program);
     }
 
     public static IReadOnlyList<PackageSourceHealth> GetSourceHealth(CancellationToken ct = default)

@@ -13,6 +13,7 @@ using DeepPurge.Core.Drivers;
 using DeepPurge.Core.Firewall;
 using DeepPurge.Core.FileSystem;
 using DeepPurge.Core.InstallMonitor;
+using DeepPurge.Core.Models;
 using DeepPurge.Core.Privacy;
 using DeepPurge.Core.Packages;
 using DeepPurge.Core.Registry;
@@ -140,6 +141,16 @@ public static class Program
                 Source = p.SourceDisplay, p.PackageId, p.LastUsedDisplay,
                 p.InstallDate, p.EstimatedSizeKB, p.InstallLocation,
                 p.SignatureDisplay,
+                Capability = p.CapabilityDisplay,
+                p.RemovalSourceIdentity,
+                p.UninstallerExecutablePath,
+                p.UninstallerArguments,
+                p.UninstallerOwner,
+                p.UninstallerPublisher,
+                p.UninstallerRisk,
+                ActionTrust = p.ActionTrustDisplay,
+                p.RemovalSupported,
+                p.RemovalStatus,
                 Flags = p.FlagsDisplay,
                 p.IsSuspectedBundleware,
                 p.OemBloatScore,
@@ -155,7 +166,7 @@ public static class Program
             var pkgId = !string.IsNullOrEmpty(p.PackageId) ? $"\t{p.PackageId}" : "";
             var lastUsed = !string.IsNullOrEmpty(p.LastUsedDisplay) ? $"\t{p.LastUsedDisplay}" : "";
             var flags = !string.IsNullOrEmpty(p.FlagsDisplay) ? $"\t{p.FlagsDisplay}" : "";
-            Console.WriteLine($"{p.DisplayName}\t{p.DisplayVersion}\t{p.Publisher}\t{source}{pkgId}{lastUsed}{flags}");
+            Console.WriteLine($"{p.DisplayName}\t{p.DisplayVersion}\t{p.Publisher}\t{source}\t{p.CapabilityDisplay}\t{p.RemovalStatus}{pkgId}{lastUsed}{flags}");
         }
         Console.WriteLine($"# {sorted.Count} programs");
         return 0;
@@ -280,6 +291,10 @@ public static class Program
 
         var engine = new UninstallEngine();
         engine.StatusChanged += s => Console.Error.WriteLine($"[status] {s}");
+        RemovalCapabilityInspector.Populate(match, silent);
+        Console.WriteLine($"[capability] {match.CapabilityDisplay} source={match.RemovalSourceIdentity} status={match.RemovalStatus}");
+        Console.WriteLine($"[action] exe={match.UninstallerExecutablePath} args={match.UninstallerArguments}");
+        Console.WriteLine($"[trust] signature={match.UninstallerTrust.SignatureDisplay} owner={match.UninstallerOwner} publisher={match.UninstallerPublisher} risk={match.UninstallerRisk}");
         Console.WriteLine(dryRun ? $"Previewing uninstall for {match.DisplayName}..." : $"Uninstalling {match.DisplayName}...");
         var result = await engine.UninstallAsync(
             match,
@@ -287,7 +302,10 @@ public static class Program
             silent: silent,
             dryRun: dryRun,
             ct: ct);
-        Console.WriteLine($"[exit={result.ExitCode}] success={result.Success}");
+        Console.WriteLine($"[exit={result.ExitCode}] success={result.Success} outcome={result.Outcome} capability={result.Capability}");
+        Console.WriteLine($"[trust] {result.TrustFacts.ReviewDisplay}");
+        if (!string.IsNullOrWhiteSpace(result.CapabilityReason))
+            Console.WriteLine($"[capability] {result.CapabilityReason}");
         if (!string.IsNullOrWhiteSpace(result.Output)) Console.WriteLine(result.Output);
         return result.Success ? 0 : 1;
     }

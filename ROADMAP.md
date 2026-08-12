@@ -4,13 +4,6 @@ Actionable work only. Historical and completed roadmap material is archived in C
 
 ## Actionable Items
 
-- [ ] P1 — Model removal capability and uninstaller trust explicitly
-  Why: Portable/game discoveries can report successful uninstall without an action, while selected HKCU/HKU uninstall strings cross into the elevated process without visible trust facts.
-  Evidence: `src/DeepPurge.Core/Packages/PortableAppScanner.cs`; `src/DeepPurge.Core/Packages/GamePlatformScanner.cs`; `src/DeepPurge.Core/Uninstall/UninstallEngine.cs`; `src/DeepPurge.App/app.manifest`; BCUninstaller capability/risk patterns.
-  Touches: installed-program models/scanners, `UninstallEngine`, signature/path-owner inspection, WPF/CLI program rows and results, tests
-  Acceptance: Each row declares `NativeUninstaller`, `PackageManager`, `PortableFolder`, `GameLauncher`, or `Unsupported` capability with source identity and trust facts; unsupported actions are disabled; no skipped action reports success; executable path, owner/publisher, arguments, and risk are reviewable before elevated execution.
-  Complexity: M
-
 - [ ] P1 — Revalidate duplicate identity and require an explicit keeper policy
   Why: Duplicate groups can drift between hashing and deletion, and the implicit age-based keeper gives users no per-group or reference-folder control.
   Evidence: `src/DeepPurge.Core/FileSystem/DuplicateFinder.cs`; Czkawka reference-folder, keeper, and saved-selection patterns.

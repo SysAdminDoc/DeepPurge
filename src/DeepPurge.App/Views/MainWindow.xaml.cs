@@ -715,6 +715,11 @@ public partial class MainWindow : Window
     {
         var program = GetSelectedProgram();
         if (program == null) { WarnStatus("Select a program to uninstall."); return; }
+        if (!program.CanUninstall)
+        {
+            ShowToast(program.RemovalStatus, isWarning: true);
+            return;
+        }
 
         try
         {
@@ -723,7 +728,7 @@ public partial class MainWindow : Window
 
             // Drop the row immediately on success so the user sees the
             // uninstall take effect without waiting for a full re-scan.
-            if (ok) _vm.RemoveProgramFromList(program);
+            if (ok && !result!.IsPreview) _vm.RemoveProgramFromList(program);
 
             if (result?.LeftoverScan != null)
             {
@@ -1280,7 +1285,7 @@ public partial class MainWindow : Window
     private void Programs_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (dgPrograms.SelectedItem is InstalledProgram p)
-            _vm.StatusText = $"{p.DisplayName}  |  {p.Publisher}  |  {p.DisplayVersion}  |  {p.InstallLocation}";
+            _vm.StatusText = $"{p.DisplayName}  |  {p.CapabilityDisplay}  |  {p.ActionTrustDisplay}  |  {p.InstallLocation}";
     }
 
     private void Programs_DoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)

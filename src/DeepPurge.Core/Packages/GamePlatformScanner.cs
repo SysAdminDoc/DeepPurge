@@ -25,7 +25,7 @@ public static class GamePlatformScanner
         foreach (var g in games)
         {
             if (existing.Contains(g.Name)) continue;
-            programs.Add(new InstalledProgram
+            var program = new InstalledProgram
             {
                 DisplayName = g.Name,
                 DisplayVersion = g.Version,
@@ -33,7 +33,9 @@ public static class GamePlatformScanner
                 Publisher = g.Platform,
                 PackageManager = g.Platform.ToLowerInvariant(),
                 Source = RegistrySource.Portable,
-            });
+            };
+            RemovalCapabilityInspector.Populate(program);
+            programs.Add(program);
             existing.Add(g.Name);
         }
     }

@@ -34,6 +34,93 @@ public class InstalledProgram : INotifyPropertyChanged
     public string PackageId { get; set; } = string.Empty;
     public string UpgradeAvailable { get; set; } = string.Empty;
 
+    private RemovalCapability _removalCapability = RemovalCapability.Unsupported;
+    private string _removalSourceIdentity = string.Empty;
+    private UninstallerTrustFacts _uninstallerTrust = UninstallerTrustFacts.Empty;
+    private string _uninstallerExecutablePath = string.Empty;
+    private string _uninstallerArguments = string.Empty;
+    private string _uninstallerOwner = string.Empty;
+    private string _uninstallerPublisher = string.Empty;
+    private string _uninstallerRisk = global::DeepPurge.Core.Models.UninstallerRisk.Unknown.ToString();
+
+    public RemovalCapability RemovalCapability
+    {
+        get => _removalCapability;
+        set { _removalCapability = value; OnPropertyChanged(); OnPropertyChanged(nameof(CapabilityDisplay)); OnPropertyChanged(nameof(RemovalFactsDisplay)); OnPropertyChanged(nameof(RemovalSupported)); OnPropertyChanged(nameof(CanUninstall)); OnPropertyChanged(nameof(RemovalStatus)); }
+    }
+
+    public string RemovalSourceIdentity
+    {
+        get => _removalSourceIdentity;
+        set { _removalSourceIdentity = value ?? string.Empty; OnPropertyChanged(); OnPropertyChanged(nameof(RemovalFactsDisplay)); }
+    }
+
+    public UninstallerTrustFacts UninstallerTrust
+    {
+        get => _uninstallerTrust;
+        set { _uninstallerTrust = value ?? UninstallerTrustFacts.Empty; OnPropertyChanged(); OnPropertyChanged(nameof(ActionTrustDisplay)); OnPropertyChanged(nameof(RemovalFactsDisplay)); OnPropertyChanged(nameof(RemovalSupported)); OnPropertyChanged(nameof(CanUninstall)); OnPropertyChanged(nameof(RemovalStatus)); }
+    }
+
+    public string UninstallerExecutablePath
+    {
+        get => _uninstallerExecutablePath;
+        set { _uninstallerExecutablePath = value ?? string.Empty; OnPropertyChanged(); OnPropertyChanged(nameof(RemovalFactsDisplay)); }
+    }
+
+    public string UninstallerArguments
+    {
+        get => _uninstallerArguments;
+        set { _uninstallerArguments = value ?? string.Empty; OnPropertyChanged(); OnPropertyChanged(nameof(RemovalFactsDisplay)); }
+    }
+
+    public string UninstallerOwner
+    {
+        get => _uninstallerOwner;
+        set { _uninstallerOwner = value ?? string.Empty; OnPropertyChanged(); OnPropertyChanged(nameof(RemovalFactsDisplay)); }
+    }
+
+    public string UninstallerPublisher
+    {
+        get => _uninstallerPublisher;
+        set { _uninstallerPublisher = value ?? string.Empty; OnPropertyChanged(); OnPropertyChanged(nameof(RemovalFactsDisplay)); }
+    }
+
+    public string UninstallerRisk
+    {
+        get => _uninstallerRisk;
+        set { _uninstallerRisk = value ?? string.Empty; OnPropertyChanged(); OnPropertyChanged(nameof(RemovalFactsDisplay)); }
+    }
+
+    public string CapabilityDisplay => RemovalCapability.ToString();
+    public string ActionTrustDisplay => UninstallerTrust.ReviewDisplay;
+    public string RemovalFactsDisplay =>
+        $"{CapabilityDisplay} | source={RemovalSourceIdentity} | " +
+        $"action={UninstallerExecutablePath} {UninstallerArguments}".TrimEnd() +
+        $" | signature={UninstallerTrust.SignatureDisplay} | " +
+        $"publisher={DisplayOrUnknown(UninstallerPublisher)} | " +
+        $"owner={DisplayOrUnknown(UninstallerOwner)} | " +
+        $"risk={UninstallerRisk} | {UninstallerTrust.Reason}";
+    public bool RemovalSupported => !IsProtected &&
+        RemovalCapability != RemovalCapability.Unsupported &&
+        UninstallerTrust.IsActionAvailable;
+    public bool CanUninstall => RemovalSupported;
+    public string RemovalStatus => RemovalSupported
+        ? UninstallerTrust.Risk is global::DeepPurge.Core.Models.UninstallerRisk.Low
+            ? "Ready"
+            : $"Review: {UninstallerTrust.RiskDisplay}"
+        : $"Unsupported: {UninstallerTrust.Reason}";
+
+    internal void OnRemovalFactsChanged()
+    {
+        OnPropertyChanged(nameof(CapabilityDisplay));
+        OnPropertyChanged(nameof(ActionTrustDisplay));
+        OnPropertyChanged(nameof(SignatureDisplay));
+        OnPropertyChanged(nameof(RemovalFactsDisplay));
+        OnPropertyChanged(nameof(RemovalSupported));
+        OnPropertyChanged(nameof(CanUninstall));
+        OnPropertyChanged(nameof(RemovalStatus));
+    }
+
     public object? Icon
     {
         get => _icon;
@@ -51,7 +138,7 @@ public class InstalledProgram : INotifyPropertyChanged
     public bool IsProtected
     {
         get => _isProtected;
-        set { _isProtected = value; OnPropertyChanged(); }
+        set { _isProtected = value; OnPropertyChanged(); OnPropertyChanged(nameof(RemovalSupported)); OnPropertyChanged(nameof(CanUninstall)); OnPropertyChanged(nameof(RemovalStatus)); OnPropertyChanged(nameof(RemovalFactsDisplay)); }
     }
 
     public bool IsSuspectedBundleware { get; set; }
@@ -144,6 +231,9 @@ public class InstalledProgram : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
     protected void OnPropertyChanged([CallerMemberName] string? name = null)
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+    private static string DisplayOrUnknown(string value)
+        => string.IsNullOrWhiteSpace(value) ? "unknown" : value;
 }
 
 public enum RegistrySource

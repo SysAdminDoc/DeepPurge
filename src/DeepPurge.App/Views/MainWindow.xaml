@@ -803,7 +803,8 @@
                             <Button x:Name="btnScanLeftovers" Content="Scan leftovers" Click="ScanLeftovers_Click"
                                     Margin="0,0,6,8"/>
                             <Button x:Name="btnUninstall" Content="Uninstall" Click="Uninstall_Click"
-                                    Style="{DynamicResource AccentButton}" Margin="0,0,6,8"/>
+                                    Style="{DynamicResource AccentButton}" Margin="0,0,6,8"
+                                    IsEnabled="{Binding SelectedItem.CanUninstall, ElementName=dgPrograms, FallbackValue=False}"/>
                             <Button x:Name="btnBulkUninstall" Content="Uninstall selected" Click="BulkUninstall_Click"
                                     Style="{DynamicResource DangerButton}" Margin="0,0,6,8"
                                     ToolTip="Uninstall every program with a checkbox. Silent flags applied automatically."/>
@@ -927,6 +928,7 @@
                                Margin="0,96,0,0">
                         <DataGrid.RowStyle>
                             <Style TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
+                                <Setter Property="ToolTip" Value="{Binding RemovalFactsDisplay}"/>
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding IsRecentlyInstalled}" Value="True">
                                         <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
@@ -937,7 +939,8 @@
                         </DataGrid.RowStyle>
                         <DataGrid.ContextMenu>
                             <ContextMenu>
-                                <MenuItem Header="Uninstall" Tag="&#xE74D;" Click="Uninstall_Click"/>
+                                <MenuItem Header="Uninstall" Tag="&#xE74D;" Click="Uninstall_Click"
+                                          IsEnabled="{Binding PlacementTarget.SelectedItem.CanUninstall, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
                                 <MenuItem Header="Uninstall Selected (bulk)" Tag="&#xE74D;" Click="BulkUninstall_Click"/>
                                 <MenuItem Header="Scan Leftovers" Tag="&#xE721;" Click="ScanLeftovers_Click"/>
                                 <MenuItem Header="Upgrade via winget" Tag="&#xE777;" Click="Ctx_WingetUpgrade_Click"/>
@@ -972,6 +975,10 @@
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
+                            <DataGridTextColumn Binding="{Binding CapabilityDisplay}" Header="CAPABILITY" Width="132"/>
+                            <DataGridTextColumn Binding="{Binding RemovalStatus}" Header="ACTION" Width="178"/>
+                            <DataGridTextColumn Binding="{Binding UninstallerRisk}" Header="RISK" Width="78"/>
+                            <DataGridTextColumn Binding="{Binding UninstallerExecutablePath}" Header="ACTION EXE" Width="220"/>
                             <DataGridTemplateColumn Header="TRUST" Width="138" SortMemberPath="SignatureDisplay">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>

@@ -8,11 +8,11 @@ public static class ProgramExporter
     public static string ExportToCsv(IEnumerable<InstalledProgram> programs, string filePath)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("\"Name\",\"Version\",\"Publisher\",\"Install Date\",\"Size (KB)\",\"Install Location\",\"Uninstall String\",\"Source\",\"Flags\"");
+        sb.AppendLine("\"Name\",\"Version\",\"Publisher\",\"Install Date\",\"Size (KB)\",\"Install Location\",\"Uninstall String\",\"Source\",\"Capability\",\"Source Identity\",\"Action\",\"Action Executable\",\"Action Arguments\",\"Action Owner\",\"Action Publisher\",\"Action Risk\",\"Flags\"");
 
         foreach (var p in programs)
         {
-            sb.AppendLine($"\"{Esc(p.DisplayName)}\",\"{Esc(p.DisplayVersion)}\",\"{Esc(p.Publisher)}\",\"{p.InstallDateDisplay}\",\"{p.EstimatedSizeKB}\",\"{Esc(p.InstallLocation)}\",\"{Esc(p.UninstallString)}\",\"{p.SourceDisplay}\",\"{Esc(p.FlagsDisplay)}\"");
+            sb.AppendLine($"\"{Esc(p.DisplayName)}\",\"{Esc(p.DisplayVersion)}\",\"{Esc(p.Publisher)}\",\"{p.InstallDateDisplay}\",\"{p.EstimatedSizeKB}\",\"{Esc(p.InstallLocation)}\",\"{Esc(p.UninstallString)}\",\"{p.SourceDisplay}\",\"{p.CapabilityDisplay}\",\"{Esc(p.RemovalSourceIdentity)}\",\"{Esc(p.RemovalStatus)}\",\"{Esc(p.UninstallerExecutablePath)}\",\"{Esc(p.UninstallerArguments)}\",\"{Esc(p.UninstallerOwner)}\",\"{Esc(p.UninstallerPublisher)}\",\"{Esc(p.UninstallerRisk)}\",\"{Esc(p.FlagsDisplay)}\"");
         }
 
         File.WriteAllText(filePath, sb.ToString(), Encoding.UTF8);
@@ -37,11 +37,11 @@ public static class ProgramExporter
         sb.AppendLine("</style></head><body>");
         sb.AppendLine("<h1>Installed Programs</h1>");
         sb.AppendLine($"<p class='meta'>Exported by DeepPurge on {DateTime.Now:yyyy-MM-dd HH:mm} | {programs.Count()} programs</p>");
-        sb.AppendLine("<table><thead><tr><th>Program</th><th>Version</th><th>Publisher</th><th>Installed</th><th class='size'>Size</th><th>Source</th><th>Flags</th></tr></thead><tbody>");
+        sb.AppendLine("<table><thead><tr><th>Program</th><th>Version</th><th>Publisher</th><th>Installed</th><th class='size'>Size</th><th>Source</th><th>Capability</th><th>Action</th><th>Action executable</th><th>Risk</th><th>Flags</th></tr></thead><tbody>");
 
         foreach (var p in programs.OrderBy(p => p.DisplayName))
         {
-            sb.AppendLine($"<tr><td>{H(p.DisplayName)}</td><td>{H(p.DisplayVersion)}</td><td>{H(p.Publisher)}</td><td>{p.InstallDateDisplay}</td><td class='size'>{p.EstimatedSizeDisplay}</td><td>{p.SourceDisplay}</td><td>{H(p.FlagsDisplay)}</td></tr>");
+            sb.AppendLine($"<tr><td>{H(p.DisplayName)}</td><td>{H(p.DisplayVersion)}</td><td>{H(p.Publisher)}</td><td>{p.InstallDateDisplay}</td><td class='size'>{p.EstimatedSizeDisplay}</td><td>{p.SourceDisplay}</td><td>{H(p.CapabilityDisplay)}</td><td>{H(p.RemovalStatus)}</td><td>{H(p.UninstallerExecutablePath)}</td><td>{H(p.UninstallerRisk)}</td><td>{H(p.FlagsDisplay)}</td></tr>");
         }
 
         sb.AppendLine("</tbody></table></body></html>");
@@ -59,6 +59,15 @@ public static class ProgramExporter
             Size = p.EstimatedSizeDisplay,
             p.InstallLocation, p.UninstallString,
             Source = p.SourceDisplay,
+            Capability = p.CapabilityDisplay,
+            p.RemovalSourceIdentity,
+            Action = p.RemovalStatus,
+            p.UninstallerExecutablePath,
+            p.UninstallerArguments,
+            p.UninstallerOwner,
+            p.UninstallerPublisher,
+            p.UninstallerRisk,
+            Trust = p.ActionTrustDisplay,
             Flags = p.FlagsDisplay,
             p.IsSuspectedBundleware,
             p.OemBloatScore,
