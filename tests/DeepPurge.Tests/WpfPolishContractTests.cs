@@ -236,6 +236,8 @@ public class WpfPolishContractTests
             "Community Cleaners",
             "Scheduled Cleaning",
             "Install Monitor",
+            "Health Dashboard",
+            "System Slimming",
             "Settings / Privacy",
         };
 

@@ -9,7 +9,7 @@ DeepPurge.sln
 ├── src/DeepPurge.Core/       Pure logic: scanners, safety, diagnostics
 ├── src/DeepPurge.App/        WPF GUI (admin manifest, MVVM via CommunityToolkit.Mvvm)
 ├── src/DeepPurge.Cli/        Headless entry point (asInvoker manifest)
-└── tests/DeepPurge.Tests/    xUnit v3, 352 cases
+└── tests/DeepPurge.Tests/    xUnit v3, 454 cases
 ```
 
 `DeepPurge.Core` has exactly one hard WPF dependency — `IconExtractor` returns
@@ -80,7 +80,7 @@ state. Returns structured `SelfTestResult` records the CLI formats.
 
 - `MainViewModel.cs` — pre-v0.9 features (programs, junk, evidence, autoruns, ...)
 - `MainViewModel.Extensions.cs` — v0.9 features (drivers, startup impact, shortcuts,
-  duplicates, winapp2, repair, schedule, updates, install snapshot)
+  duplicates, winapp2, repair, schedule, updates, install snapshot, health, and system slimming)
 
 Observable collections are bound 1:1 to DataGrid ItemsSource. Async work runs under
 `Task.Run(..., ct)`; results are marshaled back to the UI thread via
@@ -157,8 +157,8 @@ to enable "forced uninstall by exact manifest."
 
 1. `dotnet build DeepPurge.sln -c Release` — compiles App, CLI, Core, and tests
 2. `dotnet test tests/DeepPurge.Tests/DeepPurge.Tests.csproj` — locks in parser / sanitiser behaviour
-3. `Build.ps1 -Test -Sign` publishes `build/DeepPurge.exe`, `build/DeepPurgeCli.exe`, and `build/SHA256SUMS.txt`
-4. Copy hashes into winget/Scoop manifests and run `Build.ps1 -ValidateReleaseOnly -ReleaseChecksumsPath build\SHA256SUMS.txt`
+3. `Build.ps1 -Sign` publishes `build/DeepPurge.exe`, `build/DeepPurgeCli.exe`, and `build/SHA256SUMS.txt`; Release builds run the 454-test suite by default
+4. Copy hashes into winget/Scoop manifests, run `Build.ps1 -AuditDependenciesOnly`, then run `Build.ps1 -ValidateReleaseOnly -ReleaseChecksumsPath build\SHA256SUMS.txt`
 5. Git tag `vX.Y.Z`, push the tag, then create/upload GitHub Release assets locally with `gh release`
 6. `wingetcreate update ...` → winget PR
 7. Commit `packaging/scoop/deeppurge.json` to a Scoop bucket

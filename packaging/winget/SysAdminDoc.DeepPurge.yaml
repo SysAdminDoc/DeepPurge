@@ -36,7 +36,7 @@ Installers:
     InstallerType: portable
     Scope: user
     InstallerUrl: https://github.com/SysAdminDoc/DeepPurge/releases/download/v0.9.0/DeepPurge.exe
-    InstallerSha256: 0E3D0ABAD7916D16F08D3FFF0DDA15B5F29594675A00CD45A085E48439BF7A40
+    InstallerSha256: 20E7223224BFF57C9EF1C9F8C4255788A4D10E8E1DB87E09F9ED147C73CB714E
     Commands:
       - DeepPurge
 

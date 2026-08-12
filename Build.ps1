@@ -326,6 +326,110 @@ function Assert-LocalArtifactsMatchChecksums {
     }
 }
 
+function Invoke-DocumentationContractValidation {
+    Write-Host ""
+    Write-Host "  [*] Validating release documentation and capability routes..." -ForegroundColor Yellow
+
+    $docs = @(
+        (Join-Path $ProjectRoot "README.md"),
+        (Join-Path $ProjectRoot "ARCHITECTURE.md"),
+        (Join-Path $ProjectRoot "CONTRIBUTING.md"),
+        (Join-Path $ProjectRoot "packaging\README.md")
+    )
+    $docContents = @{}
+    foreach ($docPath in $docs) {
+        if (-not (Test-Path $docPath)) {
+            Add-ReleaseValidationFailure "documentation:$([IO.Path]::GetFileName($docPath))" "file is missing"
+            continue
+        }
+        $docContents[$docPath] = Get-Content $docPath -Raw
+    }
+
+    $testOutput = (& $script:DotNetExe test $TestsProject -c $Configuration --no-build --no-restore --list-tests --nologo --verbosity minimal 2>&1 | Out-String)
+    $testExitCode = $LASTEXITCODE
+    if ($testExitCode -ne 0) {
+        Add-ReleaseValidationFailure "documentation:test-count" "could not enumerate tests (exit $testExitCode)"
+    } else {
+        $testCount = ([regex]::Matches($testOutput, '(?m)^[ \t]+DeepPurge\.Tests\.[^\r\n]+')).Count
+        if ($testCount -le 0) {
+            Add-ReleaseValidationFailure "documentation:test-count" "test enumeration returned no DeepPurge.Tests entries"
+        } else {
+            foreach ($docPath in $docs | Where-Object { $_ -notlike "*packaging\README.md" }) {
+                $docText = $docContents[$docPath]
+                $match = [regex]::Match($docText, '(?im)\b(?:all\s+)?(?<count>\d+)\s+(?:tests|cases)\b')
+                if (-not $match.Success) {
+                    Add-ReleaseValidationFailure "documentation:$([IO.Path]::GetFileName($docPath)):test-count" "documented test count is missing"
+                    continue
+                }
+                if ([int]$match.Groups["count"].Value -ne $testCount) {
+                    Add-ReleaseValidationFailure "documentation:$([IO.Path]::GetFileName($docPath)):test-count" "expected $testCount tests, found $($match.Groups["count"].Value)"
+                }
+            }
+        }
+    }
+
+    foreach ($docPath in $docContents.Keys) {
+        $docName = [IO.Path]::GetFileName($docPath)
+        $docText = $docContents[$docPath]
+        if ($docText -match 'Build\.ps1\s+-Test\s+-Sign') {
+            Add-ReleaseValidationFailure "documentation:${docName}:command" "stale '-Test -Sign' release command; Release builds run tests by default"
+        }
+        if ($docText -notmatch 'Build\.ps1\s+-Sign') {
+            Add-ReleaseValidationFailure "documentation:${docName}:command" "signed release command is missing"
+        }
+    }
+
+    $appManifest = Get-Content (Join-Path $ProjectRoot "src\DeepPurge.App\app.manifest") -Raw
+    $cliManifest = Get-Content (Join-Path $ProjectRoot "src\DeepPurge.Cli\app.manifest") -Raw
+    if ($appManifest -notmatch 'requestedExecutionLevel\s+level="requireAdministrator"') {
+        Add-ReleaseValidationFailure "documentation:privilege" "GUI manifest must requireAdministrator"
+    }
+    if ($cliManifest -notmatch 'requestedExecutionLevel\s+level="asInvoker"') {
+        Add-ReleaseValidationFailure "documentation:privilege" "CLI manifest must be asInvoker"
+    }
+    $readmeText = $docContents[(Join-Path $ProjectRoot "README.md")]
+    if ($readmeText -notmatch 'requireAdministrator' -or $readmeText -notmatch 'asInvoker') {
+        Add-ReleaseValidationFailure "documentation:privilege" "README must document GUI requireAdministrator and CLI asInvoker posture"
+    }
+
+    $xamlPath = Join-Path $ProjectRoot "src\DeepPurge.App\Views\MainWindow.xaml"
+    $codeBehindPath = Join-Path $ProjectRoot "src\DeepPurge.App\Views\MainWindow.xaml.cs"
+    $cliPath = Join-Path $ProjectRoot "src\DeepPurge.Cli\Program.cs"
+    $xaml = Get-Content $xamlPath -Raw
+    $codeBehind = Get-Content $codeBehindPath -Raw
+    $cli = Get-Content $cliPath -Raw
+    foreach ($contract in @(
+        @{ Claim = "Health Dashboard"; Tag = "Health"; Element = "panelHealth"; Cli = "health" },
+        @{ Claim = "System Slimming"; Tag = "Slimming"; Element = "panelSlimming"; Cli = "slim" },
+        @{ Claim = "Expert / Safe mode"; Tag = "Settings"; Element = "panelSettings"; Cli = "settings" }
+    )) {
+        if ($readmeText -notmatch [regex]::Escape($contract.Claim)) {
+            Add-ReleaseValidationFailure "documentation:capability:$($contract.Claim)" "README claim is missing"
+        }
+        if ($xaml -notmatch [regex]::Escape(('Tag="' + $contract.Tag + '"'))) {
+            Add-ReleaseValidationFailure "documentation:capability:$($contract.Claim)" "GUI navigation tag is missing"
+        }
+        if ($xaml -notmatch [regex]::Escape(('x:Name="' + $contract.Element + '"'))) {
+            Add-ReleaseValidationFailure "documentation:capability:$($contract.Claim)" "GUI panel is missing"
+        }
+        if ($codeBehind -notmatch [regex]::Escape(('case "' + $contract.Tag + '"'))) {
+            Add-ReleaseValidationFailure "documentation:capability:$($contract.Claim)" "GUI navigation case is missing"
+        }
+        if ($cli -notmatch [regex]::Escape(('"' + $contract.Cli + '"'))) {
+            Add-ReleaseValidationFailure "documentation:capability:$($contract.Claim)" "CLI route is missing"
+        }
+    }
+    if ($xaml -notmatch 'Tag="Hunter"[^>]*Visibility="[^"]*ExpertMode' -and
+        $xaml -notmatch 'ExpertMode[^"]*BoolToVis') {
+        Add-ReleaseValidationFailure "documentation:capability:Expert / Safe mode" "Expert mode does not gate advanced navigation"
+    }
+    if ($cli -notmatch 'health\s+\[--json\]' -or $cli -notmatch 'slim\s+\[--delete\]') {
+        Add-ReleaseValidationFailure "documentation:capability:CLI help" "health/slim CLI help routes are missing"
+    }
+
+    return $true
+}
+
 function Invoke-ReleaseReadinessValidation {
     $script:ReleaseValidationFailures = [System.Collections.Generic.List[string]]::new()
 
@@ -346,6 +450,17 @@ function Invoke-ReleaseReadinessValidation {
         Assert-ReleaseValue "README.md:version badge" $matches.version $appVersion
     } else {
         Add-ReleaseValidationFailure "README.md:version badge" "version badge is missing"
+    }
+    if ($readme -match "(?m)^# DeepPurge v(?<version>\d+\.\d+\.\d+)") {
+        Assert-ReleaseValue "README.md:heading version" $matches.version $appVersion
+    } else {
+        Add-ReleaseValidationFailure "README.md:heading version" "version heading is missing"
+    }
+
+    $changelogPath = Join-Path $ProjectRoot "CHANGELOG.md"
+    $changelog = if (Test-Path $changelogPath) { Get-Content $changelogPath -Raw } else { "" }
+    if ($changelog -notmatch ("(?m)^## \[v?" + [regex]::Escape($appVersion) + "\]")) {
+        Add-ReleaseValidationFailure "CHANGELOG.md:version heading" "current version heading is missing"
     }
 
     $buildScript = Get-Content (Join-Path $ProjectRoot "Build.ps1") -Raw
@@ -423,6 +538,7 @@ function Invoke-ReleaseReadinessValidation {
     if (-not (Invoke-DependencyAuditValidation)) {
         Add-ReleaseValidationFailure "NuGet dependency audit" "project-level dependency audit failed"
     }
+    Invoke-DocumentationContractValidation | Out-Null
 
     if ($script:ReleaseValidationFailures.Count -gt 0) {
         Write-Host "  [ERROR] Release readiness validation failed:" -ForegroundColor Red

@@ -582,7 +582,8 @@
                             </RadioButton>
                             <ProgressBar Value="{Binding TasksScanProgress}" Style="{StaticResource NavProgressBar}"/>
 
-                            <RadioButton GroupName="nav" Tag="Hunter" Checked="NavButton_Checked" Style="{StaticResource NavRadioButton}">
+                            <RadioButton GroupName="nav" Tag="Hunter" Checked="NavButton_Checked" Style="{StaticResource NavRadioButton}"
+                                         Visibility="{Binding ExpertMode, Converter={StaticResource BoolToVis}}">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="&#xE721;" Style="{StaticResource NavIcon}"/>
                                     <TextBlock Text="Registry Hunter" VerticalAlignment="Center"/>
@@ -690,6 +691,21 @@
                                 </StackPanel>
                             </RadioButton>
 
+                            <RadioButton GroupName="nav" Tag="Health" Checked="NavButton_Checked" Style="{StaticResource NavRadioButton}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE9D9;" Style="{StaticResource NavIcon}"/>
+                                    <TextBlock Text="Health Dashboard" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </RadioButton>
+
+                            <RadioButton GroupName="nav" Tag="Slimming" Checked="NavButton_Checked" Style="{StaticResource NavRadioButton}"
+                                         Visibility="{Binding ExpertMode, Converter={StaticResource BoolToVis}}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE7F4;" Style="{StaticResource NavIcon}"/>
+                                    <TextBlock Text="System Slimming" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </RadioButton>
+
                             <RadioButton GroupName="nav" Tag="History" Checked="NavButton_Checked" Style="{StaticResource NavRadioButton}">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="&#xE81C;" Style="{StaticResource NavIcon}"/>
@@ -793,7 +809,8 @@
                                     <RadioButton x:Name="rbModerate" Content="Moderate" GroupName="scanMode"
                                                  IsChecked="True" Style="{StaticResource ScanModeRadio}"/>
                                     <RadioButton x:Name="rbAdvanced" Content="Advanced" GroupName="scanMode"
-                                                 Style="{StaticResource ScanModeRadio}"/>
+                                                 Style="{StaticResource ScanModeRadio}"
+                                                 Visibility="{Binding ExpertMode, Converter={StaticResource BoolToVis}}"/>
                                 </StackPanel>
                             </Border>
                             <Button x:Name="btnExport" Content="Export" Click="Export_Click"
@@ -1249,6 +1266,7 @@
                                           IsEnabled="{Binding PlacementTarget.SelectedItem.MutationSupported, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
                                 <MenuItem Header="Delete Service" Tag="&#xE74D;" Click="DeleteService_Click"
                                           IsEnabled="{Binding PlacementTarget.SelectedItem.DeletionSupported, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          Visibility="{Binding PlacementTarget.DataContext.ExpertMode, RelativeSource={RelativeSource AncestorType=ContextMenu}, Converter={StaticResource BoolToVis}}"
                                           Foreground="{DynamicResource RedBrush}"/>
                                 <Separator Style="{StaticResource MenuSep}"/>
                                 <MenuItem Header="Open in services.msc" Tag="&#xE912;" Click="Ctx_OpenServicesMsc_Click"/>
@@ -2010,6 +2028,141 @@
                     </Border>
 
                     <!-- ═══════════════════════════════════════════════════════ -->
+                    <!-- HEALTH DASHBOARD                                      -->
+                    <!-- ═══════════════════════════════════════════════════════ -->
+                    <Grid x:Name="panelHealth" Visibility="Collapsed"
+                          AutomationProperties.Name="Health Dashboard panel"
+                          AutomationProperties.HelpText="Score junk, privacy, startup, and disk hygiene with partial-scan diagnostics.">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <Border Grid.Row="0" Padding="36,28,36,12">
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Content="Run Health Check"
+                                        Command="{Binding RunHealthCheckCommand}"
+                                        Style="{DynamicResource AccentButton}" Padding="22,9"
+                                        AutomationProperties.Name="Run health check"/>
+                                <StackPanel>
+                                    <TextBlock Text="Health Dashboard" FontSize="24" FontWeight="Bold"
+                                               Foreground="{DynamicResource TextBrush}"/>
+                                    <TextBlock Text="{Binding HealthSummary}" TextWrapping="Wrap"
+                                               Foreground="{DynamicResource SubtextBrush}" Margin="0,6,24,0"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+
+                        <Border Grid.Row="1" Margin="36,0,36,14" Padding="16"
+                                Background="{DynamicResource Surface0Brush}"
+                                BorderBrush="{DynamicResource Surface1Brush}" BorderThickness="1" CornerRadius="10">
+                            <StackPanel Orientation="Horizontal">
+                                <StackPanel Margin="0,0,32,0">
+                                    <TextBlock Text="OVERALL SCORE" FontSize="10" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource Subtext0Brush}"/>
+                                    <TextBlock Text="{Binding HealthOverallScore, StringFormat={}{0}/100}" FontSize="28"
+                                               FontWeight="Bold" Foreground="{DynamicResource AccentBrush}"/>
+                                </StackPanel>
+                                <StackPanel Margin="0,0,32,0">
+                                    <TextBlock Text="GRADE" FontSize="10" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource Subtext0Brush}"/>
+                                    <TextBlock Text="{Binding HealthGrade}" FontSize="28" FontWeight="Bold"
+                                               Foreground="{DynamicResource TextBrush}"/>
+                                </StackPanel>
+                                <TextBlock Text="{Binding HealthTrendDisplay}" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource SubtextBrush}" FontSize="12"/>
+                            </StackPanel>
+                        </Border>
+
+                        <DataGrid Grid.Row="2" AutoGenerateColumns="False" ItemsSource="{Binding HealthCategories}"
+                                  AutomationProperties.Name="Health category scores">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Binding="{Binding Category}" Header="CATEGORY" Width="160"/>
+                                <DataGridTextColumn Binding="{Binding Score, StringFormat={}{0}/100}" Header="SCORE" Width="90"/>
+                                <DataGridTextColumn Binding="{Binding Summary}" Header="SUMMARY" Width="*"/>
+                                <DataGridTextColumn Binding="{Binding Action}" Header="RECOMMENDATION" Width="190"/>
+                                <DataGridTextColumn Binding="{Binding CommandTarget}" Header="TARGET" Width="130"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                        <Border Style="{StaticResource EmptyStateCard}" Panel.ZIndex="5"
+                                AutomationProperties.Name="No health assessment results">
+                            <Border.Visibility>
+                                <MultiBinding Converter="{StaticResource PanelEmptyStateVisConverter}" ConverterParameter="Health">
+                                    <Binding Path="CurrentPanel"/>
+                                    <Binding Path="HealthCategories.Count"/>
+                                </MultiBinding>
+                            </Border.Visibility>
+                            <StackPanel>
+                                <TextBlock Text="&#xE9D9;" Style="{StaticResource EmptyStateIcon}"/>
+                                <TextBlock Text="Run a health check to score this system" Style="{StaticResource EmptyStateTitle}"/>
+                                <TextBlock Text="DeepPurge checks junk, privacy traces, startup impact, and free disk space. Partial results include the source diagnostics that need attention."
+                                           Style="{StaticResource EmptyStateBody}"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <!-- ═══════════════════════════════════════════════════════ -->
+                    <!-- SYSTEM SLIMMING                                        -->
+                    <!-- ═══════════════════════════════════════════════════════ -->
+                    <Grid x:Name="panelSlimming" Visibility="Collapsed"
+                          AutomationProperties.Name="System Slimming panel"
+                          AutomationProperties.HelpText="Review removable Windows components before an expert-mode guarded deletion.">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <Border Grid.Row="0" Padding="36,28,36,14">
+                            <DockPanel>
+                                <WrapPanel DockPanel.Dock="Right" VerticalAlignment="Center">
+                                    <Button Content="Scan Components" Command="{Binding ScanSlimmableCommand}"
+                                            Style="{DynamicResource AccentButton}" Margin="0,0,8,0"
+                                            Padding="18,9" AutomationProperties.Name="Scan removable Windows components"/>
+                                    <Button Content="Remove Selected" Command="{Binding RunSlimCommand}"
+                                            IsEnabled="{Binding ExpertMode}" Style="{DynamicResource DangerButton}"
+                                            Padding="18,9" AutomationProperties.Name="Remove selected Windows components"/>
+                                </WrapPanel>
+                                <StackPanel>
+                                    <TextBlock Text="System Slimming" FontSize="24" FontWeight="Bold"
+                                               Foreground="{DynamicResource TextBrush}"/>
+                                    <TextBlock Text="{Binding SlimSummary}" TextWrapping="Wrap"
+                                               Foreground="{DynamicResource SubtextBrush}" Margin="0,6,24,0"/>
+                                    <TextBlock Text="Review each component. Enable Dry Run to preview the guarded deletion result before making changes."
+                                               TextWrapping="Wrap" Foreground="{DynamicResource PeachBrush}" Margin="0,6,24,0"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+
+                        <DataGrid Grid.Row="1" AutoGenerateColumns="False" ItemsSource="{Binding SlimmableComponents}"
+                                  AutomationProperties.Name="Removable Windows components">
+                            <DataGrid.Columns>
+                                <DataGridCheckBoxColumn Binding="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Header="REMOVE" Width="70"/>
+                                <DataGridTextColumn Binding="{Binding Name}" Header="COMPONENT" Width="220"/>
+                                <DataGridTextColumn Binding="{Binding Category}" Header="CATEGORY" Width="110"/>
+                                <DataGridTextColumn Binding="{Binding Description}" Header="DESCRIPTION" Width="*"/>
+                                <DataGridTextColumn Binding="{Binding SizeBytes, Converter={StaticResource BytesToSizeConverter}}" Header="SIZE" Width="95"/>
+                                <DataGridTextColumn Binding="{Binding Path}" Header="PATH" Width="260"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                        <Border Style="{StaticResource EmptyStateCard}" Panel.ZIndex="5"
+                                AutomationProperties.Name="No removable Windows components">
+                            <Border.Visibility>
+                                <MultiBinding Converter="{StaticResource PanelEmptyStateVisConverter}" ConverterParameter="Slimming">
+                                    <Binding Path="CurrentPanel"/>
+                                    <Binding Path="SlimmableComponents.Count"/>
+                                </MultiBinding>
+                            </Border.Visibility>
+                            <StackPanel>
+                                <TextBlock Text="&#xE7F4;" Style="{StaticResource EmptyStateIcon}"/>
+                                <TextBlock Text="Scan for removable Windows components" Style="{StaticResource EmptyStateTitle}"/>
+                                <TextBlock Text="Only existing, non-empty directories are shown. Reparse points and protected paths are rejected by SafetyGuard before deletion."
+                                           Style="{StaticResource EmptyStateBody}"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <!-- ═══════════════════════════════════════════════════════ -->
                     <!-- ACTIVITY HISTORY                                         -->
                     <!-- ═══════════════════════════════════════════════════════ -->
                     <DataGrid x:Name="dgHistory" Visibility="Collapsed" AutoGenerateColumns="False"
@@ -2070,7 +2223,7 @@
                                         <TextBlock Text="Dry Run previews cleanup results without deleting anything during this session."
                                                    TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}"/>
                                     </CheckBox>
-                                    <CheckBox IsChecked="{Binding SecureDeleteEnabled}" HorizontalAlignment="Left"
+                                    <CheckBox IsChecked="{Binding SecureDeleteEnabled}" IsEnabled="{Binding ExpertMode}" HorizontalAlignment="Left"
                                               AutomationProperties.Name="Enable secure delete by default for this session">
                                         <TextBlock Text="Secure Delete overwrites selected files before deletion and disables Recycle Bin recovery."
                                                    TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}"/>
@@ -2362,7 +2515,7 @@
                     <Border DockPanel.Dock="Right" CornerRadius="5" Padding="9,4" Margin="10,0,0,0"
                             VerticalAlignment="Center" Background="{DynamicResource BaseBrush}"
                             BorderBrush="{DynamicResource Surface1Brush}" BorderThickness="1">
-                        <CheckBox x:Name="chkSecure" IsChecked="{Binding SecureDeleteEnabled}"
+                        <CheckBox x:Name="chkSecure" IsChecked="{Binding SecureDeleteEnabled}" IsEnabled="{Binding ExpertMode}"
                                   VerticalAlignment="Center"
                                   AutomationProperties.Name="Secure delete mode"
                                   ToolTip="Overwrite file contents before unlink. Slower; no recycle-bin recovery.">

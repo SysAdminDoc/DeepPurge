@@ -5,8 +5,8 @@ namespace DeepPurge.Tests;
 
 public class ReleaseReadinessTests
 {
-    private const string GuiHash = "0E3D0ABAD7916D16F08D3FFF0DDA15B5F29594675A00CD45A085E48439BF7A40";
-    private const string CliHash = "795DF2F9D17AF59BBFE85805830806C2606BFFFAAC8381218F21A147CCBCB9F3";
+    private const string GuiHash = "20E7223224BFF57C9EF1C9F8C4255788A4D10E8E1DB87E09F9ED147C73CB714E";
+    private const string CliHash = "8AC1C08CC616D503F2BD301EDA5505649A3E5524542E72CD3F016A02886E4AAF";
 
     [Fact]
     public void Build_script_exposes_release_readiness_validation()
@@ -21,6 +21,11 @@ public class ReleaseReadinessTests
         Assert.Contains("function Write-Sha256Sums", script);
         Assert.Contains("function Invoke-ReleaseReadinessValidation", script);
         Assert.Contains("function Invoke-DependencyAuditValidation", script);
+        Assert.Contains("function Invoke-DocumentationContractValidation", script);
+        Assert.Contains("--list-tests", script);
+        Assert.Contains("requestedExecutionLevel", script);
+        Assert.Contains("panelHealth", script);
+        Assert.Contains("panelSlimming", script);
         Assert.Contains("SHA256SUMS.txt", script);
         Assert.Contains("packaging/winget/SysAdminDoc.DeepPurge.yaml:Installers[$i].InstallerSha256", script);
         Assert.Contains("packaging/scoop/deeppurge.json:architecture.$($arch.Name).hash[$i]", script);
@@ -115,6 +120,7 @@ public class ReleaseReadinessTests
         Assert.True(distinct.Count == 1,
             $"Test count drift across docs: {string.Join(", ", counts.Select(kv => $"{kv.Key}={kv.Value}"))}. " +
             $"All must agree on the same number.");
+        Assert.Equal(454, distinct[0]);
     }
 
     private static string FindRepoRoot()

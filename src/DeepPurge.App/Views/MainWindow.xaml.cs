@@ -59,6 +59,8 @@ public partial class MainWindow : Window
             ["Repair"] = "Run Windows servicing and cache-repair commands with live output.",
             ["Schedule"] = "Create constrained recurring cleanup jobs and inspect active tasks.",
             ["InstallMonitor"] = "Capture and review installer changes before considering a later replay.",
+            ["Health"] = "Assess junk, privacy, startup, and disk hygiene with a scored report.",
+            ["Slimming"] = "Review removable Windows components and reclaim space through the guarded deletion pipeline.",
             ["History"] = "Review local cleanup and maintenance activity recorded on this device.",
             ["Settings"] = "Control privacy retention, exclusions, cookies, and local data lifecycle.",
             ["About"] = "Verify the running executable, release checksum, and diagnostic posture.",
@@ -219,7 +221,8 @@ public partial class MainWindow : Window
         panelHunter, panelOrphans, panelDeletionRecovery, panelBackups,
         // v0.9.0 system-tools panels
         dgDrivers, dgStartupImpact, dgShortcuts, dgDuplicates,
-        panelWinapp2, panelRepair, panelSchedule, panelInstallMonitor, dgHistory, panelSettings, panelAbout,
+        panelWinapp2, panelRepair, panelSchedule, panelInstallMonitor, panelHealth, panelSlimming,
+        dgHistory, panelSettings, panelAbout,
     };
 
     private void NavButton_Checked(object sender, RoutedEventArgs e)
@@ -298,7 +301,14 @@ public partial class MainWindow : Window
                 dgServices.Visibility = Visibility.Visible; txtPanelTitle.Text = "Services Manager";
                 AppendToolbarButton("Rescan", ScanServices_Click, "AccentButton");
                 AppendToolbarButton("Disable", DisableService_Click);
-                AppendToolbarButton("Delete Service", DeleteService_Click, "DangerButton");
+                var deleteService = AppendToolbarButton("Delete Service", DeleteService_Click, "DangerButton");
+                deleteService.SetBinding(
+                    VisibilityProperty,
+                    new System.Windows.Data.Binding(nameof(MainViewModel.ExpertMode))
+                    {
+                        Source = _vm,
+                        Converter = new System.Windows.Controls.BooleanToVisibilityConverter(),
+                    });
                 break;
             case "Tasks":
                 dgTasks.Visibility = Visibility.Visible; txtPanelTitle.Text = "Scheduled Tasks";
@@ -329,6 +339,17 @@ public partial class MainWindow : Window
             case "Backups":
                 panelBackups.Visibility = Visibility.Visible; txtPanelTitle.Text = "Registry Backups";
                 AppendToolbarButton("Open Folder", OpenBackupFolder_Click, "AccentButton");
+                break;
+
+            case "Health":
+                panelHealth.Visibility = Visibility.Visible; txtPanelTitle.Text = "Health Dashboard";
+                AppendToolbarButton("Run Health Check", (_, _) => _vm.RunHealthCheckCommand.Execute(null), "AccentButton");
+                MaybeAutoLoad("Health", () => _vm.RunHealthCheckCommand.Execute(null));
+                break;
+            case "Slimming":
+                panelSlimming.Visibility = Visibility.Visible; txtPanelTitle.Text = "System Slimming";
+                AppendToolbarButton("Scan Components", (_, _) => _vm.ScanSlimmableCommand.Execute(null), "AccentButton");
+                AppendToolbarButton("Remove Selected", (_, _) => _vm.RunSlimCommand.Execute(null), "DangerButton");
                 break;
 
             // ─── v0.9.0 SYSTEM TOOLS ───
@@ -993,6 +1014,12 @@ public partial class MainWindow : Window
 
     private void DeleteService_Click(object sender, RoutedEventArgs e)
     {
+        if (!_vm.ExpertMode)
+        {
+            WarnStatus("Enable Expert mode in Settings / Privacy to delete services.");
+            return;
+        }
+
         if (dgServices.SelectedItem is not ServiceEntry svc)
         { WarnStatus("Select a service first."); return; }
         var result = ServiceScanner.DeleteServiceDetailed(svc);

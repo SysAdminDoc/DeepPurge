@@ -34,6 +34,10 @@ All notable changes to DeepPurge will be documented in this file.
 ### Changed (P1 dependency/toolchain)
 - **Pinned build inputs and SQLite maintenance** - The repository now requires the exact .NET SDK 10.0.302, restores from committed lockfiles in locked mode with explicit package-source mappings, and refuses mutable SDK bootstrap downloads. Microsoft.Data.Sqlite and .NET libraries resolve to 10.0.10, while SQLitePCLRaw 3.0.5 carries the SQLite 3.53.4 engine. Release builds validate these inputs, audit dependencies, and run tests before publishing.
 
+### Changed (P2 capability contract)
+- **Reachable health, slimming, and expert-mode surfaces** - Health Dashboard and System Slimming are now reachable from the WPF navigation and from read-only-by-default CLI commands. Expert mode gates registry hunting, secure delete, service deletion, and slimming mutations; the slimming grid supports live checkbox selection through observable component models.
+- **Observable enrichment and release documentation checks** - Installed-program enrichment now notifies dependent WPF bindings for package source, upgrade, signature, size, last-used, and bundle/OEM facts. A generated capability/setting matrix and release validation now fail on unreachable claims, stale commands, test counts, privilege posture, version headings, or missing capability routes.
+
 ### Changed (design)
 - **DeepPurge Slate operations console** - The WPF shell now uses a bespoke graphite/cyan default theme, denser navigation, explicit local-data posture, searchable program inventory metrics, clearer uninstall hierarchy, responsive panel toolbars, trust/source badges, and calmer loading/status surfaces. Filled action buttons retain WCAG normal-text contrast across every bundled theme.
 - **Accurate navigation and empty states** - Collection-backed empty states now update from observable counts, unavailable leftover deletion stays hidden until a scan enables it, and `--target` launches select the Forced Uninstall navigation item that matches the visible workspace.
