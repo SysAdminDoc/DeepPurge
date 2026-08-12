@@ -1054,10 +1054,14 @@ if ($app) {{
     {
         Console.Error.WriteLine("Scanning for orphaned artifacts...");
 
-        var services = DeepPurge.Core.Services.ServiceScanner.GetAllServices(orphanedOnly: true);
-        var tasks = DeepPurge.Core.Tasks.ScheduledTaskScanner.GetAllTasks().Where(t => t.IsOrphaned).ToList();
-        var firewall = FirewallRuleScanner.GetAllRules(orphanedOnly: true);
-        var paths = DeepPurge.Core.Shell.PathCleaner.ScanPathEntries(orphanedOnly: true);
+        var serviceScan = DeepPurge.Core.Services.ServiceScanner.GetAllServicesDetailed(orphanedOnly: true);
+        var taskScan = DeepPurge.Core.Tasks.ScheduledTaskScanner.GetAllTasksDetailed();
+        var firewallScan = FirewallRuleScanner.GetAllRulesDetailed(orphanedOnly: true);
+        var pathScan = DeepPurge.Core.Shell.PathCleaner.ScanPathEntriesDetailed(orphanedOnly: true);
+        var services = serviceScan.Items.ToList();
+        var tasks = taskScan.Items.Where(t => t.IsOrphaned).ToList();
+        var firewall = firewallScan.Items.ToList();
+        var paths = pathScan.Items.ToList();
 
         if (a.HasFlag("json"))
         {
@@ -1066,6 +1070,13 @@ if ($app) {{
                 tasks = tasks.Select(t => new { t.Name, t.Action }),
                 firewall = firewall.Select(r => new { r.DisplayName, r.Program }),
                 paths = paths.Select(p => new { p.Source, p.Directory }),
+                diagnostics = new
+                {
+                    services = ScanMetadata(serviceScan),
+                    tasks = ScanMetadata(taskScan),
+                    firewall = ScanMetadata(firewallScan),
+                    paths = ScanMetadata(pathScan),
+                },
             });
             return 0;
         }
@@ -1094,6 +1105,19 @@ if ($app) {{
         Console.WriteLine();
         Console.WriteLine($"# Total: {total} orphaned artifacts ({services.Count} services, " +
                          $"{tasks.Count} tasks, {firewall.Count} firewall, {paths.Count} PATH)");
+
+        var degraded = new List<string>();
+        AddScanStatus(degraded, serviceScan);
+        AddScanStatus(degraded, taskScan);
+        AddScanStatus(degraded, firewallScan);
+        AddScanStatus(degraded, pathScan);
+        Console.WriteLine(degraded.Count == 0
+            ? "Scan status: Clean"
+            : $"Scan status: Partial — {string.Join(", ", degraded)}");
+        PrintScanIssues(serviceScan);
+        PrintScanIssues(taskScan);
+        PrintScanIssues(firewallScan);
+        PrintScanIssues(pathScan);
 
         if (a.HasFlag("remnants"))
         {
@@ -1356,6 +1380,31 @@ if ($app) {{
     // ═══════════════════════════════════════════════════════
     //  HELPERS
     // ═══════════════════════════════════════════════════════
+
+    private static object ScanMetadata<T>(ScanResult<T> result) => new
+    {
+        result.ScanName,
+        Status = result.StatusDisplay,
+        result.IsDegraded,
+        result.IsCancelled,
+        DurationMilliseconds = result.Duration.TotalMilliseconds,
+        failedSources = result.FailedSources,
+        result.Warnings,
+    };
+
+    private static void AddScanStatus<T>(List<string> degraded, ScanResult<T> result)
+    {
+        if (result.IsDegraded)
+            degraded.Add($"{result.ScanName}: {result.StatusDisplay}");
+    }
+
+    private static void PrintScanIssues<T>(ScanResult<T> result)
+    {
+        foreach (var issue in result.FailedSources.Take(3))
+            Console.WriteLine($"  warning [{issue.Source}]: {issue.Message}");
+        foreach (var warning in result.Warnings.Take(3))
+            Console.WriteLine($"  note [{result.ScanName}]: {warning}");
+    }
 
     private static IProgress<DeleteProgress> ProgressSink(string label) =>
         new Progress<DeleteProgress>(p =>

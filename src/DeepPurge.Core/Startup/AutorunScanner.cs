@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using DeepPurge.Core.Diagnostics;
 using DeepPurge.Core.Execution;
 using DeepPurge.Core.Registry;
 using DeepPurge.Core.Safety;
@@ -87,18 +88,50 @@ public static class AutorunScanner
     private static readonly byte[] StartupApprovedDisabled = { 0x03, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
     public static List<AutorunEntry> GetAllAutoruns()
+        => GetAllAutorunsDetailed().Items.ToList();
+
+    public static ScanResult<AutorunEntry> GetAllAutorunsDetailed(CancellationToken ct = default)
     {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var entries = new List<AutorunEntry>();
+        var failures = new List<ScanIssue>();
+        var warnings = new List<string>();
+
         // Single pass over the process table — previously every autorun entry
         // did its own Process.GetProcessesByName() call, which (a) leaked
         // Process handles and (b) re-enumerated hundreds of processes per entry.
         using var procSet = ProcessNameSet.Snapshot();
-        ScanRegistryRun(entries, procSet);
-        ScanStartupFolders(entries);
-        ScanServices(entries, procSet);
-        ScanScheduledTasks(entries, procSet);
-        PopulateSignatures(entries);
-        return entries;
+        try
+        {
+            ct.ThrowIfCancellationRequested();
+            ScanRegistryRun(entries, procSet, failures, warnings, ct);
+            ct.ThrowIfCancellationRequested();
+            ScanStartupFolders(entries, failures, warnings, ct);
+            ct.ThrowIfCancellationRequested();
+            ScanServices(entries, procSet, failures, warnings, ct);
+            ct.ThrowIfCancellationRequested();
+            ScanScheduledTasks(entries, procSet, failures, warnings, ct);
+            ct.ThrowIfCancellationRequested();
+            PopulateSignatures(entries);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            warnings.Add("Autorun scan was cancelled; entries collected so far were retained.");
+        }
+        catch (Exception ex)
+        {
+            failures.Add(new ScanIssue("autorun", ex.Message, ex.GetType().Name));
+        }
+
+        var result = ScanResult<AutorunEntry>.Create(
+            "autorun",
+            entries,
+            failures,
+            warnings,
+            stopwatch.Elapsed,
+            isCancelled: ct.IsCancellationRequested);
+        ScanDiagnosticsLedger.Record("autorun", result);
+        return result;
     }
 
     /// <summary>
@@ -184,17 +217,20 @@ public static class AutorunScanner
             global::Microsoft.Win32.Registry.LocalMachine, @"HKLM\...\Run (32-bit)", AutorunType.RegistryRun, "HKLM"),
     };
 
-    private static void ScanRegistryRun(List<AutorunEntry> entries, ProcessNameSet procSet)
+    private static void ScanRegistryRun(List<AutorunEntry> entries, ProcessNameSet procSet,
+        List<ScanIssue> failures, List<string> warnings, CancellationToken ct)
     {
         foreach (var loc in RunLocations)
         {
             try
             {
+                ct.ThrowIfCancellationRequested();
                 using var key = loc.Hive.OpenSubKey(loc.SubKey);
                 if (key == null) continue;
 
                 foreach (var name in key.GetValueNames())
                 {
+                    ct.ThrowIfCancellationRequested();
                     var command = key.GetValue(name) as string ?? "";
                     if (string.IsNullOrEmpty(command)) continue;
 
@@ -212,10 +248,14 @@ public static class AutorunScanner
                     });
                 }
             }
-            catch { /* permission/missing - skip */ }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (Exception ex)
+            {
+                failures.Add(new ScanIssue($"autorun:{loc.Display}", ex.Message, ex.GetType().Name));
+            }
         }
 
-        ApplyStartupApprovedFlags(entries);
+        ApplyStartupApprovedFlags(entries, warnings, ct);
     }
 
     /// <summary>
@@ -223,7 +263,8 @@ public static class AutorunScanner
     /// HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run
     /// and mirrored paths. Cross-reference so the UI shows the correct toggle.
     /// </summary>
-    private static void ApplyStartupApprovedFlags(List<AutorunEntry> entries)
+    private static void ApplyStartupApprovedFlags(List<AutorunEntry> entries,
+        List<string> warnings, CancellationToken ct)
     {
         var approvedLocations = new (RegistryKey Hive, string Path)[]
         {
@@ -237,6 +278,7 @@ public static class AutorunScanner
         {
             try
             {
+                ct.ThrowIfCancellationRequested();
                 using var key = hive.OpenSubKey(path);
                 if (key == null) continue;
 
@@ -251,7 +293,11 @@ public static class AutorunScanner
                     if (match != null) match.IsEnabled = data[0] != 0x03;
                 }
             }
-            catch { /* skip */ }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (Exception ex)
+            {
+                warnings.Add($"Startup approval flags at {path} could not be read: {ex.Message}");
+            }
         }
     }
 
@@ -259,7 +305,8 @@ public static class AutorunScanner
     //  Startup folders
     // ═══════════════════════════════════════════════════════
 
-    private static void ScanStartupFolders(List<AutorunEntry> entries)
+    private static void ScanStartupFolders(List<AutorunEntry> entries,
+        List<ScanIssue> failures, List<string> warnings, CancellationToken ct)
     {
         var folders = new[]
         {
@@ -269,11 +316,13 @@ public static class AutorunScanner
 
         foreach (var (folder, location) in folders)
         {
+            ct.ThrowIfCancellationRequested();
             if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder)) continue;
             try
             {
                 foreach (var file in Directory.GetFiles(folder))
                 {
+                    ct.ThrowIfCancellationRequested();
                     var ext = Path.GetExtension(file).ToLowerInvariant();
                     if (ext is not (".lnk" or ".bat" or ".cmd" or ".exe" or ".vbs" or ".ps1" or ".url")) continue;
 
@@ -287,7 +336,11 @@ public static class AutorunScanner
                     });
                 }
             }
-            catch { /* skip */ }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (Exception ex)
+            {
+                failures.Add(new ScanIssue($"autorun:{location}", ex.Message, ex.GetType().Name));
+            }
         }
     }
 
@@ -295,7 +348,8 @@ public static class AutorunScanner
     //  Services (Win32 only, autostart only)
     // ═══════════════════════════════════════════════════════
 
-    private static void ScanServices(List<AutorunEntry> entries, ProcessNameSet procSet)
+    private static void ScanServices(List<AutorunEntry> entries, ProcessNameSet procSet,
+        List<ScanIssue> failures, List<string> warnings, CancellationToken ct)
     {
         try
         {
@@ -305,6 +359,7 @@ public static class AutorunScanner
 
             foreach (var serviceName in servicesKey.GetSubKeyNames())
             {
+                ct.ThrowIfCancellationRequested();
                 try
                 {
                     using var svcKey = servicesKey.OpenSubKey(serviceName);
@@ -332,17 +387,26 @@ public static class AutorunScanner
                         IsRunning = procSet.IsRunning(ExtractExePath(imagePath)),
                     });
                 }
-                catch { /* skip */ }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+                catch (Exception ex)
+                {
+                    warnings.Add($"Autorun service '{serviceName}' could not be read: {ex.Message}");
+                }
             }
         }
-        catch { /* skip */ }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            failures.Add(new ScanIssue("autorun:services", ex.Message, ex.GetType().Name));
+        }
     }
 
     // ═══════════════════════════════════════════════════════
     //  Scheduled tasks (non-Microsoft only)
     // ═══════════════════════════════════════════════════════
 
-    private static void ScanScheduledTasks(List<AutorunEntry> entries, ProcessNameSet procSet)
+    private static void ScanScheduledTasks(List<AutorunEntry> entries, ProcessNameSet procSet,
+        List<ScanIssue> failures, List<string> warnings, CancellationToken ct)
     {
         // procSet currently unused for scheduled tasks (we don't resolve their
         // image to the process table today), but the parameter keeps the API
@@ -351,6 +415,7 @@ public static class AutorunScanner
         _ = procSet;
         try
         {
+            ct.ThrowIfCancellationRequested();
             var result = ExternalProcessRunner.Run(new ExternalProcessCommand("schtasks.exe")
             {
                 Arguments = new[] { "/query", "/fo", "CSV", "/v", "/nh" },
@@ -359,9 +424,18 @@ public static class AutorunScanner
                 ErrorLimitChars = 64 * 1024,
             });
             var output = result.Output;
+            if (!result.Success)
+            {
+                failures.Add(new ScanIssue(
+                    "autorun:scheduled-tasks",
+                    string.IsNullOrWhiteSpace(result.CombinedOutput)
+                        ? "schtasks.exe could not enumerate scheduled tasks."
+                        : result.CombinedOutput));
+            }
 
             foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
             {
+                ct.ThrowIfCancellationRequested();
                 var fields = ParseCsvLine(line);
                 if (fields.Length < 9) continue;
 
@@ -383,7 +457,11 @@ public static class AutorunScanner
                 });
             }
         }
-        catch { /* schtasks unavailable - skip */ }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            failures.Add(new ScanIssue("autorun:scheduled-tasks", ex.Message, ex.GetType().Name));
+        }
     }
 
     // ═══════════════════════════════════════════════════════

@@ -4,13 +4,6 @@ Actionable work only. Historical and completed roadmap material is archived in C
 
 ## Actionable Items
 
-- [ ] P1 — Propagate typed partial-scan and degraded-source results
-  Why: Swallowed enumeration/process errors currently look identical to zero findings and make the GUI, CLI JSON, logs, and support data overstate confidence.
-  Evidence: scheduled-task, firewall, PATH, autorun, context-menu, health, package-enrichment, and initial-scan code paths; UniGetUI source diagnostics and Mole JSON/result patterns.
-  Touches: shared scan contracts, affected scanners, `MainViewModel`, CLI JSON/text, activity log, doctor/support bundle, tests
-  Acceptance: Each multi-source scan returns items plus failed sources, warnings, duration, cancellation, and degraded status; one source failure does not discard successful peers; all user and diagnostic surfaces distinguish clean, partial, failed, timed-out, and cancelled states.
-  Complexity: M
-
 - [ ] P1 — Pin dependency/toolchain inputs and close the SQLite maintenance gap
   Why: The build permits unlocked restore and mutable SDK bootstrap, source mapping is incomplete, and the elevated process retains an older SQLite engine despite the cited SQLite 3.53.4 and .NET 10.0.10 maintenance/security releases.
   Evidence: `Build.ps1`; `NuGet.Config`; project and lock manifests; SQLite CVE/release pages; SQLitePCLRaw 3.0.5; .NET 10.0.10 release notes; NuGet locked-restore/source-mapping documentation.

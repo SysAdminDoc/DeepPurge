@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.ServiceProcess;
 using System.Text.Json;
+using DeepPurge.Core.Diagnostics;
 using DeepPurge.Core.Execution;
 using DeepPurge.Core.Safety;
 using DeepPurge.Core.Security;
@@ -61,81 +62,122 @@ public static class ServiceScanner
         Environment.GetFolderPath(Environment.SpecialFolder.Windows);
 
     public static List<ServiceEntry> GetAllServices(bool orphanedOnly = false)
+        => GetAllServicesDetailed(orphanedOnly).Items.ToList();
+
+    public static ScanResult<ServiceEntry> GetAllServicesDetailed(
+        bool orphanedOnly = false,
+        CancellationToken ct = default)
     {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var entries = new List<ServiceEntry>();
+        var failures = new List<ScanIssue>();
+        var warnings = new List<string>();
 
         Dictionary<string, ServiceController> running;
         try
         {
+            ct.ThrowIfCancellationRequested();
             running = ServiceController.GetServices()
                 .ToDictionary(s => s.ServiceName, s => s, StringComparer.OrdinalIgnoreCase);
         }
-        catch
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             running = new Dictionary<string, ServiceController>(StringComparer.OrdinalIgnoreCase);
+            warnings.Add("Service status enumeration was cancelled.");
+        }
+        catch (Exception ex)
+        {
+            running = new Dictionary<string, ServiceController>(StringComparer.OrdinalIgnoreCase);
+            failures.Add(new ScanIssue("services:runtime", ex.Message, ex.GetType().Name));
         }
 
         try
         {
             using var servicesKey = global::Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
                 @"SYSTEM\CurrentControlSet\Services");
-            if (servicesKey == null) return entries;
-
-            foreach (var name in servicesKey.GetSubKeyNames())
+            if (servicesKey == null)
             {
-                try
+                failures.Add(new ScanIssue("services:registry", "The Windows services registry hive could not be opened."));
+            }
+            else
+            {
+                foreach (var name in servicesKey.GetSubKeyNames())
                 {
-                    using var svc = servicesKey.OpenSubKey(name);
-                    if (svc == null) continue;
-
-                    var typeVal = svc.GetValue("Type");
-                    if (typeVal == null) continue;
-                    var type = Convert.ToInt32(typeVal);
-                    if (!Win32ServiceTypes.Contains(type)) continue;
-
-                    var imagePath = svc.GetValue("ImagePath")?.ToString() ?? "";
-                    var displayName = svc.GetValue("DisplayName")?.ToString() ?? name;
-                    var description = svc.GetValue("Description")?.ToString() ?? "";
-                    var startTypeRaw = svc.GetValue("Start")?.ToString() ?? "";
-
-                    var startTypeDisplay = startTypeRaw switch
+                    ct.ThrowIfCancellationRequested();
+                    try
                     {
-                        "0" => "Boot",
-                        "1" => "System",
-                        "2" => "Automatic",
-                        "3" => "Manual",
-                        "4" => "Disabled",
-                        _ => startTypeRaw,
-                    };
+                        using var svc = servicesKey.OpenSubKey(name);
+                        if (svc == null) continue;
 
-                    var status = running.TryGetValue(name, out var sc) ? sc.Status.ToString() : "Stopped";
-                    var isOrphaned = IsOrphanedService(imagePath);
+                        var typeVal = svc.GetValue("Type");
+                        if (typeVal == null) continue;
+                        var type = Convert.ToInt32(typeVal);
+                        if (!Win32ServiceTypes.Contains(type)) continue;
 
-                    if (orphanedOnly && !isOrphaned) continue;
+                        var imagePath = svc.GetValue("ImagePath")?.ToString() ?? "";
+                        var displayName = svc.GetValue("DisplayName")?.ToString() ?? name;
+                        var description = svc.GetValue("Description")?.ToString() ?? "";
+                        var startTypeRaw = svc.GetValue("Start")?.ToString() ?? "";
 
-                    entries.Add(new ServiceEntry
+                        var startTypeDisplay = startTypeRaw switch
+                        {
+                            "0" => "Boot",
+                            "1" => "System",
+                            "2" => "Automatic",
+                            "3" => "Manual",
+                            "4" => "Disabled",
+                            _ => startTypeRaw,
+                        };
+
+                        var status = running.TryGetValue(name, out var sc) ? sc.Status.ToString() : "Stopped";
+                        var isOrphaned = IsOrphanedService(imagePath);
+
+                        if (orphanedOnly && !isOrphaned) continue;
+
+                        entries.Add(new ServiceEntry
+                        {
+                            Name = name,
+                            DisplayName = displayName,
+                            Description = description,
+                            ImagePath = imagePath,
+                            StartType = startTypeDisplay,
+                            Status = status,
+                            IsOrphaned = isOrphaned,
+                            IsSelected = false,
+                        });
+                    }
+                    catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+                    catch (Exception ex)
                     {
-                        Name = name,
-                        DisplayName = displayName,
-                        Description = description,
-                        ImagePath = imagePath,
-                        StartType = startTypeDisplay,
-                        Status = status,
-                        IsOrphaned = isOrphaned,
-                        IsSelected = false,
-                    });
+                        warnings.Add($"Service '{name}' could not be read: {ex.Message}");
+                    }
                 }
-                catch { /* skip unreadable service */ }
             }
         }
-        catch { /* registry unavailable */ }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            warnings.Add("Service registry enumeration was cancelled.");
+        }
+        catch (Exception ex)
+        {
+            failures.Add(new ScanIssue("services:registry", ex.Message, ex.GetType().Name));
+        }
         finally
         {
             foreach (var sc in running.Values) sc.Dispose();
         }
 
         PopulateSignatures(entries);
-        return entries.OrderByDescending(e => e.IsOrphaned).ThenBy(e => e.DisplayName).ToList();
+        var ordered = entries.OrderByDescending(e => e.IsOrphaned).ThenBy(e => e.DisplayName).ToList();
+        var result = ScanResult<ServiceEntry>.Create(
+            "services",
+            ordered,
+            failures,
+            warnings,
+            stopwatch.Elapsed,
+            isCancelled: ct.IsCancellationRequested);
+        ScanDiagnosticsLedger.Record("services", result);
+        return result;
     }
 
     /// <summary>

@@ -28,6 +28,9 @@ All notable changes to DeepPurge will be documented in this file.
 ### Changed (P1 cleaner safety)
 - **Diffable, provenance-bound cleaner updates** - Custom cleaner reports now expose schema/origin/SHA-256/trust facts, invalid definitions move to quarantine while valid versions are retained under LastKnownGood, and winapp2 updates record expanded file/registry target diffs, reject protected Windows package-manager state, and restore the previous database if the metadata commit fails.
 
+### Changed (P1 scan diagnostics)
+- **Typed partial-scan confidence** - Scheduled-task, firewall, PATH, autorun, context-menu, service, package-enrichment, health, orphan, and initial scans now retain successful peer items while reporting failed sources, warnings, elapsed time, cancellation, and explicit clean/partial/failed/timed-out/cancelled status. CLI JSON/text, WPF status surfaces, scan diagnostics logs, and support bundles expose the same confidence facts.
+
 ### Changed (design)
 - **DeepPurge Slate operations console** - The WPF shell now uses a bespoke graphite/cyan default theme, denser navigation, explicit local-data posture, searchable program inventory metrics, clearer uninstall hierarchy, responsive panel toolbars, trust/source badges, and calmer loading/status surfaces. Filled action buttons retain WCAG normal-text contrast across every bundled theme.
 - **Accurate navigation and empty states** - Collection-backed empty states now update from observable counts, unavailable leftover deletion stays hidden until a scan enables it, and `--target` launches select the Forced Uninstall navigation item that matches the visible workspace.

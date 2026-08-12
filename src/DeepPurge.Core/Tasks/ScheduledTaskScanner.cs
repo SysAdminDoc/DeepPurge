@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using DeepPurge.Core.Diagnostics;
 using DeepPurge.Core.Execution;
 using DeepPurge.Core.Safety;
 
@@ -38,10 +39,19 @@ public class ScheduledTaskInfo : INotifyPropertyChanged
 public static class ScheduledTaskScanner
 {
     public static List<ScheduledTaskInfo> GetAllTasks()
+        => GetAllTasksDetailed().Items.ToList();
+
+    public static ScanResult<ScheduledTaskInfo> GetAllTasksDetailed(CancellationToken ct = default)
     {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var tasks = new List<ScheduledTaskInfo>();
+        var failures = new List<ScanIssue>();
+        var warnings = new List<string>();
+        ScanCompletionStatus? forcedStatus = null;
+
         try
         {
+            ct.ThrowIfCancellationRequested();
             var result = ExternalProcessRunner.Run(PowerShellCommand(
                 "Get-ScheduledTask | " +
                 "Select-Object TaskName,TaskPath,Author,Description,State," +
@@ -51,7 +61,34 @@ public static class ScheduledTaskScanner
                 "ConvertTo-Json -Depth 2 -Compress",
                 TimeSpan.FromSeconds(30)));
             var output = result.Output;
-            if (string.IsNullOrWhiteSpace(output)) return tasks;
+            if (!result.Success)
+            {
+                failures.Add(new ScanIssue(
+                    "scheduled-tasks",
+                    string.IsNullOrWhiteSpace(result.CombinedOutput)
+                        ? "PowerShell could not enumerate scheduled tasks."
+                        : result.CombinedOutput,
+                    result.Started ? null : "ProcessStartFailure"));
+                forcedStatus = result.TimedOut
+                    ? ScanCompletionStatus.TimedOut
+                    : result.Canceled
+                        ? ScanCompletionStatus.Cancelled
+                        : null;
+            }
+
+            if (string.IsNullOrWhiteSpace(output))
+            {
+                var emptyResult = ScanResult<ScheduledTaskInfo>.Create(
+                    "scheduled-tasks",
+                    tasks,
+                    failures,
+                    warnings,
+                    stopwatch.Elapsed,
+                    forcedStatus,
+                    forcedStatus == ScanCompletionStatus.Cancelled);
+                ScanDiagnosticsLedger.Record("scheduled-tasks", emptyResult);
+                return emptyResult;
+            }
 
             using var doc = JsonDocument.Parse(output);
             var root = doc.RootElement;
@@ -59,24 +96,56 @@ public static class ScheduledTaskScanner
             if (root.ValueKind == JsonValueKind.Array)
             {
                 foreach (var el in root.EnumerateArray())
-                    tasks.Add(ParseTask(el));
+                {
+                    try { tasks.Add(ParseTask(el)); }
+                    catch (Exception ex)
+                    {
+                        warnings.Add($"A scheduled task record could not be parsed: {ex.Message}");
+                    }
+                }
             }
             else if (root.ValueKind == JsonValueKind.Object)
             {
-                tasks.Add(ParseTask(root));
+                try { tasks.Add(ParseTask(root)); }
+                catch (Exception ex)
+                {
+                    warnings.Add($"The scheduled-task response could not be parsed: {ex.Message}");
+                }
             }
         }
-        catch { /* PowerShell unavailable / parse failure - return whatever we have */ }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            forcedStatus = ScanCompletionStatus.Cancelled;
+        }
+        catch (Exception ex)
+        {
+            failures.Add(new ScanIssue("scheduled-tasks", ex.Message, ex.GetType().Name));
+        }
 
         foreach (var task in tasks)
         {
+            if (ct.IsCancellationRequested)
+            {
+                forcedStatus = ScanCompletionStatus.Cancelled;
+                break;
+            }
             if (string.IsNullOrEmpty(task.Action)) continue;
             var exePath = ExtractPath(task.Action);
             if (!string.IsNullOrEmpty(exePath) && !IsSystemPath(exePath) && !File.Exists(exePath))
                 task.IsOrphaned = true;
         }
 
-        return tasks.OrderByDescending(t => t.IsOrphaned).ThenBy(t => t.Name).ToList();
+        var ordered = tasks.OrderByDescending(t => t.IsOrphaned).ThenBy(t => t.Name).ToList();
+        var scanResult = ScanResult<ScheduledTaskInfo>.Create(
+            "scheduled-tasks",
+            ordered,
+            failures,
+            warnings,
+            stopwatch.Elapsed,
+            forcedStatus,
+            forcedStatus == ScanCompletionStatus.Cancelled);
+        ScanDiagnosticsLedger.Record("scheduled-tasks", scanResult);
+        return scanResult;
     }
 
     public static bool DisableTask(ScheduledTaskInfo task)

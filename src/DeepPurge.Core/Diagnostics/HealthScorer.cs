@@ -9,7 +9,25 @@ public record HealthReport(
     int OverallScore,
     string Grade,
     List<HealthScore> Categories,
-    HealthTrend Trend = HealthTrend.Unknown);
+    HealthTrend Trend = HealthTrend.Unknown,
+    IReadOnlyList<ScanIssue>? FailedSources = null,
+    IReadOnlyList<string>? Warnings = null,
+    TimeSpan Duration = default,
+    ScanCompletionStatus Status = ScanCompletionStatus.Clean,
+    bool IsCancelled = false)
+{
+    public bool IsDegraded => Status != ScanCompletionStatus.Clean;
+
+    public string StatusDisplay => Status switch
+    {
+        ScanCompletionStatus.Clean => "Clean",
+        ScanCompletionStatus.Partial => "Partial",
+        ScanCompletionStatus.Failed => "Failed",
+        ScanCompletionStatus.TimedOut => "Timed out",
+        ScanCompletionStatus.Cancelled => "Cancelled",
+        _ => Status.ToString(),
+    };
+}
 
 public enum HealthTrend { Improved, Worsened, Stable, Unknown }
 
@@ -95,38 +113,28 @@ public static class HealthScorer
 
     public static async Task<HealthReport> AssessAsync(CancellationToken ct = default)
     {
-        var cats = new List<HealthScore>
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var outcomes = new List<HealthCategoryResult>
         {
             await RunWithTimeoutAsync(AssessJunk, "Junk Files", ct),
             await RunWithTimeoutAsync(AssessPrivacy, "Privacy", ct),
             await RunWithTimeoutAsync(AssessStartup, "Startup Impact", ct),
-            AssessDisk(),
+            RunImmediate(AssessDisk, "Disk Space", ct),
         };
-
-        var overall = cats.Count > 0 ? (int)Math.Round(cats.Average(c => c.Score)) : 100;
-        var grade = GradeFromScore(overall);
-        var trend = HealthHistory.CompareTrend(overall);
-        var report = new HealthReport(overall, grade, cats, trend);
-        HealthHistory.Record(report);
-        return report;
+        return CompleteReport(outcomes, stopwatch.Elapsed, ct.IsCancellationRequested);
     }
 
     public static HealthReport Assess()
     {
-        var cats = new List<HealthScore>
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var outcomes = new List<HealthCategoryResult>
         {
-            AssessJunk(),
-            AssessPrivacy(),
-            AssessStartup(),
-            AssessDisk(),
+            RunImmediate(AssessJunk, "Junk Files"),
+            RunImmediate(AssessPrivacy, "Privacy"),
+            RunImmediate(AssessStartup, "Startup Impact"),
+            RunImmediate(AssessDisk, "Disk Space"),
         };
-
-        var overall = cats.Count > 0 ? (int)Math.Round(cats.Average(c => c.Score)) : 100;
-        var grade = GradeFromScore(overall);
-        var trend = HealthHistory.CompareTrend(overall);
-        var report = new HealthReport(overall, grade, cats, trend);
-        HealthHistory.Record(report);
-        return report;
+        return CompleteReport(outcomes, stopwatch.Elapsed, isCancelled: false);
     }
 
     private static string GradeFromScore(int score) => score switch
@@ -138,24 +146,119 @@ public static class HealthScorer
         _ => "F",
     };
 
-    private static async Task<HealthScore> RunWithTimeoutAsync(Func<HealthScore> scanner, string category, CancellationToken ct)
+    private sealed record HealthCategoryResult(
+        HealthScore Score,
+        ScanIssue? Issue = null,
+        bool TimedOut = false,
+        bool Cancelled = false);
+
+    private static async Task<HealthCategoryResult> RunWithTimeoutAsync(
+        Func<HealthScore> scanner,
+        string category,
+        CancellationToken ct)
     {
         try
         {
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             cts.CancelAfter(ScanTimeout);
-            return await Task.Run(scanner, cts.Token);
+            return new HealthCategoryResult(await Task.Run(scanner, cts.Token));
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            Log.Warn($"Health {category} assessment was cancelled");
+            return new HealthCategoryResult(
+                new HealthScore(category, 50, "Scan cancelled", "Try again"),
+                new ScanIssue(category, "The health category scan was cancelled."),
+                Cancelled: true);
         }
         catch (OperationCanceledException)
         {
             Log.Warn($"Health {category} assessment timed out after {ScanTimeout.TotalSeconds}s");
-            return new HealthScore(category, 50, "Scan timed out", $"Try again");
+            return new HealthCategoryResult(
+                new HealthScore(category, 50, "Scan timed out", "Try again"),
+                new ScanIssue(category, $"The health category scan timed out after {ScanTimeout.TotalSeconds:F0} seconds."),
+                TimedOut: true);
         }
         catch (Exception ex)
         {
             Log.Warn($"Health {category} assessment: {ex.Message}");
-            return new HealthScore(category, 50, "Could not assess", $"Try again");
+            return new HealthCategoryResult(
+                new HealthScore(category, 50, "Could not assess", "Try again"),
+                new ScanIssue(category, ex.Message, ex.GetType().Name));
         }
+    }
+
+    private static HealthCategoryResult RunImmediate(
+        Func<HealthScore> scanner,
+        string category,
+        CancellationToken ct = default)
+    {
+        if (ct.IsCancellationRequested)
+            return new HealthCategoryResult(
+                new HealthScore(category, 50, "Scan cancelled", "Try again"),
+                new ScanIssue(category, "The health category scan was cancelled."),
+                Cancelled: true);
+
+        try
+        {
+            return new HealthCategoryResult(scanner());
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Health {category} assessment: {ex.Message}");
+            return new HealthCategoryResult(
+                new HealthScore(category, 50, "Could not assess", "Try again"),
+                new ScanIssue(category, ex.Message, ex.GetType().Name));
+        }
+    }
+
+    private static HealthReport CompleteReport(
+        IReadOnlyList<HealthCategoryResult> outcomes,
+        TimeSpan duration,
+        bool isCancelled)
+    {
+        var categories = outcomes.Select(outcome => outcome.Score).ToList();
+        var overall = categories.Count > 0 ? (int)Math.Round(categories.Average(c => c.Score)) : 100;
+        var grade = GradeFromScore(overall);
+        var trend = HealthHistory.CompareTrend(overall);
+        var failures = outcomes
+            .Where(outcome => outcome.Issue != null)
+            .Select(outcome => outcome.Issue!)
+            .ToList();
+        var warnings = outcomes
+            .Where(outcome => outcome.Score.Summary is "Could not assess" or "Scan timed out" or "Scan cancelled")
+            .Select(outcome => $"{outcome.Score.Category}: {outcome.Score.Summary}")
+            .ToList();
+        var timedOut = outcomes.Any(outcome => outcome.TimedOut);
+        var cancelled = isCancelled || outcomes.Any(outcome => outcome.Cancelled);
+        var status = cancelled
+            ? ScanCompletionStatus.Cancelled
+            : timedOut
+                ? ScanCompletionStatus.TimedOut
+                : ScanResult<HealthScore>.Classify(categories.Count, failures, warnings);
+
+        var report = new HealthReport(
+            overall,
+            grade,
+            categories,
+            trend,
+            failures,
+            warnings,
+            duration,
+            status,
+            cancelled);
+        HealthHistory.Record(report);
+        ScanDiagnosticsLedger.Record(
+            "health",
+            ScanResult<HealthScore>.Create(
+                "health",
+                categories,
+                failures,
+                warnings,
+                duration,
+                status,
+                cancelled));
+        return report;
     }
 
     private static HealthScore AssessJunk()

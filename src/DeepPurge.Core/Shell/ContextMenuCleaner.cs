@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using DeepPurge.Core.Registry;
+using DeepPurge.Core.Diagnostics;
 using DeepPurge.Core.Safety;
 
 namespace DeepPurge.Core.Shell;
@@ -55,15 +56,46 @@ public static class ContextMenuCleaner
     };
 
     public static List<ContextMenuEntry> ScanContextMenuEntries()
+        => ScanContextMenuEntriesDetailed().Items.ToList();
+
+    public static ScanResult<ContextMenuEntry> ScanContextMenuEntriesDetailed(
+        CancellationToken ct = default)
     {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var entries = new List<ContextMenuEntry>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var failures = new List<ScanIssue>();
+        var warnings = new List<string>();
 
-        foreach (var path in ShellLocations)
-            ScanShellKey(entries, seen, path, FriendlyLocation(path));
+        try
+        {
+            foreach (var path in ShellLocations)
+            {
+                ct.ThrowIfCancellationRequested();
+                ScanShellKey(entries, seen, path, FriendlyLocation(path), failures, warnings, ct);
+            }
 
-        ScanFileTypeShellEntries(entries, seen);
-        return entries;
+            ct.ThrowIfCancellationRequested();
+            ScanFileTypeShellEntries(entries, seen, failures, warnings, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            warnings.Add("Context-menu scan was cancelled; entries collected so far were retained.");
+        }
+        catch (Exception ex)
+        {
+            failures.Add(new ScanIssue("context-menu", ex.Message, ex.GetType().Name));
+        }
+
+        var result = ScanResult<ContextMenuEntry>.Create(
+            "context-menu",
+            entries,
+            failures,
+            warnings,
+            stopwatch.Elapsed,
+            isCancelled: ct.IsCancellationRequested);
+        ScanDiagnosticsLedger.Record("context-menu", result);
+        return result;
     }
 
     public static int RemoveOrphanedEntries(IEnumerable<ContextMenuEntry> entries)
@@ -154,7 +186,8 @@ public static class ContextMenuCleaner
     // ═══════════════════════════════════════════════════════
 
     private static void ScanShellKey(List<ContextMenuEntry> entries, HashSet<string> seen,
-        string subPath, string location)
+        string subPath, string location, List<ScanIssue> failures, List<string> warnings,
+        CancellationToken ct)
     {
         try
         {
@@ -163,6 +196,7 @@ public static class ContextMenuCleaner
 
             foreach (var name in key.GetSubKeyNames())
             {
+                ct.ThrowIfCancellationRequested();
                 try
                 {
                     using var sub = key.OpenSubKey(name);
@@ -200,19 +234,29 @@ public static class ContextMenuCleaner
                         IsSelected = false,
                     });
                 }
-                catch { /* skip unreadable child */ }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+                catch (Exception ex)
+                {
+                    warnings.Add($"Context-menu entry '{subPath}\\{name}' could not be read: {ex.Message}");
+                }
             }
         }
-        catch { /* skip unreachable root */ }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            failures.Add(new ScanIssue($"context-menu:{subPath}", ex.Message, ex.GetType().Name));
+        }
     }
 
-    private static void ScanFileTypeShellEntries(List<ContextMenuEntry> entries, HashSet<string> seen)
+    private static void ScanFileTypeShellEntries(List<ContextMenuEntry> entries, HashSet<string> seen,
+        List<ScanIssue> failures, List<string> warnings, CancellationToken ct)
     {
         try
         {
             using var root = global::Microsoft.Win32.Registry.ClassesRoot;
             foreach (var name in root.GetSubKeyNames())
             {
+                ct.ThrowIfCancellationRequested();
                 if (!name.StartsWith('.')) continue;
                 try
                 {
@@ -225,6 +269,7 @@ public static class ContextMenuCleaner
 
                     foreach (var shellName in progKey.GetSubKeyNames())
                     {
+                        ct.ThrowIfCancellationRequested();
                         try
                         {
                             using var shellSub = progKey.OpenSubKey(shellName);
@@ -247,13 +292,25 @@ public static class ContextMenuCleaner
                                 IsSelected = false,
                             });
                         }
-                        catch { /* skip */ }
+                        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+                        catch (Exception ex)
+                        {
+                            warnings.Add($"File-type context-menu entry '{name}\\{shellName}' could not be read: {ex.Message}");
+                        }
                     }
                 }
-                catch { /* skip */ }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+                catch (Exception ex)
+                {
+                    warnings.Add($"File-type context-menu extension '{name}' could not be read: {ex.Message}");
+                }
             }
         }
-        catch { /* skip */ }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            failures.Add(new ScanIssue("context-menu:file-types", ex.Message, ex.GetType().Name));
+        }
     }
 
     // ═══════════════════════════════════════════════════════
