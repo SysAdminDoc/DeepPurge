@@ -2,10 +2,12 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.Json;
 using DeepPurge.Core.Execution;
 using DeepPurge.Core.Registry;
 using DeepPurge.Core.Safety;
 using DeepPurge.Core.Security;
+using DeepPurge.Core.Services;
 using global::Microsoft.Win32;
 
 namespace DeepPurge.Core.Startup;
@@ -25,6 +27,8 @@ public class AutorunEntry : INotifyPropertyChanged
     public string Publisher { get; set; } = "";
     public string Description { get; set; } = "";
     public bool IsRunning { get; set; }
+    public bool IsProtected => AutorunSafety.IsProtected(this);
+    public bool MutationSupported => !IsProtected && Type != AutorunType.ScheduledTask;
 
     /// <summary>WinVerifyTrust result for the resolved executable.</summary>
     public SignatureStatus SignatureStatus
@@ -57,6 +61,21 @@ public enum AutorunType
     StartupFolder,
     Service,
     ScheduledTask,
+}
+
+internal static class AutorunSafety
+{
+    public static bool IsProtected(AutorunEntry entry)
+        => entry.Type switch
+        {
+            AutorunType.RegistryRun or AutorunType.RegistryRunOnce =>
+                !SafetyGuard.IsAutorunSafeToDelete(entry.Command) ||
+                !SafetyGuard.IsRegistryPathSafeToDelete($"{entry.RegistryPath}\\{entry.Name}"),
+            AutorunType.StartupFolder => !SafetyGuard.IsPathSafeToDelete(entry.Command),
+            AutorunType.Service => !SafetyGuard.IsServiceSafeToModify(entry.Name),
+            AutorunType.ScheduledTask => true,
+            _ => true,
+        };
 }
 
 public static class AutorunScanner
@@ -372,116 +391,146 @@ public static class AutorunScanner
     // ═══════════════════════════════════════════════════════
 
     public static bool DisableAutorun(AutorunEntry entry)
+        => DisableAutorunDetailed(entry).Succeeded;
+
+    public static AdministrativeMutationResult DisableAutorunDetailed(
+        AutorunEntry entry,
+        bool dryRun = false)
     {
+        const string operation = "autorun-disable";
+        var validation = ValidateEntry(entry, operation);
+        if (validation != null) return validation;
+
         try
         {
-            switch (entry.Type)
+            return entry.Type switch
             {
-                case AutorunType.RegistryRun:
-                case AutorunType.RegistryRunOnce:
-                    return SetRunEntryEnabled(entry, enabled: false);
-
-                case AutorunType.StartupFolder:
-                    if (File.Exists(entry.Command) && SafetyGuard.IsPathSafeToDelete(entry.Command))
-                    {
-                        var disabledPath = entry.Command + ".disabled";
-                        if (File.Exists(disabledPath))
-                        {
-                            var stale = new DeletionExecutor().Execute(
-                                new DeletionRequest(
-                                    disabledPath,
-                                    Operation: "autorun-stale-disabled"),
-                                DeleteOptions.Default);
-                            if (!stale.IsConfirmed)
-                                return false;
-                        }
-                        File.Move(entry.Command, disabledPath);
-                        entry.IsEnabled = false;
-                    }
-                    return true;
-
-                case AutorunType.Service:
-                    if (RunScConfig(entry.Name, "disabled"))
-                    {
-                        entry.IsEnabled = false;
-                        return true;
-                    }
-                    return false;
-            }
+                AutorunType.RegistryRun or AutorunType.RegistryRunOnce =>
+                    SetRunEntryEnabledDetailed(entry, enabled: false, dryRun),
+                AutorunType.StartupFolder =>
+                    MoveStartupEntryDetailed(entry, enable: false, dryRun),
+                AutorunType.Service => DisableServiceAutorunDetailed(entry, dryRun),
+                _ => AdministrativeMutationPolicy.Unsupported(
+                    operation,
+                    entry.Name,
+                    "This autorun source does not expose a reversible disable handler."),
+            };
         }
-        catch { /* fall through */ }
-        return false;
+        catch (Exception ex)
+        {
+            return AdministrativeMutationPolicy.Failed(
+                operation,
+                entry.Name,
+                "Unknown",
+                ex.Message);
+        }
     }
 
     public static bool DeleteAutorun(AutorunEntry entry)
+        => DeleteAutorunDetailed(entry).Succeeded;
+
+    public static AdministrativeMutationResult DeleteAutorunDetailed(
+        AutorunEntry entry,
+        bool dryRun = false)
     {
+        const string operation = "autorun-delete";
+        var validation = ValidateEntry(entry, operation);
+        if (validation != null) return validation;
+
         try
         {
             switch (entry.Type)
             {
                 case AutorunType.RegistryRun:
                 case AutorunType.RegistryRunOnce:
-                    return RegistryDeletion.DeleteValue(
-                        $@"{entry.RegistryPath}\{entry.Name}",
-                        "autorun-delete").Deleted;
+                    return MapRegistryDeletion(
+                        RegistryDeletion.DeleteValue(
+                            $@"{entry.RegistryPath}\{entry.Name}",
+                            operation,
+                            dryRun),
+                        operation,
+                        entry.Name);
 
                 case AutorunType.StartupFolder:
-                    if (File.Exists(entry.Command) && SafetyGuard.IsPathSafeToDelete(entry.Command))
-                        return new DeletionExecutor().Execute(
-                            new DeletionRequest(
-                                entry.Command,
-                                Operation: "autorun-delete"),
-                            DeleteOptions.Default).IsConfirmed;
-                    var disabled = entry.Command + ".disabled";
-                    if (File.Exists(disabled) && SafetyGuard.IsPathSafeToDelete(disabled))
-                        return new DeletionExecutor().Execute(
-                            new DeletionRequest(
-                                disabled,
-                                Operation: "autorun-delete-disabled"),
-                            DeleteOptions.Default).IsConfirmed;
-                    return false;
+                    var path = File.Exists(entry.Command)
+                        ? entry.Command
+                        : entry.Command + ".disabled";
+                    if (!File.Exists(path))
+                        return AdministrativeMutationPolicy.Skipped(
+                            operation,
+                            entry.Name,
+                            "Absent",
+                            "The startup entry file is already absent.");
+                    return MapFileDeletion(
+                        new DeletionExecutor().Execute(
+                            new DeletionRequest(path, Operation: operation),
+                            new DeleteOptions(DryRun: dryRun)),
+                        operation,
+                        path);
 
                 case AutorunType.Service:
-                    return RunSc(new[] { "delete", entry.Name });
+                    return ServiceScanner.DeleteServiceDetailed(new ServiceEntry { Name = entry.Name }, dryRun);
+
+                default:
+                    return AdministrativeMutationPolicy.Unsupported(
+                        operation,
+                        entry.Name,
+                        "Scheduled-task autoruns must be changed through the scheduled-task safety handler.");
             }
         }
-        catch { /* fall through */ }
-        return false;
+        catch (Exception ex)
+        {
+            return AdministrativeMutationPolicy.Failed(
+                operation,
+                entry.Name,
+                "Unknown",
+                ex.Message);
+        }
     }
 
     public static bool ToggleAutorun(AutorunEntry entry)
+        => ToggleAutorunDetailed(entry).Succeeded;
+
+    public static AdministrativeMutationResult ToggleAutorunDetailed(
+        AutorunEntry entry,
+        bool dryRun = false)
+        => entry.IsEnabled
+            ? DisableAutorunDetailed(entry, dryRun)
+            : EnableAutorunDetailed(entry, dryRun);
+
+    public static AdministrativeMutationResult EnableAutorunDetailed(
+        AutorunEntry entry,
+        bool dryRun = false)
     {
-        if (entry.IsEnabled) return DisableAutorun(entry);
+        const string operation = "autorun-enable";
+        var validation = ValidateEntry(entry, operation);
+        if (validation != null) return validation;
 
         try
         {
-            switch (entry.Type)
+            return entry.Type switch
             {
-                case AutorunType.RegistryRun:
-                case AutorunType.RegistryRunOnce:
-                    return SetRunEntryEnabled(entry, enabled: true);
-
-                case AutorunType.StartupFolder:
-                    var disabledPath = entry.Command + ".disabled";
-                    if (File.Exists(disabledPath))
-                    {
-                        File.Move(disabledPath, entry.Command);
-                        entry.IsEnabled = true;
-                        return true;
-                    }
-                    return false;
-
-                case AutorunType.Service:
-                    if (RunScConfig(entry.Name, "auto"))
-                    {
-                        entry.IsEnabled = true;
-                        return true;
-                    }
-                    return false;
-            }
+                AutorunType.RegistryRun or AutorunType.RegistryRunOnce =>
+                    SetRunEntryEnabledDetailed(entry, enabled: true, dryRun),
+                AutorunType.StartupFolder =>
+                    MoveStartupEntryDetailed(entry, enable: true, dryRun),
+                AutorunType.Service => ServiceScanner.EnableServiceDetailed(
+                    new ServiceEntry { Name = entry.Name },
+                    dryRun),
+                _ => AdministrativeMutationPolicy.Unsupported(
+                    operation,
+                    entry.Name,
+                    "This autorun source does not expose a reversible enable handler."),
+            };
         }
-        catch { /* fall through */ }
-        return false;
+        catch (Exception ex)
+        {
+            return AdministrativeMutationPolicy.Failed(
+                operation,
+                entry.Name,
+                "Unknown",
+                ex.Message);
+        }
     }
 
     /// <summary>
@@ -489,17 +538,317 @@ public static class AutorunScanner
     /// StartupApproved key pattern Windows uses for Task Manager's Startup tab.
     /// Never deletes the underlying Run value, so re-enabling always works.
     /// </summary>
-    private static bool SetRunEntryEnabled(AutorunEntry entry, bool enabled)
+    private static AdministrativeMutationResult SetRunEntryEnabledDetailed(
+        AutorunEntry entry,
+        bool enabled,
+        bool dryRun)
     {
+        var operation = enabled ? "autorun-enable" : "autorun-disable";
+        var target = $"{entry.RegistryPath}\\{entry.Name}";
         var (hive, approvedPath) = ResolveStartupApprovedPath(entry);
-        if (hive == null) return false;
+        if (hive == null)
+            return AdministrativeMutationPolicy.Unsupported(
+                operation,
+                target,
+                "The autorun registry hive could not be resolved.");
 
-        using var key = hive.CreateSubKey(approvedPath, writable: true);
-        if (key == null) return false;
+        try
+        {
+            byte[]? existing;
+            using (var current = hive.OpenSubKey(approvedPath))
+                existing = current?.GetValue(entry.Name) as byte[];
 
-        key.SetValue(entry.Name, enabled ? StartupApprovedEnabled : StartupApprovedDisabled, RegistryValueKind.Binary);
-        entry.IsEnabled = enabled;
-        return true;
+            var before = JsonSerializer.Serialize(new
+            {
+                Hive = entry.RegistryPath.StartsWith("HKLM", StringComparison.OrdinalIgnoreCase) ? "HKLM" : "HKCU",
+                Path = approvedPath,
+                Value = entry.Name,
+                Data = existing is null ? null : Convert.ToBase64String(existing),
+            });
+            var next = enabled ? StartupApprovedEnabled : StartupApprovedDisabled;
+            var rollback = JsonSerializer.Serialize(new
+            {
+                Hive = entry.RegistryPath.StartsWith("HKLM", StringComparison.OrdinalIgnoreCase) ? "HKLM" : "HKCU",
+                Path = approvedPath,
+                Value = entry.Name,
+                Data = existing is null ? null : Convert.ToBase64String(existing),
+                Restore = existing is null ? "DeleteValue" : "SetBinaryValue",
+            });
+
+            if (dryRun)
+                return AdministrativeMutationPolicy.Preview(
+                    operation,
+                    target,
+                    before,
+                    $"StartupApproved={next[0]:X2}",
+                    rollback);
+
+            using var key = hive.CreateSubKey(approvedPath, writable: true);
+            if (key == null)
+                return AdministrativeMutationPolicy.Failed(
+                    operation,
+                    target,
+                    before,
+                    "The StartupApproved registry key could not be opened.",
+                    rollback);
+
+            key.SetValue(entry.Name, next, RegistryValueKind.Binary);
+            var after = key.GetValue(entry.Name) as byte[];
+            if (after is null || after.Length == 0 || after[0] != next[0])
+                return AdministrativeMutationPolicy.Failed(
+                    operation,
+                    target,
+                    before,
+                    "The StartupApproved value did not match the requested state.",
+                    rollback);
+
+            entry.IsEnabled = enabled;
+            SystemRefreshNotifier.NotifyShellChanged();
+            return AdministrativeMutationPolicy.Changed(
+                operation,
+                target,
+                before,
+                $"StartupApproved={after[0]:X2}",
+                rollback);
+        }
+        catch (Exception ex)
+        {
+            return AdministrativeMutationPolicy.Failed(
+                operation,
+                target,
+                "Unknown",
+                ex.Message);
+        }
+    }
+
+    private static AdministrativeMutationResult MoveStartupEntryDetailed(
+        AutorunEntry entry,
+        bool enable,
+        bool dryRun)
+    {
+        var operation = enable ? "autorun-enable" : "autorun-disable";
+        var source = enable ? entry.Command + ".disabled" : entry.Command;
+        var destination = enable ? entry.Command : entry.Command + ".disabled";
+        var target = entry.Command;
+
+        if (!SafetyGuard.IsPathSafeToDelete(entry.Command))
+            return AdministrativeMutationPolicy.Skipped(
+                operation,
+                target,
+                "Present",
+                "Protected startup-folder path.");
+
+        var before = JsonSerializer.Serialize(new
+        {
+            Source = source,
+            Destination = destination,
+            SourceExists = File.Exists(source),
+            DestinationExists = File.Exists(destination),
+        });
+        var rollback = JsonSerializer.Serialize(new
+        {
+            Move = $"MoveFile '{destination}' '{source}'",
+            Source = source,
+            Destination = destination,
+        });
+
+        if (!File.Exists(source))
+            return AdministrativeMutationPolicy.Skipped(
+                operation,
+                target,
+                before,
+                enable
+                    ? "The disabled startup entry file is absent."
+                    : "The startup entry file is already disabled or absent.");
+        if (File.Exists(destination))
+            return AdministrativeMutationPolicy.Failed(
+                operation,
+                target,
+                before,
+                "The destination startup entry already exists.",
+                rollback);
+
+        if (dryRun)
+            return AdministrativeMutationPolicy.Preview(
+                operation,
+                target,
+                before,
+                JsonSerializer.Serialize(new
+                {
+                    Source = source,
+                    Destination = destination,
+                    SourceExists = false,
+                    DestinationExists = true,
+                }),
+                rollback);
+
+        File.Move(source, destination);
+        if (File.Exists(source) || !File.Exists(destination))
+            return AdministrativeMutationPolicy.Failed(
+                operation,
+                target,
+                before,
+                "The startup entry move was not verified.",
+                rollback);
+
+        entry.IsEnabled = enable;
+        SystemRefreshNotifier.NotifyShellChanged();
+        return AdministrativeMutationPolicy.Changed(
+            operation,
+            target,
+            before,
+            JsonSerializer.Serialize(new
+            {
+                Source = source,
+                Destination = destination,
+                SourceExists = false,
+                DestinationExists = true,
+            }),
+            rollback);
+    }
+
+    private static AdministrativeMutationResult DisableServiceAutorunDetailed(
+        AutorunEntry entry,
+        bool dryRun)
+    {
+        var result = ServiceScanner.DisableServiceDetailed(
+            new ServiceEntry { Name = entry.Name },
+            dryRun);
+        if (result.Succeeded) entry.IsEnabled = false;
+        return result;
+    }
+
+    private static AdministrativeMutationResult? ValidateEntry(
+        AutorunEntry entry,
+        string operation)
+    {
+        if (string.IsNullOrWhiteSpace(entry.Name))
+            return AdministrativeMutationPolicy.Unsupported(
+                operation,
+                entry.Name,
+                "The autorun entry has no stable name.");
+        if (entry.Type == AutorunType.ScheduledTask)
+            return AdministrativeMutationPolicy.Unsupported(
+                operation,
+                entry.Name,
+                "Scheduled-task autoruns must be changed through the scheduled-task safety handler.");
+        if (AutorunSafety.IsProtected(entry))
+            return AdministrativeMutationPolicy.Skipped(
+                operation,
+                entry.Name,
+                "Present",
+                "Protected Windows autorun entry.");
+        return null;
+    }
+
+    private static AdministrativeMutationResult MapRegistryDeletion(
+        RegistryDeletionResult result,
+        string operation,
+        string target)
+    {
+        var rollback = JsonSerializer.Serialize(new
+        {
+            result.BackupPath,
+            result.OperationId,
+            result.BackupSha256,
+        });
+        return result.Status switch
+        {
+            RegistryDeletionStatus.Deleted => ChangedRegistryResult(result, operation, target, rollback),
+            RegistryDeletionStatus.DryRun => AdministrativeMutationPolicy.Preview(
+                operation,
+                target,
+                "Present",
+                "Absent (planned)",
+                rollback),
+            RegistryDeletionStatus.SkippedUnsafePath => AdministrativeMutationPolicy.Skipped(
+                operation,
+                target,
+                "Present",
+                "Protected registry path."),
+            RegistryDeletionStatus.SkippedMissing => AdministrativeMutationPolicy.Skipped(
+                operation,
+                target,
+                "Absent",
+                "The autorun registry value is already absent."),
+            _ => AdministrativeMutationPolicy.Failed(
+                operation,
+                target,
+                "Present",
+                result.ErrorMessage ?? result.Status.ToString(),
+                rollback),
+        };
+    }
+
+    private static AdministrativeMutationResult ChangedRegistryResult(
+        RegistryDeletionResult result,
+        string operation,
+        string target,
+        string rollback)
+    {
+        SystemRefreshNotifier.NotifyShellChanged();
+        return AdministrativeMutationPolicy.Changed(
+            operation,
+            target,
+            "Present",
+            "Absent",
+            rollback);
+    }
+
+    private static AdministrativeMutationResult MapFileDeletion(
+        DeletionResult result,
+        string operation,
+        string target)
+    {
+        var rollback = JsonSerializer.Serialize(new
+        {
+            result.Path,
+            result.Recoverable,
+            result.Outcome,
+            Restore = result.Recoverable ? "Restore from Recycle Bin" : "Unavailable",
+        });
+        return result.Outcome switch
+        {
+            DeletionOutcomeKind.Recycled or
+            DeletionOutcomeKind.PermanentlyDeleted or
+            DeletionOutcomeKind.SecurelyDeleted => ChangedFileResult(result, operation, target, rollback),
+            DeletionOutcomeKind.Preview => AdministrativeMutationPolicy.Preview(
+                operation,
+                target,
+                "Present",
+                "Absent (planned)",
+                rollback),
+            DeletionOutcomeKind.Skipped => AdministrativeMutationPolicy.Skipped(
+                operation,
+                target,
+                "Present",
+                result.Reason ?? "The startup entry was skipped."),
+            DeletionOutcomeKind.Queued => AdministrativeMutationPolicy.Unsupported(
+                operation,
+                target,
+                "The startup entry was queued and is not confirmed removed."),
+            _ => AdministrativeMutationPolicy.Failed(
+                operation,
+                target,
+                "Present",
+                result.Reason ?? result.Outcome.ToString(),
+                rollback),
+        };
+    }
+
+    private static AdministrativeMutationResult ChangedFileResult(
+        DeletionResult result,
+        string operation,
+        string target,
+        string rollback)
+    {
+        SystemRefreshNotifier.NotifyShellChanged();
+        return AdministrativeMutationPolicy.Changed(
+            operation,
+            target,
+            "Present",
+            "Absent",
+            rollback);
     }
 
     private static (RegistryKey? hive, string path) ResolveStartupApprovedPath(AutorunEntry entry)
@@ -528,23 +877,6 @@ public static class AutorunScanner
     // ═══════════════════════════════════════════════════════
     //  Helpers
     // ═══════════════════════════════════════════════════════
-
-    private static bool RunScConfig(string serviceName, string startType)
-        => RunSc(new[] { "config", serviceName, "start=", startType });
-
-    private static bool RunSc(IReadOnlyList<string> args)
-    {
-        try
-        {
-            var result = ExternalProcessRunner.Run(new ExternalProcessCommand("sc.exe")
-            {
-                Arguments = args,
-                Timeout = TimeSpan.FromSeconds(10),
-            });
-            return result.Success;
-        }
-        catch { return false; }
-    }
 
     private static string ExtractExePath(string command)
     {

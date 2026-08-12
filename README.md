@@ -31,7 +31,7 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 - **Skipped-item details** - Junk and Evidence cleanup summaries expose redacted reasons for missing, denied, unsafe, locked, command-failed, and too-recent items in GUI status, CLI text, CLI JSON, and activity history
 
 ### System Management
-- **Autorun Manager** - Registry Run/RunOnce, startup folders, and service autoruns with **reversible** disable (StartupApproved pattern) and delete
+- **Autorun Manager** - Registry Run/RunOnce, startup folders, and service autoruns with **reversible** disable (StartupApproved pattern), guarded deletion where a rollback provider exists, and explicit unsupported states for protected sources
 - **Startup Impact ratings** - High / Medium / Low per autorun process, parsed from the Windows Diagnostic Infrastructure boot traces in `System32\wdi\LogFiles\StartupInfo\*.xml`. Same metric Task Manager uses — no undocumented APIs.
 - **Digital signature badges** - Every autorun entry and service shows its WinVerifyTrust result (signer CN / Unsigned / Untrusted / Revoked) *(inspired by Sysinternals Autoruns)*
 - **Browser Extensions** - Scan extensions across Chrome, Edge, Brave, Firefox, Vivaldi, and Opera; remove only exact profile packages while protecting system and stale entries
@@ -85,6 +85,8 @@ A thorough, open-source Windows uninstaller that goes deep. Removes programs com
 - **Registry Backups panel** - Open the ACL-protected `%ProgramData%\DeepPurge\RegistryBackups` store; every artifact binds its hive, subkey/value, object identity, owner/DACL, and operation ID, and legacy manifests cannot auto-discover a `.reg` file
 - Recycle Bin for ordinary file cleanup through `IFileOperation` where supported, with explicit permanent-delete and secure-delete outcomes
 - Typed cleanup results distinguish preview, recycled, permanent, secure, queued, skipped, failed, and cancelled items; only confirmed mutations enter recovery manifests
+- Administrative mutation ledger for firewall, PATH, autorun, service, scheduled-task, shell, and DeepPurge schedule changes with before/after state, rollback data, verification, and exact typed outcomes
+- Protected services, firewall rules, PATH entries, registry roots, and Microsoft scheduled-task paths are skipped before production mutation; unsupported rollback-sensitive actions are disabled in the WPF surface
 - Confidence-based leftover classification (Safe / Moderate / Risky)
 - Leftover ownership evidence and conflict review: another product's install root, protected Windows scope, and weak single-source matches are never auto-removable
 - Centralized `SafetyGuard` blocks every destructive call against Windows, Program Files, System32, and protected registry hives

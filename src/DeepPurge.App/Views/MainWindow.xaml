@@ -1167,7 +1167,9 @@
                         <DataGrid.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Header="Toggle Enable/Disable" Tag="&#xE7B3;" Click="Ctx_ToggleAutorun_Click"/>
-                                <MenuItem Header="Delete Entry" Tag="&#xE74D;" Click="DeleteAutorun_Click" Foreground="{DynamicResource RedBrush}"/>
+                                <MenuItem Header="Delete Entry" Tag="&#xE74D;" Click="DeleteAutorun_Click"
+                                          IsEnabled="{Binding PlacementTarget.SelectedItem.MutationSupported, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          Foreground="{DynamicResource RedBrush}"/>
                                 <Separator Style="{StaticResource MenuSep}"/>
                                 <MenuItem Header="Open File Location" Tag="&#xE838;" Click="Ctx_OpenAutorunPath_Click"/>
                                 <MenuItem Header="Copy Command" Tag="&#xE8C8;" Click="Ctx_CopyCommand_Click"/>
@@ -1236,8 +1238,11 @@
                     <DataGrid AutoGenerateColumns="False" x:Name="dgServices" Visibility="Collapsed" ItemsSource="{Binding Services}">
                         <DataGrid.ContextMenu>
                             <ContextMenu>
-                                <MenuItem Header="Disable Service" Tag="&#xE769;" Click="DisableService_Click"/>
-                                <MenuItem Header="Delete Service" Tag="&#xE74D;" Click="DeleteService_Click" Foreground="{DynamicResource RedBrush}"/>
+                                <MenuItem Header="Disable Service" Tag="&#xE769;" Click="DisableService_Click"
+                                          IsEnabled="{Binding PlacementTarget.SelectedItem.MutationSupported, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                <MenuItem Header="Delete Service" Tag="&#xE74D;" Click="DeleteService_Click"
+                                          IsEnabled="{Binding PlacementTarget.SelectedItem.DeletionSupported, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          Foreground="{DynamicResource RedBrush}"/>
                                 <Separator Style="{StaticResource MenuSep}"/>
                                 <MenuItem Header="Open in services.msc" Tag="&#xE912;" Click="Ctx_OpenServicesMsc_Click"/>
                                 <MenuItem Header="Copy Service Name" Tag="&#xE8C8;" Click="Ctx_CopyName_Click"/>
@@ -1265,7 +1270,9 @@
                     <DataGrid AutoGenerateColumns="False" x:Name="dgTasks" Visibility="Collapsed" ItemsSource="{Binding ScheduledTasks}">
                         <DataGrid.ContextMenu>
                             <ContextMenu>
-                                <MenuItem Header="Delete Task" Tag="&#xE74D;" Click="DeleteTask_Click" Foreground="{DynamicResource RedBrush}"/>
+                                <MenuItem Header="Delete Task" Tag="&#xE74D;" Click="DeleteTask_Click"
+                                          IsEnabled="{Binding PlacementTarget.SelectedItem.MutationSupported, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          Foreground="{DynamicResource RedBrush}"/>
                                 <MenuItem Header="Open Task Scheduler" Tag="&#xE823;" Click="Ctx_OpenTaskScheduler_Click"/>
                                 <MenuItem Header="Copy Task Name" Tag="&#xE8C8;" Click="Ctx_CopyName_Click"/>
                                 <MenuItem Header="Rescan" Tag="&#xE72C;" Click="ScanTasks_Click"/>

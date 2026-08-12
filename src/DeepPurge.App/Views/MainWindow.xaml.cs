@@ -633,6 +633,44 @@ public partial class MainWindow : Window
         AutomationProperties.SetName(btn, text);
         AutomationProperties.SetHelpText(btn, BuildToolbarHelpText(text));
         if (style != null) btn.Style = (Style)FindResource(style);
+        switch (text)
+        {
+            case "Delete Entry":
+                btn.SetBinding(IsEnabledProperty, new System.Windows.Data.Binding("SelectedItem.MutationSupported")
+                {
+                    Source = dgAutorun,
+                    FallbackValue = false,
+                });
+                break;
+            case "Disable":
+                btn.SetBinding(IsEnabledProperty, new System.Windows.Data.Binding("SelectedItem.MutationSupported")
+                {
+                    Source = dgServices,
+                    FallbackValue = false,
+                });
+                break;
+            case "Delete Service":
+                btn.SetBinding(IsEnabledProperty, new System.Windows.Data.Binding("SelectedItem.DeletionSupported")
+                {
+                    Source = dgServices,
+                    FallbackValue = false,
+                });
+                break;
+            case "Delete Task":
+                btn.SetBinding(IsEnabledProperty, new System.Windows.Data.Binding("SelectedItem.MutationSupported")
+                {
+                    Source = dgTasks,
+                    FallbackValue = false,
+                });
+                break;
+            case "Remove Job":
+                btn.SetBinding(IsEnabledProperty, new System.Windows.Data.Binding("SelectedItem.DeletionSupported")
+                {
+                    Source = lstScheduledJobs,
+                    FallbackValue = false,
+                });
+                break;
+        }
         btn.Click += handler;
         genericButtons.Children.Add(btn);
         return btn;
@@ -873,9 +911,21 @@ public partial class MainWindow : Window
     {
         var selected = _vm.ContextMenuEntries.Where(c => c.IsSelected).ToList();
         if (selected.Count == 0) { WarnStatus("Select at least one context menu entry to remove."); return; }
-        var removed = ContextMenuCleaner.RemoveOrphanedEntries(selected);
-        foreach (var item in selected) _vm.ContextMenuEntries.Remove(item);
-        ShowToast($"Removed {removed} context menu entries");
+        var results = ContextMenuCleaner.RemoveOrphanedEntriesDetailed(selected);
+        var changedTargets = results
+            .Where(result => result.Succeeded)
+            .Select(result => result.Target)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in selected)
+        {
+            if (changedTargets.Contains($"HKCR\\{item.RegistryPath}"))
+                _vm.ContextMenuEntries.Remove(item);
+        }
+        var removed = results.Count(result => result.Succeeded);
+        var notChanged = results.Count(result => !result.Succeeded);
+        ShowToast($"Removed {removed} context menu entr{(removed == 1 ? "y" : "ies")}" +
+                  (notChanged > 0 ? $"; {notChanged} not changed" : ""),
+                  isWarning: notChanged > 0);
     }
 
     private async void ScanServices_Click(object sender, RoutedEventArgs e) => await _vm.ScanServicesAsync();
@@ -884,24 +934,20 @@ public partial class MainWindow : Window
     {
         if (dgServices.SelectedItem is not ServiceEntry svc)
         { WarnStatus("Select a service first."); return; }
-        if (!SafetyGuard.IsServiceSafeToModify(svc.Name))
-        { ShowToast($"{svc.DisplayName} is a protected Windows service", isWarning: true); return; }
-
-        if (ServiceScanner.DisableService(svc))
-        { svc.StartType = "Disabled"; dgServices.Items.Refresh(); ShowToast($"Disabled {svc.DisplayName}"); }
-        else ShowToast($"Failed to disable {svc.DisplayName}", isError: true);
+        var result = ServiceScanner.DisableServiceDetailed(svc);
+        if (result.Succeeded)
+        { dgServices.Items.Refresh(); ShowToast($"Disabled {svc.DisplayName}"); }
+        else ShowToast(result.Reason ?? $"Failed to disable {svc.DisplayName}", isError: result.Outcome == AdministrativeMutationOutcome.Failed, isWarning: result.IsReviewOnly);
     }
 
     private void DeleteService_Click(object sender, RoutedEventArgs e)
     {
         if (dgServices.SelectedItem is not ServiceEntry svc)
         { WarnStatus("Select a service first."); return; }
-        if (!SafetyGuard.IsServiceSafeToModify(svc.Name))
-        { ShowToast($"{svc.DisplayName} is a protected Windows service", isWarning: true); return; }
-
-        if (ServiceScanner.DeleteService(svc))
+        var result = ServiceScanner.DeleteServiceDetailed(svc);
+        if (result.Succeeded)
         { _vm.Services.Remove(svc); ShowToast($"Deleted {svc.DisplayName}"); }
-        else ShowToast($"Failed to delete {svc.DisplayName}", isError: true);
+        else ShowToast(result.Reason ?? $"Service deletion was not completed for {svc.DisplayName}", isError: result.Outcome == AdministrativeMutationOutcome.Failed, isWarning: result.IsReviewOnly);
     }
 
     private async void ScanTasks_Click(object sender, RoutedEventArgs e) => await _vm.ScanTasksAsync();
@@ -910,12 +956,10 @@ public partial class MainWindow : Window
     {
         if (dgTasks.SelectedItem is not ScheduledTaskInfo task)
         { WarnStatus("Select a scheduled task first."); return; }
-        if (!SafetyGuard.IsTaskSafeToDelete(task.Path ?? task.Name))
-        { ShowToast($"{task.Name} is a protected Windows task", isWarning: true); return; }
-
-        if (ScheduledTaskScanner.DeleteTask(task))
+        var result = ScheduledTaskScanner.DeleteTaskDetailed(task);
+        if (result.Succeeded)
         { _vm.ScheduledTasks.Remove(task); ShowToast($"Deleted {task.Name}"); }
-        else ShowToast($"Failed to delete {task.Name}", isError: true);
+        else ShowToast(result.Reason ?? $"Task deletion was not completed for {task.Name}", isError: result.Outcome == AdministrativeMutationOutcome.Failed, isWarning: result.IsReviewOnly);
     }
 
     private async void CreateRestorePoint_Click(object sender, RoutedEventArgs e)
@@ -940,12 +984,10 @@ public partial class MainWindow : Window
     {
         if (dgAutorun.SelectedItem is not AutorunEntry entry)
         { WarnStatus("Select an autorun entry first."); return; }
-        if (!SafetyGuard.IsAutorunSafeToDelete(entry.Command))
-        { ShowToast($"{entry.Name} is a protected system entry", isWarning: true); return; }
-
-        if (AutorunScanner.DeleteAutorun(entry))
+        var result = AutorunScanner.DeleteAutorunDetailed(entry);
+        if (result.Succeeded)
         { _vm.Autoruns.Remove(entry); ShowToast($"Deleted {entry.Name}"); }
-        else ShowToast($"Failed to delete {entry.Name}", isError: true);
+        else ShowToast(result.Reason ?? $"Autorun deletion was not completed for {entry.Name}", isError: result.Outcome == AdministrativeMutationOutcome.Failed, isWarning: result.IsReviewOnly);
     }
 
     private async void RemoveWindowsApp_Click(object sender, RoutedEventArgs e)
@@ -1081,12 +1123,13 @@ public partial class MainWindow : Window
     private void Ctx_ToggleAutorun_Click(object sender, RoutedEventArgs e)
     {
         if (dgAutorun.SelectedItem is not AutorunEntry entry) return;
-        if (AutorunScanner.ToggleAutorun(entry))
+        var result = AutorunScanner.ToggleAutorunDetailed(entry);
+        if (result.Succeeded)
         {
             dgAutorun.Items.Refresh();
             ShowToast($"{(entry.IsEnabled ? "Enabled" : "Disabled")} {entry.Name}");
         }
-        else ShowToast($"Failed to toggle {entry.Name}", isError: true);
+        else ShowToast(result.Reason ?? $"Autorun toggle was not completed for {entry.Name}", isError: result.Outcome == AdministrativeMutationOutcome.Failed, isWarning: result.IsReviewOnly);
     }
 
     private void Ctx_ExcludePath_Click(object sender, RoutedEventArgs e)

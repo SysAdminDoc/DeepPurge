@@ -4,13 +4,6 @@ Actionable work only. Historical and completed roadmap material is archived in C
 
 ## Actionable Items
 
-- [ ] P1 — Route non-file administrative mutations through reversible safety policy
-  Why: Firewall, PATH, service/autorun, and scheduled-task actions bypass existing guards, omit backups/refresh notifications, or expose unsupported mutations.
-  Evidence: `src/DeepPurge.Core/Firewall/FirewallRuleScanner.cs`; `src/DeepPurge.Core/Shell/PathCleaner.cs`; `src/DeepPurge.Core/Startup/AutorunScanner.cs`; `SafetyGuard.cs`; scheduled-task action handlers.
-  Touches: safety and operation-ledger services, firewall/PATH/autorun/service/task modules, WPF/CLI actions, tests
-  Acceptance: Every mutation runs a matching protection rule, records before/after state and rollback, reports exact outcome, sends required system refresh notifications, and disables UI/CLI actions for unsupported source types; protected services/rules/PATH entries cannot be changed through production code.
-  Complexity: L
-
 - [ ] P1 — Model removal capability and uninstaller trust explicitly
   Why: Portable/game discoveries can report successful uninstall without an action, while selected HKCU/HKU uninstall strings cross into the elevated process without visible trust facts.
   Evidence: `src/DeepPurge.Core/Packages/PortableAppScanner.cs`; `src/DeepPurge.Core/Packages/GamePlatformScanner.cs`; `src/DeepPurge.Core/Uninstall/UninstallEngine.cs`; `src/DeepPurge.App/app.manifest`; BCUninstaller capability/risk patterns.

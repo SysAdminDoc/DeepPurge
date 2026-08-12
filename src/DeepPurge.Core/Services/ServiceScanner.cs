@@ -2,7 +2,9 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.ServiceProcess;
+using System.Text.Json;
 using DeepPurge.Core.Execution;
+using DeepPurge.Core.Safety;
 using DeepPurge.Core.Security;
 using Microsoft.Win32;
 
@@ -22,6 +24,9 @@ public class ServiceEntry : INotifyPropertyChanged
     public string Status { get; set; } = "";
     public bool IsOrphaned { get; set; }
     public string StatusDisplay => IsOrphaned ? "Orphaned" : Status;
+    public bool IsProtected => !SafetyGuard.IsServiceSafeToModify(Name);
+    public bool MutationSupported => !string.IsNullOrWhiteSpace(Name) && !IsProtected;
+    public bool DeletionSupported => false;
 
     public SignatureStatus SignatureStatus
     {
@@ -193,46 +198,251 @@ public static class ServiceScanner
     }
 
     public static bool StopService(ServiceEntry entry)
+        => StopServiceDetailed(entry).Succeeded;
+
+    public static AdministrativeMutationResult StopServiceDetailed(
+        ServiceEntry entry,
+        bool dryRun = false)
     {
+        const string operation = "service-stop";
+        var target = entry.Name;
+        var validation = ValidateService(entry, operation);
+        if (validation != null) return validation;
+
         try
         {
             using var sc = new ServiceController(entry.Name);
+            var before = sc.Status.ToString();
+            if (sc.Status == ServiceControllerStatus.Stopped)
+                return AdministrativeMutationPolicy.Skipped(
+                    operation,
+                    target,
+                    before,
+                    "The service is already stopped.");
+
+            var rollback = $"sc.exe start '{EscapeSc(entry.Name)}'";
+            if (dryRun)
+                return AdministrativeMutationPolicy.Preview(
+                    operation,
+                    target,
+                    before,
+                    "Stopped (planned)",
+                    rollback);
+
+            sc.Stop();
+            sc.WaitForStatus(ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(30));
             if (sc.Status != ServiceControllerStatus.Stopped)
-            {
-                sc.Stop();
-                sc.WaitForStatus(ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(30));
-            }
-            return true;
+                return AdministrativeMutationPolicy.Failed(
+                    operation,
+                    target,
+                    before,
+                    "The service did not reach Stopped after the stop request.",
+                    rollback);
+
+            SystemRefreshNotifier.NotifyShellChanged();
+            return AdministrativeMutationPolicy.Changed(
+                operation,
+                target,
+                before,
+                "Stopped",
+                rollback);
         }
-        catch { return false; }
+        catch (Exception ex)
+        {
+            return AdministrativeMutationPolicy.Failed(
+                operation,
+                target,
+                "Unknown",
+                ex.Message);
+        }
     }
 
-    public static bool DisableService(ServiceEntry entry) => RunSc(new[] { "config", entry.Name, "start=", "disabled" });
+    public static bool DisableService(ServiceEntry entry)
+        => DisableServiceDetailed(entry).Succeeded;
+
+    public static AdministrativeMutationResult DisableServiceDetailed(
+        ServiceEntry entry,
+        bool dryRun = false)
+        => ConfigureServiceStartDetailed(entry, 4, "service-disable", dryRun);
+
+    public static bool EnableService(ServiceEntry entry)
+        => EnableServiceDetailed(entry).Succeeded;
+
+    public static AdministrativeMutationResult EnableServiceDetailed(
+        ServiceEntry entry,
+        bool dryRun = false)
+        => ConfigureServiceStartDetailed(entry, 2, "service-enable", dryRun);
+
+    private static AdministrativeMutationResult ConfigureServiceStartDetailed(
+        ServiceEntry entry,
+        int desiredStart,
+        string operation,
+        bool dryRun)
+    {
+        var target = entry.Name;
+        var validation = ValidateService(entry, operation);
+        if (validation != null) return validation;
+
+        if (!TryReadStartValue(entry.Name, out var beforeStart, out var beforeError))
+            return AdministrativeMutationPolicy.Unsupported(
+                operation,
+                target,
+                $"The service start value could not be captured for rollback: {beforeError}");
+
+        var before = JsonSerializer.Serialize(new { Start = beforeStart, StartType = StartDisplay(beforeStart) });
+        var rollback = $"sc.exe config '{EscapeSc(entry.Name)}' start= {ScStartToken(beforeStart)}";
+        if (dryRun)
+            return AdministrativeMutationPolicy.Preview(
+                operation,
+                target,
+                before,
+                JsonSerializer.Serialize(new { Start = desiredStart, StartType = StartDisplay(desiredStart) }),
+                rollback);
+
+        var result = RunScResult(new[]
+        {
+            "config",
+            entry.Name,
+            "start=",
+            ScStartToken(desiredStart),
+        });
+        if (!result.Success)
+            return AdministrativeMutationPolicy.Failed(
+                operation,
+                target,
+                before,
+                result.CombinedOutput,
+                rollback);
+
+        if (!TryReadStartValue(entry.Name, out var afterStart, out var afterError) || afterStart != desiredStart)
+            return AdministrativeMutationPolicy.Failed(
+                operation,
+                target,
+                before,
+                $"The service start value was not verified as {StartDisplay(desiredStart)}: {afterError}",
+                rollback);
+
+        entry.StartType = StartDisplay(desiredStart);
+        SystemRefreshNotifier.NotifyShellChanged();
+        return AdministrativeMutationPolicy.Changed(
+            operation,
+            target,
+            before,
+            JsonSerializer.Serialize(new { Start = afterStart, StartType = StartDisplay(afterStart) }),
+            rollback);
+    }
 
     public static bool DeleteService(ServiceEntry entry)
+        => DeleteServiceDetailed(entry).Succeeded;
+
+    public static AdministrativeMutationResult DeleteServiceDetailed(
+        ServiceEntry entry,
+        bool dryRun = false)
     {
-        // Best-effort stop; deletion succeeds even if the service was already gone.
-        StopService(entry);
-        return RunSc(new[] { "delete", entry.Name });
+        var validation = ValidateService(entry, "service-delete");
+        if (validation != null) return validation;
+
+        // SCM deletion also removes the service registration and its security
+        // descriptor. Until a trusted service export/restore provider exists,
+        // refusing this action is safer than pretending a text snapshot is a
+        // rollback package.
+        return AdministrativeMutationPolicy.Unsupported(
+            "service-delete",
+            entry.Name,
+            "Service deletion is disabled until a trusted SCM rollback provider is available.");
     }
 
     // ═══════════════════════════════════════════════════════
     //  Internals
     // ═══════════════════════════════════════════════════════
 
-    private static bool RunSc(IReadOnlyList<string> args)
+    private static ExternalProcessResult RunScResult(IReadOnlyList<string> args)
     {
         try
         {
-            var result = ExternalProcessRunner.Run(new ExternalProcessCommand("sc.exe")
+            return ExternalProcessRunner.Run(new ExternalProcessCommand("sc.exe")
             {
                 Arguments = args,
                 Timeout = TimeSpan.FromSeconds(15),
             });
-            return result.Success;
         }
-        catch { return false; }
+        catch (Exception ex)
+        {
+            return new ExternalProcessResult(
+                new ExternalProcessCommand("sc.exe") { Arguments = args },
+                -1,
+                "",
+                ex.Message,
+                Started: false,
+                TimedOut: false,
+                Canceled: false,
+                StartError: ex.Message);
+        }
     }
+
+    private static AdministrativeMutationResult? ValidateService(
+        ServiceEntry entry,
+        string operation)
+    {
+        if (string.IsNullOrWhiteSpace(entry.Name))
+            return AdministrativeMutationPolicy.Unsupported(
+                operation,
+                entry.Name,
+                "The service has no stable service name.");
+        if (!SafetyGuard.IsServiceSafeToModify(entry.Name))
+            return AdministrativeMutationPolicy.Skipped(
+                operation,
+                entry.Name,
+                "Present",
+                "Protected Windows service.");
+        return null;
+    }
+
+    private static bool TryReadStartValue(string serviceName, out int start, out string error)
+    {
+        start = 0;
+        error = "";
+        try
+        {
+            using var key = global::Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
+                $@"SYSTEM\CurrentControlSet\Services\{serviceName}");
+            if (key?.GetValue("Start") is null)
+            {
+                error = "The service registry value is missing.";
+                return false;
+            }
+            start = Convert.ToInt32(key.GetValue("Start"));
+            return start is >= 0 and <= 4;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    private static string StartDisplay(int start) => start switch
+    {
+        0 => "Boot",
+        1 => "System",
+        2 => "Automatic",
+        3 => "Manual",
+        4 => "Disabled",
+        _ => start.ToString(),
+    };
+
+    private static string ScStartToken(int start) => start switch
+    {
+        0 => "boot",
+        1 => "system",
+        2 => "auto",
+        3 => "demand",
+        4 => "disabled",
+        _ => "demand",
+    };
+
+    private static string EscapeSc(string value) =>
+        value.Replace("\r", "").Replace("\n", "").Replace("'", "''");
 
     /// <summary>
     /// Returns true only when we are *confident* the ImagePath points to a
