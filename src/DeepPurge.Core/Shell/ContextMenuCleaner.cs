@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using DeepPurge.Core.Registry;
+using DeepPurge.Core.Safety;
 
 namespace DeepPurge.Core.Shell;
 
@@ -14,6 +15,8 @@ public class ContextMenuEntry : INotifyPropertyChanged
     public string Location { get; set; } = "";
     public bool IsOrphaned { get; set; }
     public string Status => IsOrphaned ? "Orphaned" : "Valid";
+    public bool IsProtected => !SafetyGuard.IsRegistryPathSafeToDelete($"HKCR\\{RegistryPath}");
+    public bool MutationSupported => IsOrphaned && !IsProtected;
 
     public bool IsSelected
     {
@@ -64,18 +67,88 @@ public static class ContextMenuCleaner
     }
 
     public static int RemoveOrphanedEntries(IEnumerable<ContextMenuEntry> entries)
+        => RemoveOrphanedEntriesDetailed(entries).Count(result => result.Succeeded);
+
+    public static IReadOnlyList<AdministrativeMutationResult> RemoveOrphanedEntriesDetailed(
+        IEnumerable<ContextMenuEntry> entries,
+        bool dryRun = false)
     {
-        int removed = 0;
+        var results = new List<AdministrativeMutationResult>();
         foreach (var entry in entries.Where(e => e.IsSelected && e.IsOrphaned))
         {
+            var target = $"HKCR\\{entry.RegistryPath}";
+            if (entry.IsProtected)
+            {
+                results.Add(AdministrativeMutationPolicy.Skipped(
+                    "context-menu-delete",
+                    target,
+                    "Present",
+                    "Protected shell registry path."));
+                continue;
+            }
+
             try
             {
-                var result = RegistryDeletion.DeleteKeyTree($"HKCR\\{entry.RegistryPath}", "contextmenu-delete");
-                if (result.Deleted) removed++;
+                var deletion = RegistryDeletion.DeleteKeyTree(
+                    target,
+                    "contextmenu-delete",
+                    dryRun);
+                var rollback = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    deletion.BackupPath,
+                    deletion.OperationId,
+                    deletion.BackupSha256,
+                });
+                results.Add(deletion.Status switch
+                {
+                    RegistryDeletionStatus.Deleted => ChangedContextMenuResult(target, rollback),
+                    RegistryDeletionStatus.DryRun => AdministrativeMutationPolicy.Preview(
+                        "context-menu-delete",
+                        target,
+                        "Present",
+                        "Absent (planned)",
+                        rollback),
+                    RegistryDeletionStatus.SkippedUnsafePath => AdministrativeMutationPolicy.Skipped(
+                        "context-menu-delete",
+                        target,
+                        "Present",
+                        "Protected shell registry path."),
+                    RegistryDeletionStatus.SkippedMissing => AdministrativeMutationPolicy.Skipped(
+                        "context-menu-delete",
+                        target,
+                        "Absent",
+                        "The shell registration is already absent."),
+                    _ => AdministrativeMutationPolicy.Failed(
+                        "context-menu-delete",
+                        target,
+                        "Present",
+                        deletion.ErrorMessage ?? deletion.Status.ToString(),
+                        rollback),
+                });
             }
-            catch { /* skip unreachable entries */ }
+            catch (Exception ex)
+            {
+                results.Add(AdministrativeMutationPolicy.Failed(
+                    "context-menu-delete",
+                    target,
+                    "Present",
+                    ex.Message));
+            }
         }
-        return removed;
+        return results;
+    }
+
+    private static AdministrativeMutationResult ChangedContextMenuResult(
+        string target,
+        string rollback)
+    {
+        SystemRefreshNotifier.NotifyShellChanged();
+        return AdministrativeMutationPolicy.Changed(
+            "context-menu-delete",
+            target,
+            "Present",
+            "Absent",
+            rollback);
     }
 
     // ═══════════════════════════════════════════════════════

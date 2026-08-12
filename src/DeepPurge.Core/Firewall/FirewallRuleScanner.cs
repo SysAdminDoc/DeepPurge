@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using DeepPurge.Core.Execution;
+using DeepPurge.Core.Safety;
 
 namespace DeepPurge.Core.Firewall;
 
@@ -19,6 +20,8 @@ public class FirewallRuleEntry : INotifyPropertyChanged
     public string Profile { get; set; } = "";
     public bool IsOrphaned { get; set; }
     public string Status => IsOrphaned ? "Orphaned" : "Valid";
+    public bool IsProtected => !SafetyGuard.IsFirewallRuleSafeToDelete(DisplayName);
+    public bool MutationSupported => !string.IsNullOrWhiteSpace(Name) && !IsProtected;
 
     public bool IsSelected
     {
@@ -93,27 +96,101 @@ public static class FirewallRuleScanner
     /// Delete the specified firewall rules using <c>Remove-NetFirewallRule</c>.
     /// </summary>
     public static int DeleteRules(IEnumerable<FirewallRuleEntry> rules)
-    {
-        int deleted = 0;
-        foreach (var rule in rules.Where(r => r.IsSelected))
-        {
-            if (DeleteRule(rule)) deleted++;
-        }
-        return deleted;
-    }
+        => DeleteRulesDetailed(rules).Count(result => result.Succeeded);
+
+    public static IReadOnlyList<AdministrativeMutationResult> DeleteRulesDetailed(
+        IEnumerable<FirewallRuleEntry> rules,
+        bool dryRun = false)
+        => rules
+            .Where(rule => rule.IsSelected)
+            .Select(rule => DeleteRuleDetailed(rule, dryRun))
+            .ToList();
 
     public static bool DeleteRule(FirewallRuleEntry rule)
+        => DeleteRuleDetailed(rule).Succeeded;
+
+    public static AdministrativeMutationResult DeleteRuleDetailed(
+        FirewallRuleEntry rule,
+        bool dryRun = false)
     {
+        const string operation = "firewall-rule-delete";
+        var target = string.IsNullOrWhiteSpace(rule.DisplayName)
+            ? rule.Name
+            : rule.DisplayName;
+
+        if (string.IsNullOrWhiteSpace(rule.Name))
+            return AdministrativeMutationPolicy.Unsupported(
+                operation,
+                target,
+                "The firewall rule has no stable rule name.");
+
+        if (!SafetyGuard.IsFirewallRuleSafeToDelete(rule.DisplayName))
+            return AdministrativeMutationPolicy.Skipped(
+                operation,
+                target,
+                "Present",
+                "Protected Windows firewall rule.");
+
+        var before = JsonSerializer.Serialize(new
+        {
+            rule.Name,
+            rule.DisplayName,
+            rule.Direction,
+            rule.Action,
+            rule.Program,
+            rule.Enabled,
+            rule.Profile,
+        });
+        var rollback = BuildRollbackCommand(rule);
+
+        if (dryRun)
+            return AdministrativeMutationPolicy.Preview(
+                operation,
+                target,
+                before,
+                "Absent (planned)",
+                rollback);
+
         try
         {
             var result = ExternalProcessRunner.Run(new ExternalProcessCommand("powershell.exe")
             {
-                Arguments = new[] { "-NoProfile", "-EncodedCommand", EncodePsCommand($"Remove-NetFirewallRule -Name '{EscapePs(rule.Name)}' -ErrorAction Stop") },
+                Arguments = new[]
+                {
+                    "-NoProfile",
+                    "-EncodedCommand",
+                    EncodePsCommand(
+                        $"Remove-NetFirewallRule -Name '{EscapePs(rule.Name)}' -ErrorAction Stop; " +
+                        $"if (Get-NetFirewallRule -Name '{EscapePs(rule.Name)}' -ErrorAction SilentlyContinue) " +
+                        "{ throw 'The firewall rule still exists after removal.' }"),
+                },
                 Timeout = TimeSpan.FromSeconds(15),
             });
-            return result.Success;
+            if (!result.Success)
+                return AdministrativeMutationPolicy.Failed(
+                    operation,
+                    target,
+                    before,
+                    result.CombinedOutput,
+                    rollback);
+
+            SystemRefreshNotifier.NotifyShellChanged();
+            return AdministrativeMutationPolicy.Changed(
+                operation,
+                target,
+                before,
+                "Absent",
+                rollback);
         }
-        catch { return false; }
+        catch (Exception ex)
+        {
+            return AdministrativeMutationPolicy.Failed(
+                operation,
+                target,
+                before,
+                ex.Message,
+                rollback);
+        }
     }
 
     // ===============================================================
@@ -179,6 +256,20 @@ public static class FirewallRuleScanner
 
     private static string EscapePs(string s) =>
         string.IsNullOrEmpty(s) ? "" : s.Replace("\0", "").Replace("'", "''");
+
+    private static string BuildRollbackCommand(FirewallRuleEntry rule)
+    {
+        var command =
+            $"New-NetFirewallRule -Name '{EscapePs(rule.Name)}' " +
+            $"-DisplayName '{EscapePs(rule.DisplayName)}' " +
+            $"-Direction '{EscapePs(rule.Direction)}' " +
+            $"-Action '{EscapePs(rule.Action)}' " +
+            $"-Enabled '{EscapePs(rule.Enabled)}' " +
+            $"-Profile '{EscapePs(rule.Profile)}'";
+        if (!string.IsNullOrWhiteSpace(rule.Program) && rule.Program != "Any" && rule.Program != "*")
+            command += $" -Program '{EscapePs(rule.Program)}'";
+        return command;
+    }
 
     public static string EncodePsCommand(string script) =>
         Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(script));

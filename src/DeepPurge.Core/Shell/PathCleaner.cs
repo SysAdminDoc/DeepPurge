@@ -1,5 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
+using DeepPurge.Core.Safety;
 // Using fully-qualified Microsoft.Win32.Registry to avoid collision with DeepPurge.Core.Registry namespace.
 
 namespace DeepPurge.Core.Shell;
@@ -11,7 +13,9 @@ public class PathEntry : INotifyPropertyChanged
     public string Directory { get; set; } = "";
     public string Source { get; set; } = ""; // "System" or "User"
     public bool IsOrphaned { get; set; }
-    public string Status => IsOrphaned ? "Orphaned" : "Valid";
+    public bool IsProtected => !SafetyGuard.IsPathEntrySafeToRemove(Directory);
+    public bool MutationSupported => IsOrphaned && !IsProtected;
+    public string Status => IsProtected ? "Protected" : IsOrphaned ? "Orphaned" : "Valid";
 
     public bool IsSelected
     {
@@ -65,32 +69,55 @@ public static class PathCleaner
     /// </summary>
     public static int RemoveOrphanedEntries(IEnumerable<PathEntry> entries)
     {
-        var toRemove = entries.Where(e => e.IsSelected && e.IsOrphaned).ToList();
-        if (toRemove.Count == 0) return 0;
+        return RemoveOrphanedEntriesDetailed(entries)
+            .Where(result => result.Succeeded)
+            .Sum(result => result.ItemsAffected);
+    }
 
-        int removed = 0;
+    public static IReadOnlyList<AdministrativeMutationResult> RemoveOrphanedEntriesDetailed(
+        IEnumerable<PathEntry> entries,
+        bool dryRun = false)
+    {
+        var selected = entries.Where(entry => entry.IsSelected && entry.IsOrphaned).ToList();
+        var results = new List<AdministrativeMutationResult>();
 
-        // Group by source scope
-        var systemRemoves = toRemove.Where(e => e.Source == "System")
-            .Select(e => e.Directory).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var userRemoves = toRemove.Where(e => e.Source == "User")
-            .Select(e => e.Directory).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var protectedEntry in selected.Where(entry => entry.IsProtected))
+        {
+            results.Add(AdministrativeMutationPolicy.Skipped(
+                "path-entry-remove",
+                protectedEntry.Directory,
+                "Present",
+                "Protected system PATH entry."));
+        }
+
+        var systemRemoves = selected
+            .Where(entry => entry.Source == "System" && !entry.IsProtected)
+            .Select(entry => entry.Directory)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var userRemoves = selected
+            .Where(entry => entry.Source == "User" && !entry.IsProtected)
+            .Select(entry => entry.Directory)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         if (systemRemoves.Count > 0)
-            removed += RemoveFromScope(
+            results.Add(RemoveFromScopeDetailed(
                 global::Microsoft.Win32.Registry.LocalMachine,
                 @"SYSTEM\CurrentControlSet\Control\Session Manager\Environment",
                 "Path",
-                systemRemoves);
+                "HKLM",
+                systemRemoves,
+                dryRun));
 
         if (userRemoves.Count > 0)
-            removed += RemoveFromScope(
+            results.Add(RemoveFromScopeDetailed(
                 global::Microsoft.Win32.Registry.CurrentUser,
                 @"Environment",
                 "Path",
-                userRemoves);
+                "HKCU",
+                userRemoves,
+                dryRun));
 
-        return removed;
+        return results;
     }
 
     // ===============================================================
@@ -116,7 +143,8 @@ public static class PathCleaner
                 if (string.IsNullOrEmpty(dir)) continue;
 
                 var expanded = Environment.ExpandEnvironmentVariables(dir);
-                var isOrphaned = IsOrphanedPathEntry(expanded);
+                var isProtected = !SafetyGuard.IsPathEntrySafeToRemove(dir);
+                var isOrphaned = !isProtected && IsOrphanedPathEntry(expanded);
 
                 if (orphanedOnly && !isOrphaned) continue;
 
@@ -146,13 +174,24 @@ public static class PathCleaner
         return !System.IO.Directory.Exists(path);
     }
 
-    private static int RemoveFromScope(global::Microsoft.Win32.RegistryKey root, string subKeyPath,
-        string valueName, HashSet<string> toRemove)
+    private static AdministrativeMutationResult RemoveFromScopeDetailed(
+        global::Microsoft.Win32.RegistryKey root,
+        string subKeyPath,
+        string valueName,
+        string hiveName,
+        HashSet<string> toRemove,
+        bool dryRun)
     {
+        var target = $"{hiveName}\\{subKeyPath}\\{valueName}";
         try
         {
             using var key = root.OpenSubKey(subKeyPath, writable: true);
-            if (key == null) return 0;
+            if (key == null)
+                return AdministrativeMutationPolicy.Failed(
+                    "path-entry-remove",
+                    target,
+                    "Unavailable",
+                    "The PATH registry scope could not be opened.");
 
             // Preserve the original value kind (REG_EXPAND_SZ vs REG_SZ).
             var kind = key.GetValueKind(valueName);
@@ -160,7 +199,7 @@ public static class PathCleaner
                          ?.ToString() ?? "";
 
             var parts = raw.Split(';', StringSplitOptions.RemoveEmptyEntries);
-            int removed = 0;
+            var removed = 0;
             var kept = new List<string>();
 
             foreach (var part in parts)
@@ -174,14 +213,63 @@ public static class PathCleaner
                     kept.Add(trimmed);
             }
 
-            if (removed > 0)
+            var newPath = string.Join(';', kept);
+            var rollback = JsonSerializer.Serialize(new
             {
-                var newPath = string.Join(';', kept);
-                key.SetValue(valueName, newPath, kind);
-            }
+                Hive = hiveName,
+                SubKey = subKeyPath,
+                Value = valueName,
+                Kind = kind.ToString(),
+                Raw = raw,
+            });
+            var before = JsonSerializer.Serialize(new { Kind = kind.ToString(), Raw = raw });
 
-            return removed;
+            if (removed == 0)
+                return AdministrativeMutationPolicy.Skipped(
+                    "path-entry-remove",
+                    target,
+                    before,
+                    "The selected PATH entries were no longer present.");
+
+            if (dryRun)
+                return AdministrativeMutationPolicy.Preview(
+                    "path-entry-remove",
+                    target,
+                    before,
+                    JsonSerializer.Serialize(new { Kind = kind.ToString(), Raw = newPath }),
+                    rollback,
+                    removed);
+
+            key.SetValue(valueName, newPath, kind);
+            var afterRaw = key.GetValue(
+                valueName,
+                "",
+                global::Microsoft.Win32.RegistryValueOptions.DoNotExpandEnvironmentNames)
+                ?.ToString() ?? "";
+            if (!string.Equals(afterRaw, newPath, StringComparison.Ordinal))
+                return AdministrativeMutationPolicy.Failed(
+                    "path-entry-remove",
+                    target,
+                    before,
+                    "The PATH value did not match the requested post-write state.",
+                    rollback);
+
+            SystemRefreshNotifier.NotifyEnvironmentChanged();
+            return AdministrativeMutationPolicy.Changed(
+                "path-entry-remove",
+                target,
+                before,
+                JsonSerializer.Serialize(new { Kind = kind.ToString(), Raw = afterRaw }),
+                rollback,
+                removed);
         }
-        catch { return 0; }
+        catch (Exception ex)
+        {
+            return AdministrativeMutationPolicy.Failed(
+                "path-entry-remove",
+                target,
+                "Unknown",
+                ex.Message);
+        }
     }
 }

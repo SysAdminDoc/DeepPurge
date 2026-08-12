@@ -1,5 +1,6 @@
 using System.Security.AccessControl;
 using System.Security.Principal;
+using System.Text.Json;
 using System.Xml.Linq;
 using DeepPurge.Core.App;
 using DeepPurge.Core.Diagnostics;
@@ -33,6 +34,8 @@ public sealed record ScheduledJobInfo(
     string Diagnostic)
 {
     public bool IsTrusted => ActionTargetTrusted && TaskAclTrusted && !IsLegacyWrapper;
+    public bool DeletionSupported => !string.IsNullOrWhiteSpace(Name) &&
+        TaskPath.StartsWith(@"\DeepPurge\", StringComparison.OrdinalIgnoreCase);
     public string SecurityStatus => IsLegacyWrapper
         ? "Migration required"
         : !Enabled ? "Protected / disabled"
@@ -88,6 +91,89 @@ public sealed class ScheduleManager
     }
 
     public bool CreateJob(ScheduleJob job, string cliPath)
+        => CreateJobDetailed(job, cliPath).Succeeded;
+
+    public AdministrativeMutationResult CreateJobDetailed(
+        ScheduleJob job,
+        string cliPath,
+        bool dryRun = false)
+    {
+        var safeName = SanitizeName(job.Name);
+        var target = TaskFolder + safeName;
+        try
+        {
+            ValidateJob(job);
+            if (!SafetyGuard.IsTaskSafeToDelete(target))
+                return AdministrativeMutationPolicy.Skipped(
+                    "scheduled-job-create",
+                    target,
+                    "Absent",
+                    "Protected scheduled-task path.");
+
+            var existing = _backend.Get(safeName);
+            var before = existing == null
+                ? "Absent"
+                : JsonSerializer.Serialize(new
+                {
+                    existing.Name,
+                    existing.Xml,
+                    existing.SecurityDescriptor,
+                });
+            var rollback = existing == null
+                ? $"Delete the newly registered task '{target}'."
+                : JsonSerializer.Serialize(new
+                {
+                    existing.Name,
+                    existing.Xml,
+                    existing.SecurityDescriptor,
+                    Restore = "Register the captured protected task definition.",
+                });
+
+            if (dryRun)
+                return AdministrativeMutationPolicy.Preview(
+                    "scheduled-job-create",
+                    target,
+                    before,
+                    "Registered (planned)",
+                    rollback);
+
+            if (!CreateJobCore(job, cliPath))
+                return AdministrativeMutationPolicy.Failed(
+                    "scheduled-job-create",
+                    target,
+                    before,
+                    LastError,
+                    rollback);
+
+            var registered = _backend.Get(safeName)
+                ?? throw new InvalidOperationException(
+                    "The scheduled job was not returned after registration.");
+            var after = JsonSerializer.Serialize(new
+            {
+                registered.Name,
+                registered.Xml,
+                registered.SecurityDescriptor,
+            });
+            SystemRefreshNotifier.NotifyShellChanged();
+            return AdministrativeMutationPolicy.Changed(
+                "scheduled-job-create",
+                target,
+                before,
+                after,
+                rollback);
+        }
+        catch (Exception ex)
+        {
+            LastError = ex.Message;
+            return AdministrativeMutationPolicy.Failed(
+                "scheduled-job-create",
+                target,
+                "Unknown",
+                ex.Message);
+        }
+    }
+
+    private bool CreateJobCore(ScheduleJob job, string cliPath)
     {
         LastError = string.Empty;
         ValidateJob(job);
@@ -137,24 +223,88 @@ public sealed class ScheduleManager
     }
 
     public bool DeleteJob(string name)
+        => DeleteJobDetailed(name).Succeeded;
+
+    public AdministrativeMutationResult DeleteJobDetailed(
+        string name,
+        bool dryRun = false)
     {
         LastError = string.Empty;
         var safeName = SanitizeName(name);
+        var target = TaskFolder + safeName;
+        if (!SafetyGuard.IsTaskSafeToDelete(target))
+        {
+            var protectedResult = AdministrativeMutationPolicy.Skipped(
+                "scheduled-job-delete",
+                target,
+                "Present",
+                "Protected scheduled-task path.");
+            LastError = protectedResult.Reason ?? "Protected scheduled-task path.";
+            return protectedResult;
+        }
+
         var existing = _backend.Get(safeName);
+        if (existing == null)
+        {
+            var missing = AdministrativeMutationPolicy.Skipped(
+                "scheduled-job-delete",
+                target,
+                "Absent",
+                "The DeepPurge scheduled job is already absent.");
+            LastError = missing.Reason ?? "The scheduled job is absent.";
+            return missing;
+        }
+
         var legacyWrapper = existing != null && TryGetLegacyWrapperPath(existing, out var wrapper)
             ? wrapper
             : null;
+        var before = JsonSerializer.Serialize(new
+        {
+            existing!.Name,
+            existing.Xml,
+            existing.SecurityDescriptor,
+        });
+        var rollback = JsonSerializer.Serialize(new
+        {
+            existing.Name,
+            existing.Xml,
+            existing.SecurityDescriptor,
+            Restore = "Register the captured protected task definition.",
+        });
+
+        if (dryRun)
+            return AdministrativeMutationPolicy.Preview(
+                "scheduled-job-delete",
+                target,
+                before,
+                "Absent (planned)",
+                rollback);
+
         try
         {
             _backend.Delete(safeName);
+            if (_backend.Get(safeName) != null)
+                throw new InvalidOperationException(
+                    "The scheduled job still exists after deletion.");
             DeleteLegacyWrapper(legacyWrapper);
-            return true;
+            SystemRefreshNotifier.NotifyShellChanged();
+            return AdministrativeMutationPolicy.Changed(
+                "scheduled-job-delete",
+                target,
+                before,
+                "Absent",
+                rollback);
         }
         catch (Exception ex)
         {
             LastError = ex.Message;
             Log.Warn($"Scheduled job deletion failed: {ex.Message}");
-            return false;
+            return AdministrativeMutationPolicy.Failed(
+                "scheduled-job-delete",
+                target,
+                before,
+                ex.Message,
+                rollback);
         }
     }
 

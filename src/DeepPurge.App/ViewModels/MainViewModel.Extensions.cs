@@ -512,11 +512,14 @@ public partial class MainViewModel
         try
         {
             var manager = new ScheduleManager();
-            var ok = manager.DeleteJob(name);
+            var result = manager.DeleteJobDetailed(name);
+            var ok = result.Succeeded;
             RefreshScheduledJobs();
             StatusText = ok
                 ? $"Removed scheduled job '{name}'."
-                : $"Failed to remove scheduled job '{name}': {manager.LastError}";
+                : result.Reason is { Length: > 0 } reason
+                    ? $"Scheduled job '{name}' was not changed: {reason}"
+                    : $"Failed to remove scheduled job '{name}': {manager.LastError}";
             return ok;
         }
         catch (Exception ex)
@@ -1050,11 +1053,16 @@ public partial class MainViewModel
         try
         {
             var selected = OrphanedFirewallRules.Where(r => r.IsSelected).ToList();
-            var n = FirewallRuleScanner.DeleteRules(selected);
-            foreach (var r in selected.Where(r => r.IsSelected))
-                OrphanedFirewallRules.Remove(r);
-            ActivityLog.Record("orphans", $"Deleted {n} orphaned firewall rule(s)", itemCount: n);
-            StatusText = $"Deleted {n} orphaned firewall rule(s).";
+            var results = FirewallRuleScanner.DeleteRulesDetailed(selected);
+            for (var i = 0; i < selected.Count && i < results.Count; i++)
+            {
+                if (results[i].Succeeded)
+                    OrphanedFirewallRules.Remove(selected[i]);
+            }
+            var changed = results.Count(result => result.Succeeded);
+            var reviewed = results.Count(result => result.IsReviewOnly || result.Outcome == AdministrativeMutationOutcome.Failed);
+            ActivityLog.Record("orphans", $"Deleted {changed} orphaned firewall rule(s); {reviewed} not changed", itemCount: changed);
+            StatusText = $"Deleted {changed} orphaned firewall rule(s); {reviewed} not changed.";
         }
         catch (Exception ex) { Log.Error("DeleteOrphanedFirewallRules", ex); StatusText = $"Delete failed: {ex.Message}"; }
     }
@@ -1065,11 +1073,19 @@ public partial class MainViewModel
         try
         {
             var selected = OrphanedPathEntries.Where(p => p.IsSelected).ToList();
-            var n = PathCleaner.RemoveOrphanedEntries(selected);
-            foreach (var p in selected.Where(p => p.IsSelected))
-                OrphanedPathEntries.Remove(p);
-            ActivityLog.Record("orphans", $"Removed {n} orphaned PATH entr(ies)", itemCount: n);
-            StatusText = $"Removed {n} orphaned PATH entr(ies).";
+            var results = PathCleaner.RemoveOrphanedEntriesDetailed(selected);
+            var changedScopes = results
+                .Where(result => result.Succeeded)
+                .Select(result => result.Target.StartsWith("HKLM\\", StringComparison.OrdinalIgnoreCase)
+                    ? "System"
+                    : "User")
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var entry in selected.Where(entry => changedScopes.Contains(entry.Source)))
+                OrphanedPathEntries.Remove(entry);
+            var changed = results.Where(result => result.Succeeded).Sum(result => result.ItemsAffected);
+            var reviewed = results.Count(result => result.IsReviewOnly || result.Outcome == AdministrativeMutationOutcome.Failed);
+            ActivityLog.Record("orphans", $"Removed {changed} orphaned PATH entr(ies); {reviewed} not changed", itemCount: changed);
+            StatusText = $"Removed {changed} orphaned PATH entr(ies); {reviewed} not changed.";
         }
         catch (Exception ex) { Log.Error("RemoveOrphanedPathEntries", ex); StatusText = $"Remove failed: {ex.Message}"; }
     }
