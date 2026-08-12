@@ -10,6 +10,9 @@ All notable changes to DeepPurge will be documented in this file.
 ### Changed (P1 deletion contract)
 - **Unified deletion outcomes and recovery provenance** - File cleanup now passes through one typed executor with preview, Recycle Bin (`IFileOperation` where available), permanent, secure, queued, skipped, failed, and cancelled outcomes. Summaries expose confirmed versus planned counts/bytes, cleanup callers report per-item failures consistently, and manifests record disposition/recoverability only after confirmed mutations.
 
+### Fixed (P1 leftover ownership)
+- **Ownership-conflict gates for leftovers** - File and registry candidates now carry evidence, competing-product conflicts, system protection state, and an explicit auto-removal eligibility decision. Candidates inside another installed product, protected Windows scope, or supported only by weak single-source metadata are review-only in the GUI/CLI surfaces.
+
 ### Changed (design)
 - **DeepPurge Slate operations console** - The WPF shell now uses a bespoke graphite/cyan default theme, denser navigation, explicit local-data posture, searchable program inventory metrics, clearer uninstall hierarchy, responsive panel toolbars, trust/source badges, and calmer loading/status surfaces. Filled action buttons retain WCAG normal-text contrast across every bundled theme.
 - **Accurate navigation and empty states** - Collection-backed empty states now update from observable counts, unavailable leftover deletion stays hidden until a scan enables it, and `--target` launches select the Forced Uninstall navigation item that matches the visible workspace.

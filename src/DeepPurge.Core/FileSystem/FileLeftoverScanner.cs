@@ -23,6 +23,7 @@ public class FileLeftoverScanner
     // Other installed programs' folders — used for cross-reference exclusion
     private HashSet<string> _otherProgramFolders = new(StringComparer.OrdinalIgnoreCase);
     private HashSet<string> _sharedParentDirs = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<InstalledProgram> _otherInstalledPrograms = new();
 
     private static readonly HashSet<string> SystemProtectedFolders = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -125,6 +126,7 @@ public class FileLeftoverScanner
         if (mode >= ScanMode.Advanced)
             ScanAllUserProfiles(leftovers);
 
+        ApplyOwnershipGates(program, leftovers);
         return leftovers;
     }
 
@@ -212,6 +214,7 @@ public class FileLeftoverScanner
     {
         _otherProgramFolders.Clear();
         _sharedParentDirs.Clear();
+        _otherInstalledPrograms.Clear();
         try
         {
             var allPrograms = Registry.InstalledProgramScanner.GetAllInstalledPrograms();
@@ -222,6 +225,7 @@ public class FileLeftoverScanner
             foreach (var prog in allPrograms)
             {
                 if (prog.RegistryPath == targetProgram.RegistryPath) continue;
+                _otherInstalledPrograms.Add(prog);
                 if (prog.DisplayName == targetProgram.DisplayName) continue;
 
                 if (!string.IsNullOrEmpty(prog.DisplayName))
@@ -243,6 +247,91 @@ public class FileLeftoverScanner
             }
         }
         catch (Exception ex) { Log.Warn($"Failed to build cross-reference from installed programs: {ex.Message}"); }
+    }
+
+    private void ApplyOwnershipGates(
+        InstalledProgram targetProgram,
+        List<LeftoverItem> leftovers)
+    {
+        foreach (var item in leftovers)
+        {
+            var decision = LeftoverOwnershipGate.Evaluate(
+                targetProgram,
+                item.Path,
+                _otherInstalledPrograms,
+                BuildEvidence(targetProgram, item));
+            item.Evidence = decision.Evidence.ToList();
+            item.OwnershipConflicts = decision.Conflicts.ToList();
+            item.IsAutoRemovalEligible = decision.AutoRemovalEligible;
+
+            if (decision.AutoRemovalEligible) continue;
+
+            item.IsSelected = false;
+            item.Confidence = decision.ProtectedBySystem || decision.Conflicts.Count > 0
+                ? LeftoverConfidence.Risky
+                : item.Confidence == LeftoverConfidence.Safe
+                    ? LeftoverConfidence.Moderate
+                    : item.Confidence;
+            item.Details = string.IsNullOrWhiteSpace(decision.ReviewReason)
+                ? item.Details
+                : $"{item.Details}; review-only: {decision.ReviewReason}";
+        }
+    }
+
+    private IEnumerable<LeftoverEvidence> BuildEvidence(
+        InstalledProgram targetProgram,
+        LeftoverItem item)
+    {
+        var evidence = new List<LeftoverEvidence>();
+        if (item.Details.Contains("signature match", StringComparison.OrdinalIgnoreCase))
+            evidence.Add(new LeftoverEvidence("Signature", item.Details, EvidenceStrength.Strong));
+        if (item.Details.Contains("uninstall registry", StringComparison.OrdinalIgnoreCase))
+            evidence.Add(new LeftoverEvidence("UninstallIdentity", item.Path, EvidenceStrength.Strong));
+
+        if (!string.IsNullOrWhiteSpace(targetProgram.InstallLocation) &&
+            IsUnder(item.Path, targetProgram.InstallLocation))
+        {
+            evidence.Add(new LeftoverEvidence(
+                "InstallLocation",
+                targetProgram.InstallLocation,
+                EvidenceStrength.Strong));
+        }
+
+        var name = Path.GetFileNameWithoutExtension(item.Path);
+        var match = MatchConfidence(name, item.Path);
+        if (match == LeftoverConfidence.Safe)
+            evidence.Add(new LeftoverEvidence("IdentityName", name, EvidenceStrength.Strong));
+        else if (match == LeftoverConfidence.Moderate)
+            evidence.Add(new LeftoverEvidence("SecondaryName", name, EvidenceStrength.Supporting));
+
+        if (item.Details.Contains("Application data", StringComparison.OrdinalIgnoreCase) ||
+            item.Details.Contains("Temporary files", StringComparison.OrdinalIgnoreCase) ||
+            item.Details.Contains("Prefetch", StringComparison.OrdinalIgnoreCase))
+        {
+            evidence.Add(new LeftoverEvidence("ScannerContext", item.Details, EvidenceStrength.Supporting));
+        }
+
+        if (!string.IsNullOrWhiteSpace(targetProgram.Publisher) &&
+            item.Path.Contains(targetProgram.Publisher, StringComparison.OrdinalIgnoreCase))
+        {
+            evidence.Add(new LeftoverEvidence("PublisherPath", targetProgram.Publisher, EvidenceStrength.Weak));
+        }
+
+        if (evidence.Count == 0)
+            evidence.Add(new LeftoverEvidence("Scanner", item.Details, EvidenceStrength.Weak));
+        return evidence;
+    }
+
+    private static bool IsUnder(string path, string root)
+    {
+        try
+        {
+            var candidate = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+            var normalizedRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
+            return candidate.Equals(normalizedRoot, StringComparison.OrdinalIgnoreCase) ||
+                   candidate.StartsWith(normalizedRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        }
+        catch { return false; }
     }
 
     // ═══════════════════════════════════════════════════════

@@ -847,9 +847,9 @@ public partial class MainViewModel : ObservableObject
     {
         if (CurrentScanResult == null) return;
         foreach (var i in CurrentScanResult.RegistryLeftovers)
-            i.IsSelected = i.Confidence == LeftoverConfidence.Safe;
+            i.IsSelected = i.Confidence == LeftoverConfidence.Safe && i.IsAutoRemovalEligible;
         foreach (var i in CurrentScanResult.FileLeftovers)
-            i.IsSelected = i.Confidence == LeftoverConfidence.Safe;
+            i.IsSelected = i.Confidence == LeftoverConfidence.Safe && i.IsAutoRemovalEligible;
         UpdateLeftoverStats();
     }
 

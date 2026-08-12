@@ -4,13 +4,6 @@ Actionable work only. Historical and completed roadmap material is archived in C
 
 ## Actionable Items
 
-- [ ] P1 — Add ownership-conflict gates to leftover attribution
-  Why: Name/publisher/install-location heuristics can attribute shared or adversarial paths to the wrong program and offer unrelated data for deletion.
-  Evidence: `src/DeepPurge.Core/FileSystem/FileLeftoverScanner.cs`; `src/DeepPurge.Core/Registry/RegistryLeftoverScanner.cs`; `src/DeepPurge.Core/Uninstall/UninstallEngine.cs`; cited academic uninstaller/remover study.
-  Touches: file/registry leftover scanners, installed-product index, MSI/package ownership adapters, candidate evidence models, preview WPF/CLI, tests
-  Acceptance: Candidates carry each supporting signal and conflicts against other installed products/components; paths claimed by another product, Windows, or weak single-source metadata are protected/review-only; crafted metadata pointing at another app or Windows directory never becomes auto-removable.
-  Complexity: L
-
 - [ ] P1 — Route non-file administrative mutations through reversible safety policy
   Why: Firewall, PATH, service/autorun, and scheduled-task actions bypass existing guards, omit backups/refresh notifications, or expose unsupported mutations.
   Evidence: `src/DeepPurge.Core/Firewall/FirewallRuleScanner.cs`; `src/DeepPurge.Core/Shell/PathCleaner.cs`; `src/DeepPurge.Core/Startup/AutorunScanner.cs`; `SafetyGuard.cs`; scheduled-task action handlers.
