@@ -4,6 +4,15 @@ All notable changes to DeepPurge will be documented in this file.
 
 ## [Unreleased]
 
+## [v0.9.1] — Capability contract and release hardening
+
+### Added
+- Reachable Health Dashboard and System Slimming surfaces in the GUI and CLI, with expert-mode mutation gates and generated capability/setting coverage checks.
+- Release documentation validation for command routes, test counts, privilege posture, version alignment, and capability claims.
+
+### Fixed
+- Observable installed-program enrichment and System Slimming selection updates now refresh bound WPF controls.
+
 ### Fixed (P0 install-monitor safety)
 - **Quarantined Install Monitor V2 replay** - Install traces now use an authoritative pre/post snapshot, capture installer identity before launch, classify created versus modified files, resolve USN parent FRNs without fabricating paths, correlate Sysmon registry events to the installer process tree/time window, preserve explicit HKU SIDs, and block legacy or diagnostic-only manifests from replay. Replay additionally requires a matching SHA256 and stable filesystem identity, and failed deletes no longer count as removed.
 

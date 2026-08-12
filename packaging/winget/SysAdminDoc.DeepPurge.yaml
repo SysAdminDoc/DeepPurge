@@ -7,7 +7,7 @@
 # ────────────────────────────────────────────────────────────────────
 
 PackageIdentifier: SysAdminDoc.DeepPurge
-PackageVersion:    0.9.0
+PackageVersion:    0.9.1
 PackageName:       DeepPurge
 Publisher:         SysAdminDoc
 PublisherSupportUrl: https://github.com/SysAdminDoc/DeepPurge/issues
@@ -35,8 +35,8 @@ Installers:
   - Architecture: x64
     InstallerType: portable
     Scope: user
-    InstallerUrl: https://github.com/SysAdminDoc/DeepPurge/releases/download/v0.9.0/DeepPurge.exe
-    InstallerSha256: 20E7223224BFF57C9EF1C9F8C4255788A4D10E8E1DB87E09F9ED147C73CB714E
+    InstallerUrl: https://github.com/SysAdminDoc/DeepPurge/releases/download/v0.9.1/DeepPurge.exe
+    InstallerSha256: 091B8624CE739B076A6196223C88E8E72F8094F66CA4367FDF1E4539CE0122C6
     Commands:
       - DeepPurge
 

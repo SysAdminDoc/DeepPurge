@@ -110,7 +110,7 @@ public static class SupportBundleExporter
     private static int WriteAppSummary(string dir)
     {
         var asm = typeof(SupportBundleExporter).Assembly.GetName();
-        var version = (asm.Version ?? new Version(0, 9, 0)).ToString(3);
+        var version = (asm.Version ?? new Version(0, 9, 1)).ToString(3);
 
         var lines = new List<string>
         {

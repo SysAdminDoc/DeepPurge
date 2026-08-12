@@ -8,7 +8,7 @@ Package-manager manifests and publish checklists for DeepPurge releases.
 2. Copy the generated SHA256 values into the winget and Scoop manifests for the exact assets being released.
 3. Run `Build.ps1 -ValidateReleaseOnly -ReleaseChecksumsPath build\SHA256SUMS.txt`; fix every reported file/key before publishing. This also runs the project-level NuGet dependency audit for Core, App, CLI, and Tests.
    To run only that audit during release prep, use `Build.ps1 -AuditDependenciesOnly`.
-4. Tag the release: `git tag v0.9.0 && git push --tags`.
+4. Tag the release: `git tag v0.9.1 && git push --tags`.
 5. Create or update the GitHub Release with `gh release create` / `gh release upload` and attach both executables plus `SHA256SUMS.txt`.
 
 ## winget
@@ -16,7 +16,7 @@ Package-manager manifests and publish checklists for DeepPurge releases.
 `packaging/winget/SysAdminDoc.DeepPurge.yaml` is a singleton manifest. To submit:
 
 ```powershell
-wingetcreate update SysAdminDoc.DeepPurge --version 0.9.0 --urls https://github.com/SysAdminDoc/DeepPurge/releases/download/v0.9.0/DeepPurge.exe
+wingetcreate update SysAdminDoc.DeepPurge --version 0.9.1 --urls https://github.com/SysAdminDoc/DeepPurge/releases/download/v0.9.1/DeepPurge.exe
 ```
 
 The tool will split the singleton into the required three-file form (Version / Installer / DefaultLocale) and open a PR against `microsoft/winget-pkgs`.

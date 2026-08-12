@@ -4,7 +4,7 @@
         xmlns:vm="clr-namespace:DeepPurge.App.ViewModels"
         xmlns:conv="clr-namespace:DeepPurge.App.Converters"
         xmlns:props="clr-namespace:DeepPurge.App.Properties"
-        Title="DeepPurge v0.9.0" Width="1440" Height="900"
+        Title="DeepPurge v0.9.1" Width="1440" Height="900"
         MinWidth="1060" MinHeight="700" WindowStartupLocation="CenterScreen"
         Style="{DynamicResource MainWindowStyle}">
 
@@ -625,7 +625,7 @@
                             </RadioButton>
 
                             <!-- ═══════════════════════════════════════════════════════ -->
-                            <!-- SYSTEM TOOLS (v0.9.0) — optional scans, run on demand  -->
+                            <!-- SYSTEM TOOLS (v0.9.1) — optional scans, run on demand  -->
                             <!-- ═══════════════════════════════════════════════════════ -->
                             <TextBlock Text="SYSTEM TOOLS" Style="{StaticResource SectionLabel}"/>
 

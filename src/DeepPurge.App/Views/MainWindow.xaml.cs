@@ -219,7 +219,7 @@ public partial class MainWindow : Window
         dgEmptyFolders, panelDisk, dgAutorun, dgBrowserExt, dgContextMenu,
         dgServices, dgTasks, dgRestore, panelLeftovers,
         panelHunter, panelOrphans, panelDeletionRecovery, panelBackups,
-        // v0.9.0 system-tools panels
+        // v0.9.1 system-tools panels
         dgDrivers, dgStartupImpact, dgShortcuts, dgDuplicates,
         panelWinapp2, panelRepair, panelSchedule, panelInstallMonitor, panelHealth, panelSlimming,
         dgHistory, panelSettings, panelAbout,
@@ -352,7 +352,7 @@ public partial class MainWindow : Window
                 AppendToolbarButton("Remove Selected", (_, _) => _vm.RunSlimCommand.Execute(null), "DangerButton");
                 break;
 
-            // ─── v0.9.0 SYSTEM TOOLS ───
+            // ─── v0.9.1 SYSTEM TOOLS ───
             case "Drivers":
                 dgDrivers.Visibility = Visibility.Visible; txtPanelTitle.Text = "Driver Store";
                 AppendToolbarButton("Rescan",         ScanDrivers_Click,  "AccentButton");
@@ -430,7 +430,7 @@ public partial class MainWindow : Window
         if (_autoLoaded.Add(panel)) load();
     }
 
-    // ─── v0.9.0 panel click handlers — all delegate to VM commands so
+    // ─── v0.9.1 panel click handlers — all delegate to VM commands so
     //     business logic stays out of the view. Keeps the Ctrl+F
     //     "where does X live?" search consistent with existing handlers.
 
