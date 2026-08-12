@@ -6,7 +6,7 @@ echo     DeepPurge Builder
 echo   ============================================
 echo.
 echo   Building portable executable...
-echo   .NET 10 SDK will be auto-installed if needed.
+echo   Requires the pinned .NET 10.0.302 SDK; this script never downloads it.
 echo.
 
 :: Run the build script with proper execution policy
