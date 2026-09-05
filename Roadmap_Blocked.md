@@ -4,35 +4,30 @@ Items moved here from ROADMAP.md because they require external resources,
 credentials, or human judgment that cannot be resolved during autonomous
 development passes.
 
-## v0.9.x — stabilization
-
-- [ ] **Submit winget manifest** to `microsoft/winget-pkgs`
-      Blocked: needs a published GitHub Release with a stable download URL
-      and ideally an Authenticode-signed binary.
+## v0.9.x: stabilization
 
 - [ ] **Create `SysAdminDoc/scoop-bucket`** repo and commit the Scoop manifest
       Blocked: needs GitHub repo creation + a published release to populate
       the manifest's `url` and `hash` fields.
 
-- [ ] **Obtain code-signing certificate** and wire `DEEPPURGE_CERT_PATH` /
-      `DEEPPURGE_CERT_PASSWORD` secrets into the release workflow
+- [ ] **Obtain code-signing certificate** and configure it on the local release machine
       Blocked: requires purchase decision (EV vs OV), Azure Code Signing
-      enrollment, and secret provisioning in GitHub Actions.
+      enrollment, and secure local certificate provisioning.
 
 - [ ] **Real-world field test** of each v0.9 panel on a freshly-imaged
       Windows 11 VM
       Blocked: requires a clean VM image and manual human testing.
 
-## v0.12 — accessibility + polish
+## v0.12: accessibility + polish
 
 - [ ] **Crowdin submission** for localization strings
       Blocked: requires Crowdin project creation and external contributor setup.
       The `.resx` infrastructure is already in place (`Properties/Resources.resx`).
 
-## v1.0 — large features (need dedicated session + testing)
+## v1.0: large features (need dedicated session + testing)
 
 - [ ] **Velopack auto-updater**
-      Blocked: requires Velopack NuGet integration, release workflow changes,
+      Blocked: requires Velopack NuGet integration, local release packaging changes,
       and end-to-end testing of the download/apply/restart flow.
       `Core/Updates/UpdateChecker.cs` has the detection; Velopack adds the apply.
 
@@ -52,7 +47,7 @@ development passes.
       20 to ~150 strings. Needs visual verification that no binding breaks
       the UI. The infrastructure is ready (Resources.resx, Resources.Designer.cs).
 
-- [ ] **ViewModel decomposition — extract per-panel ViewModels**
+- [ ] **ViewModel decomposition: extract per-panel ViewModels**
       Blocked: MainViewModel (1666 lines across 2 partials) needs splitting
       into ~10 per-panel VMs. Requires updating all XAML DataContext bindings
       and MainWindow.xaml.cs panel switching. Risk of breaking bindings

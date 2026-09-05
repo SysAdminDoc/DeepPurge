@@ -4,7 +4,7 @@
         xmlns:vm="clr-namespace:DeepPurge.App.ViewModels"
         xmlns:conv="clr-namespace:DeepPurge.App.Converters"
         xmlns:props="clr-namespace:DeepPurge.App.Properties"
-        Title="DeepPurge v0.9.1" Width="1440" Height="900"
+        Title="DeepPurge v0.9.2" Width="1440" Height="900"
         MinWidth="1060" MinHeight="700" WindowStartupLocation="CenterScreen"
         Style="{DynamicResource MainWindowStyle}">
 
@@ -374,17 +374,10 @@
                                 </Button.Template>
                             </Button>
                             <StackPanel Orientation="Horizontal">
-                                <Border Width="36" Height="36" CornerRadius="8" Margin="0,0,12,0">
-                                    <Border.Background>
-                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                            <GradientStop Color="{DynamicResource AccentColor}" Offset="0"/>
-                                            <GradientStop Color="{DynamicResource TealColor}" Offset="1"/>
-                                        </LinearGradientBrush>
-                                    </Border.Background>
-                                    <TextBlock Text="&#xE74D;" FontFamily="{StaticResource Ico}" FontSize="17"
-                                               Foreground="{StaticResource ActionForegroundBrush}"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
+                                <Image Source="pack://application:,,,/DeepPurge;component/Assets/logo-mark.png"
+                                       Width="38" Height="38" Margin="0,0,12,0"
+                                       Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"
+                                       AutomationProperties.Name="DeepPurge logo"/>
                                 <StackPanel VerticalAlignment="Center">
                                     <TextBlock Text="DeepPurge" FontSize="17" FontWeight="Bold" Foreground="{DynamicResource TextBrush}"/>
                                     <TextBlock Text="LOCAL SYSTEM CARE" FontSize="8.5" FontWeight="SemiBold"
@@ -625,7 +618,7 @@
                             </RadioButton>
 
                             <!-- ═══════════════════════════════════════════════════════ -->
-                            <!-- SYSTEM TOOLS (v0.9.1) — optional scans, run on demand  -->
+                            <!-- SYSTEM TOOLS (v0.9) — optional scans, run on demand  -->
                             <!-- ═══════════════════════════════════════════════════════ -->
                             <TextBlock Text="SYSTEM TOOLS" Style="{StaticResource SectionLabel}"/>
 
@@ -976,7 +969,7 @@
                         <DataGrid.Columns>
                             <DataGridCheckBoxColumn Binding="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" Width="44"
                                                     HeaderTemplate="{StaticResource MasterCheckboxHeader}"/>
-                            <DataGridTemplateColumn Header="PROGRAM" Width="*" MinWidth="220"
+                            <DataGridTemplateColumn Header="PROGRAM" Width="*" MinWidth="240"
                                                     CellTemplate="{StaticResource IconNameCell}" SortMemberPath="DisplayName"/>
                             <DataGridTextColumn Binding="{Binding Publisher}" Header="PUBLISHER" Width="145"/>
                             <DataGridTextColumn Binding="{Binding DisplayVersion}" Header="VERSION" Width="96"/>
@@ -992,11 +985,10 @@
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
-                            <DataGridTextColumn Binding="{Binding CapabilityDisplay}" Header="CAPABILITY" Width="132"/>
-                            <DataGridTextColumn Binding="{Binding RemovalStatus}" Header="ACTION" Width="178"/>
-                            <DataGridTextColumn Binding="{Binding UninstallerRisk}" Header="RISK" Width="78"/>
-                            <DataGridTextColumn Binding="{Binding UninstallerExecutablePath}" Header="ACTION EXE" Width="220"/>
-                            <DataGridTemplateColumn Header="TRUST" Width="138" SortMemberPath="SignatureDisplay">
+                            <DataGridTextColumn Binding="{Binding CapabilityDisplay}" Header="CAPABILITY" Width="150"/>
+                            <DataGridTextColumn Binding="{Binding RemovalStatus}" Header="ACTION" Width="230"/>
+                            <DataGridTextColumn Binding="{Binding UninstallerRisk}" Header="RISK" Width="80"/>
+                            <DataGridTemplateColumn Header="TRUST" Width="160" SortMemberPath="SignatureDisplay">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
@@ -1491,7 +1483,7 @@
                             </DataGrid.Columns>
                         </DataGrid>
                         <Border Grid.Row="1" Style="{StaticResource EmptyStateCard}"
-                                Visibility="{Binding DeletionManifests, Converter={StaticResource EmptyCollectionVisConverter}}"
+                                Visibility="{Binding DeletionManifests.Count, Converter={StaticResource EmptyCollectionVisConverter}}"
                                 AutomationProperties.Name="No deletion manifests available">
                             <StackPanel>
                                 <TextBlock Text="&#xE8BB;" Style="{StaticResource EmptyStateIcon}"/>
@@ -1541,7 +1533,7 @@
                             </ListBox.ItemTemplate>
                         </ListBox>
                         <Border Grid.Row="4" Style="{StaticResource EmptyStateCard}" Padding="18" MaxWidth="460"
-                                Visibility="{Binding DeletionRestoreDetails, Converter={StaticResource EmptyCollectionVisConverter}}"
+                                Visibility="{Binding DeletionRestoreDetails.Count, Converter={StaticResource EmptyCollectionVisConverter}}"
                                 AutomationProperties.Name="No restore dry-run details">
                             <StackPanel>
                                 <TextBlock Text="Dry-run restore details will appear here before any restore is applied."
@@ -1768,7 +1760,7 @@
                             </DataGrid.Columns>
                         </DataGrid>
                         <Border Grid.Row="2" Style="{StaticResource EmptyStateCard}"
-                                Visibility="{Binding Winapp2Entries, Converter={StaticResource EmptyCollectionVisConverter}}"
+                                Visibility="{Binding Winapp2Entries.Count, Converter={StaticResource EmptyCollectionVisConverter}}"
                                 AutomationProperties.Name="No applicable community cleaners">
                             <StackPanel>
                                 <TextBlock Text="&#xE8A5;" Style="{StaticResource EmptyStateIcon}"/>
@@ -1958,7 +1950,7 @@
                                 </ListBox.ItemTemplate>
                             </ListBox>
                             <Border Style="{StaticResource EmptyStateCard}"
-                                    Visibility="{Binding ScheduledJobs, Converter={StaticResource EmptyCollectionVisConverter}}"
+                                    Visibility="{Binding ScheduledJobs.Count, Converter={StaticResource EmptyCollectionVisConverter}}"
                                     AutomationProperties.Name="No scheduled cleaning jobs">
                                 <StackPanel>
                                     <TextBlock Text="&#xE823;" Style="{StaticResource EmptyStateIcon}"/>

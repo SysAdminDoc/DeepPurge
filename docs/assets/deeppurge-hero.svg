@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#06111d"/>
+      <stop offset="0.58" stop-color="#0a1625"/>
+      <stop offset="1" stop-color="#101a2c"/>
+    </linearGradient>
+    <radialGradient id="brandGlow" cx="0" cy="0" r="1" gradientTransform="translate(160 100) rotate(34) scale(540 400)">
+      <stop offset="0" stop-color="#19cbea" stop-opacity="0.2"/>
+      <stop offset="0.62" stop-color="#19cbea" stop-opacity="0.035"/>
+      <stop offset="1" stop-color="#19cbea" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="screenFade" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#07111e" stop-opacity="0.96"/>
+      <stop offset="0.72" stop-color="#07111e" stop-opacity="0.2"/>
+      <stop offset="1" stop-color="#07111e" stop-opacity="0"/>
+    </linearGradient>
+    <pattern id="grid" width="42" height="42" patternUnits="userSpaceOnUse">
+      <path d="M42 0H0V42" fill="none" stroke="#8db6d5" stroke-opacity="0.045"/>
+    </pattern>
+    <filter id="shadow" x="-20%" y="-25%" width="150%" height="170%">
+      <feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#000814" flood-opacity="0.65"/>
+    </filter>
+    <clipPath id="screenClip">
+      <rect x="560" y="90" width="820" height="461" rx="22"/>
+    </clipPath>
+  </defs>
+
+  <rect width="1280" height="640" fill="url(#background)"/>
+  <rect width="1280" height="640" fill="url(#brandGlow)"/>
+  <rect width="1280" height="640" fill="url(#grid)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="548" y="78" width="844" height="485" rx="28" fill="#111f30" stroke="#28455c" stroke-width="2"/>
+    <image href="screenshots/deeppurge-programs.png" x="560" y="90" width="820" height="461"
+           preserveAspectRatio="xMidYMid slice" clip-path="url(#screenClip)"/>
+  </g>
+  <rect x="510" y="0" width="330" height="640" fill="url(#screenFade)"/>
+
+  <g font-family="Segoe UI, Arial, sans-serif">
+    <image href="brand/deeppurge-mark-256.png" x="60" y="56" width="94" height="94"/>
+    <text x="176" y="96" fill="#f3f8fc" font-size="31" font-weight="700">DeepPurge</text>
+    <text x="177" y="122" fill="#71e6d1" font-size="12" font-weight="700" letter-spacing="2.2">LOCAL WINDOWS CARE</text>
+
+    <rect x="60" y="179" width="78" height="3" rx="1.5" fill="#19cbea"/>
+    <text x="60" y="246" fill="#f4f8fc" font-size="51" font-weight="700" letter-spacing="-1.4">See what stays.</text>
+    <text x="60" y="304" fill="#f4f8fc" font-size="51" font-weight="700" letter-spacing="-1.4">Control what goes.</text>
+
+    <text x="62" y="360" fill="#b7c7d5" font-size="19">
+      <tspan x="62" dy="0">A safety-first uninstaller and cleanup toolkit</tspan>
+      <tspan x="62" dy="29">with recovery evidence built into every decision.</tspan>
+    </text>
+
+    <g font-size="13" font-weight="600">
+      <rect x="60" y="448" width="111" height="40" rx="20" fill="#10283a" stroke="#1d4f68"/>
+      <circle cx="84" cy="468" r="5" fill="#45dfa2"/>
+      <text x="98" y="473" fill="#d8e8f2">Local only</text>
+
+      <rect x="182" y="448" width="132" height="40" rx="20" fill="#10283a" stroke="#1d4f68"/>
+      <circle cx="206" cy="468" r="5" fill="#19cbea"/>
+      <text x="220" y="473" fill="#d8e8f2">Portable GUI</text>
+
+      <rect x="60" y="500" width="132" height="40" rx="20" fill="#10283a" stroke="#1d4f68"/>
+      <circle cx="84" cy="520" r="5" fill="#8b9cff"/>
+      <text x="98" y="525" fill="#d8e8f2">Scriptable CLI</text>
+
+      <rect x="203" y="500" width="150" height="40" rx="20" fill="#10283a" stroke="#1d4f68"/>
+      <circle cx="227" cy="520" r="5" fill="#ffcc66"/>
+      <text x="241" y="525" fill="#d8e8f2">Dry-run previews</text>
+    </g>
+
+    <text x="62" y="590" fill="#71879a" font-size="14">Windows 10 and 11  •  x64  •  Open source  •  v0.9.2</text>
+  </g>
+</svg>

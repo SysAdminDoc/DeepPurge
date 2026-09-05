@@ -125,7 +125,14 @@ public class InstalledProgram : INotifyPropertyChanged
         set { _uninstallerRisk = value ?? string.Empty; OnPropertyChanged(); OnPropertyChanged(nameof(RemovalFactsDisplay)); }
     }
 
-    public string CapabilityDisplay => RemovalCapability.ToString();
+    public string CapabilityDisplay => RemovalCapability switch
+    {
+        RemovalCapability.NativeUninstaller => "Native uninstaller",
+        RemovalCapability.PackageManager => "Package manager",
+        RemovalCapability.PortableFolder => "Portable folder",
+        RemovalCapability.GameLauncher => "Game launcher",
+        _ => "Unsupported",
+    };
     public string ActionTrustDisplay => UninstallerTrust.ReviewDisplay;
     public string RemovalFactsDisplay =>
         $"{CapabilityDisplay} | source={RemovalSourceIdentity} | " +

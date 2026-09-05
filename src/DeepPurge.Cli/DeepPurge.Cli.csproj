@@ -7,9 +7,9 @@
     <Nullable>enable</Nullable>
     <RootNamespace>DeepPurge.Cli</RootNamespace>
     <AssemblyName>DeepPurgeCli</AssemblyName>
-    <Version>0.9.1</Version>
+    <Version>0.9.2</Version>
     <Authors>SysAdminDoc</Authors>
-    <Description>DeepPurge CLI - headless uninstall / clean / schedule</Description>
+    <Description>Scriptable Windows cleanup and uninstall CLI</Description>
     <ApplicationIcon>..\..\icon.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>

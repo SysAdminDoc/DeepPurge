@@ -25,6 +25,12 @@ namespace DeepPurge.App.Views;
 
 public partial class MainWindow : Window
 {
+    private static bool IsCaptureSession =>
+        string.Equals(
+            Environment.GetEnvironmentVariable("DEEPPURGE_CAPTURE_MODE"),
+            "1",
+            StringComparison.Ordinal);
+
     private readonly MainViewModel _vm;
     private DispatcherTimer? _toastTimer;
     private string _currentPanel = "Programs";
@@ -83,7 +89,11 @@ public partial class MainWindow : Window
             cmbTheme.SelectedIndex = 0;
         }
 
-        SourceInitialized += (_, _) => _trayIcon = new TrayIconService(this, _vm, RestoreFromTray, ExitFromTray, ShowToast);
+        SourceInitialized += (_, _) =>
+        {
+            if (!IsCaptureSession)
+                _trayIcon = new TrayIconService(this, _vm, RestoreFromTray, ExitFromTray, ShowToast);
+        };
         Loaded += OnWindowLoaded;
         StateChanged += OnWindowStateChanged;
     }
@@ -94,6 +104,24 @@ public partial class MainWindow : Window
 
     private async void OnWindowLoaded(object sender, RoutedEventArgs e)
     {
+        if (IsCaptureSession)
+        {
+            try
+            {
+                await _vm.RefreshAsync();
+            }
+            catch (Exception ex)
+            {
+                _vm.StatusText = $"Program inventory error: {ex.Message}";
+            }
+            finally
+            {
+                _vm.IsInitialScanRunning = false;
+                FadeOutLoadingOverlay();
+            }
+            return;
+        }
+
         try
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
@@ -219,7 +247,7 @@ public partial class MainWindow : Window
         dgEmptyFolders, panelDisk, dgAutorun, dgBrowserExt, dgContextMenu,
         dgServices, dgTasks, dgRestore, panelLeftovers,
         panelHunter, panelOrphans, panelDeletionRecovery, panelBackups,
-        // v0.9.1 system-tools panels
+        // v0.9 system-tools panels
         dgDrivers, dgStartupImpact, dgShortcuts, dgDuplicates,
         panelWinapp2, panelRepair, panelSchedule, panelInstallMonitor, panelHealth, panelSlimming,
         dgHistory, panelSettings, panelAbout,
@@ -352,7 +380,7 @@ public partial class MainWindow : Window
                 AppendToolbarButton("Remove Selected", (_, _) => _vm.RunSlimCommand.Execute(null), "DangerButton");
                 break;
 
-            // ─── v0.9.1 SYSTEM TOOLS ───
+            // ─── v0.9 SYSTEM TOOLS ───
             case "Drivers":
                 dgDrivers.Visibility = Visibility.Visible; txtPanelTitle.Text = "Driver Store";
                 AppendToolbarButton("Rescan",         ScanDrivers_Click,  "AccentButton");
@@ -430,7 +458,7 @@ public partial class MainWindow : Window
         if (_autoLoaded.Add(panel)) load();
     }
 
-    // ─── v0.9.1 panel click handlers — all delegate to VM commands so
+    // ─── v0.9 panel click handlers — all delegate to VM commands so
     //     business logic stays out of the view. Keeps the Ctrl+F
     //     "where does X live?" search consistent with existing handlers.
 
@@ -1404,7 +1432,7 @@ public partial class MainWindow : Window
 
     protected override void OnClosing(CancelEventArgs e)
     {
-        if (!_exitRequested)
+        if (!_exitRequested && !IsCaptureSession)
         {
             e.Cancel = true;
             HideToTray();

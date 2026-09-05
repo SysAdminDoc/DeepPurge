@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    DeepPurge Build Script v0.9.1
+    DeepPurge Build Script v0.9.2
     Compiles the project into single portable .exe files (GUI + CLI)
 
 .DESCRIPTION
@@ -52,7 +52,7 @@ $TestsProject = Join-Path $ProjectRoot "tests\DeepPurge.Tests\DeepPurge.Tests.cs
 
 Write-Host ""
 Write-Host "  ============================================" -ForegroundColor Cyan
-Write-Host "    DeepPurge Build Script v0.9.1" -ForegroundColor Cyan
+Write-Host "    DeepPurge Build Script v0.9.2" -ForegroundColor Cyan
 Write-Host "  ============================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -434,7 +434,7 @@ function Invoke-ReleaseReadinessValidation {
     $script:ReleaseValidationFailures = [System.Collections.Generic.List[string]]::new()
 
     Write-Host ""
-    Write-Host "  [*] Validating release and package manifests..." -ForegroundColor Yellow
+    Write-Host "  [*] Validating release and Scoop manifest..." -ForegroundColor Yellow
 
     $appVersion = Get-CsprojVersion $AppProject "src/DeepPurge.App/DeepPurge.App.csproj:Version"
     $coreVersion = Get-CsprojVersion $CoreProject "src/DeepPurge.Core/DeepPurge.Core.csproj:Version"
@@ -482,29 +482,6 @@ function Invoke-ReleaseReadinessValidation {
     $checksums = Read-ReleaseChecksums $checksumPath
     if ([string]::IsNullOrWhiteSpace($ReleaseChecksumsPath)) {
         Assert-LocalArtifactsMatchChecksums $checksums
-    }
-
-    $wingetPath = Join-Path $ProjectRoot "packaging\winget\SysAdminDoc.DeepPurge.yaml"
-    if (Test-Path $wingetPath) {
-        $winget = Get-Content $wingetPath -Raw
-        Assert-NoReleasePlaceholders "packaging/winget/SysAdminDoc.DeepPurge.yaml" $winget
-
-        if ($winget -match "(?m)^PackageVersion:\s*(?<version>\S+)") {
-            Assert-ReleaseValue "packaging/winget/SysAdminDoc.DeepPurge.yaml:PackageVersion" $matches.version $appVersion
-        } else {
-            Add-ReleaseValidationFailure "packaging/winget/SysAdminDoc.DeepPurge.yaml:PackageVersion" "value is missing"
-        }
-
-        $urls = @([regex]::Matches($winget, "(?m)^\s*InstallerUrl:\s*(?<url>\S+)") | ForEach-Object { $_.Groups["url"].Value })
-        $hashes = @([regex]::Matches($winget, "(?m)^\s*InstallerSha256:\s*(?<hash>\S+)") | ForEach-Object { $_.Groups["hash"].Value })
-        if ($urls.Count -ne $hashes.Count) {
-            Add-ReleaseValidationFailure "packaging/winget/SysAdminDoc.DeepPurge.yaml:Installers" "InstallerUrl count ($($urls.Count)) does not match InstallerSha256 count ($($hashes.Count))"
-        }
-        for ($i = 0; $i -lt [Math]::Min($urls.Count, $hashes.Count); $i++) {
-            Assert-ReleaseAsset "packaging/winget/SysAdminDoc.DeepPurge.yaml:Installers[$i].InstallerSha256" $urls[$i] $hashes[$i] $checksums $appVersion
-        }
-    } else {
-        Add-ReleaseValidationFailure "packaging/winget/SysAdminDoc.DeepPurge.yaml" "file is missing"
     }
 
     $scoopPath = Join-Path $ProjectRoot "packaging\scoop\deeppurge.json"

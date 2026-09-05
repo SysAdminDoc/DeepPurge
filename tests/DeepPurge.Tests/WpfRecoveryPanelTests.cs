@@ -14,7 +14,9 @@ public class WpfRecoveryPanelTests
         Assert.Contains("Tag=\"DeletionRecovery\"", xaml);
         Assert.Contains("x:Name=\"panelDeletionRecovery\"", xaml);
         Assert.Contains("ItemsSource=\"{Binding DeletionManifests}\"", xaml);
+        Assert.Contains("Visibility=\"{Binding DeletionManifests.Count, Converter={StaticResource EmptyCollectionVisConverter}}\"", xaml);
         Assert.Contains("ItemsSource=\"{Binding DeletionManifestEntries}\"", xaml);
+        Assert.Contains("Visibility=\"{Binding DeletionRestoreDetails.Count, Converter={StaticResource EmptyCollectionVisConverter}}\"", xaml);
         Assert.Contains("panelDeletionRecovery.Visibility = Visibility.Visible", codeBehind);
         Assert.Contains("DryRunRestoreDeletionManifestCommand", codeBehind);
         Assert.Contains("RestoreSelectedDeletionManifestCommand", codeBehind);

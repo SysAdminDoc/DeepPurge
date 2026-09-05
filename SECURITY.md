@@ -18,28 +18,28 @@ Email a description of the issue to **snafumatthew@gmail.com** with the subject 
 `DeepPurge security report`. Include:
 
 1. Affected version (`DeepPurge version` from the About panel, or `deeppurgecli version`).
-2. Impact description — what can an attacker do?
+2. Impact description. What can an attacker do?
 3. Reproduction steps, ideally with a minimal proof-of-concept.
 4. Your disclosure timeline expectations (default: 90 days).
 
 You can expect an acknowledgement within 48 hours and a triage update within 7 days.
 
-## Scope
+## Reports we prioritize
 
-In scope:
+Please use the private reporting process for:
 
 - Local privilege escalation via DeepPurge running as Administrator
 - Arbitrary code execution via crafted input (winapp2.ini, install snapshots, job names)
-- SafetyGuard bypass — any input path or registry key that escapes the protected list
+- SafetyGuard bypass, including any input path or registry key that escapes the protected list
 - Command injection in `ScheduleManager`, `WindowsRepairEngine`, or `UninstallEngine`
 - Supply-chain issues in `DataPaths` (path traversal, symlink attacks)
 
-Out of scope:
+The security process is not intended for:
 
 - Issues that require a separately-compromised user account on the same machine
 - Social engineering requiring the user to paste malicious content into DeepPurge
 - Denial of service against the local UI (crashing DeepPurge itself does not compromise the system)
-- Vulnerabilities in dependencies that are already fixed upstream — upgrade and re-test first
+- Vulnerabilities in dependencies that are already fixed upstream. Upgrade and test again first.
 
 ## Safe-harbour
 
@@ -52,7 +52,7 @@ Good-faith security research is welcome. We will not pursue legal action for res
 ## Hardening context
 
 - Every destructive file and registry operation passes through
-  [`Core/Safety/SafetyGuard.cs`](src/DeepPurge.Core/Safety/SafetyGuard.cs) — the blocklist
+  [`Core/Safety/SafetyGuard.cs`](src/DeepPurge.Core/Safety/SafetyGuard.cs). The blocklist
   is locked in by the `SafetyGuardTests` suite.
 - The GUI runs `requireAdministrator`; the CLI runs `asInvoker` so scripting works without UAC.
   Destructive CLI commands invoked from a non-elevated shell fail at the underlying call

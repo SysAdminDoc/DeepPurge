@@ -1,39 +1,31 @@
-# DeepPurge Architecture
+# DeepPurge architecture
 
-A concise design overview for contributors. Focuses on cross-cutting patterns rather than per-scanner detail — read the individual source files for the specifics.
+This document covers the boundaries that matter when changing DeepPurge. Scanner-specific details live beside the implementation.
 
 ## Solution layout
 
-```
+```text
 DeepPurge.sln
-├── src/DeepPurge.Core/       Pure logic: scanners, safety, diagnostics
-├── src/DeepPurge.App/        WPF GUI (admin manifest, MVVM via CommunityToolkit.Mvvm)
-├── src/DeepPurge.Cli/        Headless entry point (asInvoker manifest)
-└── tests/DeepPurge.Tests/    xUnit v3, 454 cases
+  src/DeepPurge.Core/       Scanners, safety, recovery, execution, diagnostics
+  src/DeepPurge.App/        WPF GUI with an administrator manifest
+  src/DeepPurge.Cli/        Scriptable CLI with an asInvoker manifest
+  tests/DeepPurge.Tests/    xUnit v3 with 459 cases
+  tools/DeepPurge.Capture/  Private-desktop production screenshot tool
 ```
 
-`DeepPurge.Core` has exactly one hard WPF dependency — `IconExtractor` returns
-`ImageSource` — which is why `UseWPF=true` is set on the Core csproj. If you ever
-split icon handling into the App layer, that dependency disappears.
+`DeepPurge.Core` has one intentional WPF dependency because `IconExtractor` returns `ImageSource`. Moving icon materialization into the app layer would remove that dependency.
 
-## Cross-cutting concerns
+## Safety boundary
 
-### SafetyGuard (`Core/Safety/SafetyGuard.cs`)
+### SafetyGuard
 
-Every destructive operation (file delete, registry delete, service modify, scheduled-task
-delete) passes through `SafetyGuard` before acting. The guard holds hard-coded blocklists:
+Every destructive file, registry, service, scheduled-task, driver, and system-cleanup route must cross the applicable safety policy before it mutates state. The guard blocks protected directories, boot files, critical registry roots, core services, and Microsoft task namespaces.
 
-- Protected directories (Windows, System32, WinSxS, etc.)
-- Protected files (bootmgr, registry hives)
-- Protected registry roots (HKLM\SYSTEM\CurrentControlSet\Control, SAM, etc.)
-- Protected service names (50+ core Windows services)
-- Protected scheduled-task paths (Microsoft\Windows\, Microsoft\Office\)
+Tests keep the deny rules from changing silently.
 
-Tests in `SafetyGuardTests` lock in the deny rules so a refactor can't silently relax them.
+### DeleteOptions
 
-### DeleteOptions (`Core/Safety/DeleteOptions.cs`)
-
-The single argument record threaded through every destructive pipeline:
+Cleanup pipelines share one options record:
 
 ```csharp
 public readonly record struct DeleteOptions(
@@ -43,128 +35,115 @@ public readonly record struct DeleteOptions(
     int MinAgeDays = 0);
 ```
 
-Convention: when you add a new destructive pipeline, take `DeleteOptions` — don't add
-new bool args. When you add a new behavioural toggle, extend the record — don't add
-a new positional arg.
+Extend this record when a deletion policy changes. Don't add a second set of unrelated boolean parameters.
 
-### DataPaths (`Core/App/DataPaths.cs`)
+### Typed outcomes
 
-Routes every persistent file through one resolver. A `DeepPurge.portable` marker next
-to the exe flips the root from `%LocalAppData%\DeepPurge\` to `./Data/`. Every caller
-that needs a log/backup/snapshot path MUST go through `DataPaths` — direct
-`%LocalAppData%` references break portable mode.
+Cleanup does not report planned work as completed work. Results distinguish previewed, recycled, permanently deleted, securely deleted, queued, skipped, failed, and cancelled items. Recovery manifests are written only after a confirmed mutation.
 
-### Log (`Core/Diagnostics/Log.cs`)
+### Recovery evidence
 
-Append-only, thread-safe, 5 MB rotating. Used for swallowed exceptions so field issues
-can be debugged without the user having to attach a debugger. Never throws — logging
-failures must not crash callers.
+Registry and administrative workflows bind recovery data to the original operation. Hashes, object identity, owner and access-control facts, and operation IDs prevent a nearby or changed file from being accepted as rollback data.
 
-### PrivacyMaintenance (`Core/Diagnostics/PrivacyMaintenance.cs`)
+Some actions are not recoverable. The result model must say so.
 
-Applies the Settings / Privacy retention policy for `deeppurge.log*`, `activity.jsonl`,
-and `deletions-*.jsonl`. `settings prune [--dry-run]` and the GUI "Prune Old Data"
-action share this helper. Path scrubbing is display/report redaction only; deletion
-manifests are not rewritten because rollback depends on their original paths.
+## Persistent data
 
-### SelfTest (`Core/Diagnostics/SelfTest.cs`)
+`DataPaths` resolves every setting, log, backup, snapshot, and activity path. A `DeepPurge.portable` marker beside the executable redirects the root from `%LocalAppData%\DeepPurge\` to `./Data/`.
 
-14-check environment probe driving `deeppurgecli doctor`. Read-only; never modifies
-state. Returns structured `SelfTestResult` records the CLI formats.
+Production code should not hard-code a user-data root.
 
-## GUI architecture
+`Log` writes an append-only, thread-safe rotating file. Operational exceptions that are handled for the user still belong in the log.
 
-### MVVM wiring
+`PrivacyMaintenance` applies retention rules to logs, activity records, and deletion manifests. Path scrubbing affects reports and display data. It does not rewrite rollback records whose paths are required for recovery.
 
-`MainViewModel` is a partial class split across two files:
+## External process execution
 
-- `MainViewModel.cs` — pre-v0.9 features (programs, junk, evidence, autoruns, ...)
-- `MainViewModel.Extensions.cs` — v0.9 features (drivers, startup impact, shortcuts,
-  duplicates, winapp2, repair, schedule, updates, install snapshot, health, and system slimming)
+Windows-owned tools resolve from protected absolute system paths. Package managers resolve from known install roots. Arguments are passed separately, output is bounded, and timeout or cancellation has a typed result.
 
-Observable collections are bound 1:1 to DataGrid ItemsSource. Async work runs under
-`Task.Run(..., ct)`; results are marshaled back to the UI thread via
-`_dispatcher.Invoke` / `BeginInvoke`.
+Package-manager operations run through the original desktop-user broker instead of inheriting the GUI's administrator token.
 
-### Panel switching
+## GUI
 
-The sidebar is a `RadioButton` group with each button's `Tag` naming its target panel.
-`MainWindow.xaml.cs.NavButton_Checked` hides all panels in `AllPanels`, then shows the
-one for the selected tag. Adding a new panel is three steps:
+### View model
 
-1. Add a `RadioButton` in the sidebar XAML with a unique `Tag`
-2. Add the panel element in the content area with `Visibility="Collapsed"` and
-   `x:Name="panelXxx"` (or `dgXxx` for DataGrid)
-3. Add the element to `AllPanels` and add a `case` in `NavButton_Checked`
+`MainViewModel` is split across two files:
+
+- `MainViewModel.cs` contains program inventory, cleanup, evidence, autorun, settings, and shared behavior.
+- `MainViewModel.Extensions.cs` contains driver, startup-impact, shortcut, duplicate, cleaner, repair, schedule, health, and system-slimming behavior.
+
+Observable collections bind directly to WPF grids. Long work runs asynchronously and marshals collection changes back to the application dispatcher.
+
+### Navigation
+
+Sidebar `RadioButton` controls use their `Tag` as the panel identifier. `MainWindow.NavButton_Checked` hides the current panel, selects the matching target, builds contextual actions, and starts any safe lazy load.
+
+Adding a panel requires all of the following:
+
+1. Add a tagged navigation control.
+2. Add a named panel with collapsed default visibility.
+3. Add the panel to `AllPanels`.
+4. Add the navigation case and any loading behavior.
+5. Add the capability contract entry and tests.
 
 ### Themes
 
-`ThemeManager` reapplies a merged `ResourceDictionary` on swap. Dark themes are first-class;
-light is opt-in. Controls reference `{DynamicResource}` — never `{StaticResource}` — so
-theme swap is instant. Theme choice persists to `DataPaths.ThemeFile`.
+`ThemeManager` swaps the active color `ResourceDictionary`. Controls use dynamic resources so theme changes apply at runtime. DeepPurge Slate is the default. Arctic provides the light option, and the remaining bundled themes retain their own contrast checks.
 
-## CLI architecture
+### Screenshot capture
 
-### Argument parsing
+`tools/DeepPurge.Capture` loads the production `MainWindow`, production resource dictionaries, and read-only scanner data. Its launcher creates a private Windows desktop and starts the WPF worker there. The worker refuses to run on the interactive `Default` desktop.
 
-`ParsedArgs` in `Program.cs` handles `--flag`, `--option value`, `--option=value`, and
-positional tokens. New options that take a value must be added to `ValueOptions` so the
-parser consumes the next token. Boolean flags are free — anything `--xxx` not in the
-value list is a flag.
+Capture mode disables the tray icon and limits startup to the program inventory. Requested panels then run their own read-only scans before `RenderTargetBitmap` saves the image. This keeps screenshot work away from the user's active display and avoids invented UI data.
 
-### Exit codes (BCU convention)
+## CLI
 
+`ParsedArgs` handles flags, `--option value`, `--option=value`, and positional tokens. Options that consume the next token belong in `ValueOptions`.
+
+Exit codes follow the command-line contract:
+
+```text
+0     success
+1     general failure
+2     invalid argument
+13    access denied
+1223  cancelled
 ```
-0    success
-1    general failure
-2    bad argument
-13   access denied
-1223 user cancelled (CTRL_C or uninstaller returned 1223)
+
+Long-running commands catch cancellation before their general exception handler so cancellation remains distinct from failure.
+
+## Install monitoring
+
+`InstallSnapshotEngine.TraceInstallAsync` captures authoritative filesystem and registry state before and after an installer. Optional USN and Sysmon evidence adds context but does not authorize replay deletion.
+
+Snapshot walks cover configured program and user-data roots plus bounded registry trees. Compressed snapshots are retained by per-program and global limits.
+
+Replay uses the set of created files from an authoritative manifest. It checks recorded identity, size, timestamp, and hash immediately before deletion. Legacy or diagnostic-only manifests cannot be replayed.
+
+## Concurrency rules
+
+- COM shortcut inspection owns a dedicated STA thread.
+- Independent initial scanners can run in parallel and return partial-source diagnostics.
+- Large hashing and deletion loops respect cancellation and avoid unbounded worker creation.
+- WPF collection changes return to the dispatcher.
+- Fire-and-forget work must still log failure and expose useful state.
+
+## Build and release
+
+The exact .NET SDK version comes from `global.json`. Locked restore is enabled for the product projects.
+
+```powershell
+dotnet build DeepPurge.sln -c Release -r win-x64
+dotnet test tests\DeepPurge.Tests\DeepPurge.Tests.csproj -c Release -r win-x64
+./Build.ps1 -AuditDependenciesOnly
+./Build.ps1 -Sign
+./Build.ps1 -ValidateReleaseOnly -ReleaseChecksumsPath build\SHA256SUMS.txt
 ```
 
-Callers (Task Scheduler, SCCM, Intune) key off these to decide retry behaviour.
+`Build.ps1 -Sign` publishes the self-contained GUI and CLI, signs them when a certificate is supplied, writes `SHA256SUMS.txt`, and can validate the Scoop manifest against the exact release assets. All 459 tests run before a normal Release publish.
 
-### Threading
+The repository does not use GitHub build workflows. Release files are built, tested, signed, and uploaded locally.
 
-Commands with long-running work wrap `Task.Run` bodies in a try/catch that catches
-`OperationCanceledException` first (to preserve 1223) then falls through to a generic
-handler that logs + returns exit 1.
+## Test philosophy
 
-## Install-monitor flagship
-
-`InstallSnapshotEngine.TraceInstallAsync` captures a before/after manifest of:
-
-- Program Files, Program Files (x86), ProgramData, LocalAppData, AppData
-- HKLM\SOFTWARE, HKLM\SOFTWARE\WOW6432Node, HKCU\SOFTWARE (depth-3 key tree)
-
-Walks run in parallel via `Task.WhenAll`. Snapshots gzip to `DataPaths.Snapshots`,
-pruned to 3 per program and 30 global. `Diff` computes adds AND removes (upgrade-
-scenario fidelity). `ReplayRemoveAsync` feeds the added-files set through SafetyGuard
-to enable "forced uninstall by exact manifest."
-
-`MainViewModel.ForcedUninstallByManifestAsync` is the public surface from the GUI side.
-
-## Threading rules
-
-- **STA required:** `ShortcutRepairScanner` (COM IShellLinkW) — wraps its scan on a
-  dedicated STA thread so callers on MTA `Task.Run` get correct apartment semantics.
-- **Parallel IO:** `InstallSnapshotEngine` walks roots in parallel; `DuplicateFinder`
-  hashes sequentially (ArrayPool pressure matters more than concurrency here).
-- **WPF dispatch:** `MainViewModel._dispatcher.Invoke` for synchronous UI updates,
-  `BeginInvoke` for fire-and-forget.
-
-## Build + release flow
-
-1. `dotnet build DeepPurge.sln -c Release` — compiles App, CLI, Core, and tests
-2. `dotnet test tests/DeepPurge.Tests/DeepPurge.Tests.csproj` — locks in parser / sanitiser behaviour
-3. `Build.ps1 -Sign` publishes `build/DeepPurge.exe`, `build/DeepPurgeCli.exe`, and `build/SHA256SUMS.txt`; Release builds run the 454-test suite by default
-4. Copy hashes into winget/Scoop manifests, run `Build.ps1 -AuditDependenciesOnly`, then run `Build.ps1 -ValidateReleaseOnly -ReleaseChecksumsPath build\SHA256SUMS.txt`
-5. Git tag `vX.Y.Z`, push the tag, then create/upload GitHub Release assets locally with `gh release`
-6. `wingetcreate update ...` → winget PR
-7. Commit `packaging/scoop/deeppurge.json` to a Scoop bucket
-
-## Testing philosophy
-
-Tests cover the parts that broke in the field: schema parsers, version comparisons,
-sanitisers, threshold classifiers. We don't mock Windows — tests that need real
-filesystem / registry / COM are deliberately not written.
+Tests concentrate on safety decisions, parsers, command construction, identity checks, bounded scans, recovery provenance, WPF contracts, and release metadata. Integration checks use temporary files or read-only Windows APIs where practical. A test must never make an unreviewed system change.
