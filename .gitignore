@@ -5,6 +5,7 @@ build/
 publish/
 TestResults/
 *.binlog
+docs/assets/screenshots/capture-error.txt
 
 # ─── IDE / editor ────────────────────────────────────────
 .vs/

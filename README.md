@@ -1,195 +1,199 @@
-# DeepPurge v0.9.1
+<p align="center">
+  <img src="docs/assets/brand/deeppurge-mark-256.png" width="124" alt="DeepPurge shield and recovery mark">
+</p>
 
-![Version](https://img.shields.io/badge/version-v0.9.1-blue) ![License](https://img.shields.io/badge/license-MIT-green) ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey) ![CLI](https://img.shields.io/badge/CLI-headless-8A3FFC)
+# DeepPurge v0.9.2
 
-A thorough, open-source Windows uninstaller that goes deep. Removes programs completely, hunts down every leftover, and cleans system cruft that other tools miss. Ships a GUI and a headless CLI for scripting / Task Scheduler / Intune / SCCM.
+![Version](https://img.shields.io/badge/version-v0.9.2-19cbea) ![License](https://img.shields.io/badge/license-MIT-45dfa2) ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0b1739) ![Architecture](https://img.shields.io/badge/architecture-x64-6ea8fe) ![Interface](https://img.shields.io/badge/interfaces-GUI%20%7C%20CLI-8b5cf6)
 
-## Features
+**See what stays. Control what goes.**
 
-### Uninstall
-- **Installed Programs** - Full registry scan (HKLM + HKCU, 32/64-bit) with extracted program icons
-- **Bulk Uninstall** - Multi-select + one-click sequential uninstall with silent flags auto-applied *(inspired by BCUninstaller)*
-- **winget integration** - Programs tracked by winget are tagged with their package ID; upgrade-available badge + right-click → "Upgrade via winget"; uninstall uses `winget uninstall --id ... --exact` before registry fallbacks, and `doctor` reports source health when package-manager enrichment degrades *(inspired by BCU source-adapter pattern)*
-- **Scoop integration** - Scoop apps that skip the Windows installer DB are auto-discovered, merged into the list, and removed through `scoop uninstall`
-- **Chocolatey integration** - `choco list --local-only --limit-output` entries are merged into the installed programs list and removed through non-interactive `choco uninstall`
-- **Privilege-contained package managers** - winget, Scoop, and Chocolatey resolve from known absolute install roots and run as the original non-elevated desktop user, never with the GUI's administrator token or a current-directory/PATH-selected shim
-- **Explicit removal capability and trust** - Each row declares a `NativeUninstaller`, `PackageManager`, `PortableFolder`, `GameLauncher`, or `Unsupported` action with source identity, executable, arguments, owner/publisher, signature, and risk facts. Unsupported actions are disabled and the action is revalidated immediately before execution.
-- **Recoverable portable removal** - Portable folders are moved to the Recycle Bin as one recoverable action; game-launcher discoveries are review-only until a source-native uninstall command is available.
-- **Silent-switch database** - Curated per-installer-family silent flags (`/S`, `/qn`, `/VERYSILENT`, `/quiet`, Squirrel `--uninstall --silent`) with vendor fingerprint overrides *(inspired by PatchMyPC)*
-- **Forced Uninstall** - Scan for remnants of already-removed or partially uninstalled programs
-- **Windows Apps** - Remove UWP/MSIX apps including system bloatware
-- **Leftover Scanner** - Three scan modes (Safe / Moderate / Advanced) for registry keys, files, and folders
-- **Export** - Export installed programs list to HTML, CSV, or JSON
+DeepPurge is a safety-first Windows uninstaller and cleanup toolkit. It inventories software, traces leftovers, scores system hygiene, and records recovery evidence before guarded changes. Everything runs locally.
 
-### Cleanup
-- **Junk Cleaner** - Browser caches, temp files, crash dumps, prefetch, installer cache, Windows Update leftovers
-- **Evidence Remover** - Recent documents, jump lists, thumbnail cache, clipboard, DNS cache, Explorer history, Windows logs, crash reports, error reports, font cache, delivery optimization cache
-- **Empty Folders** - Scan common locations for empty directory trees and remove them
-- **Disk Analyzer** - Folder size breakdown and large file finder (50MB+) with delete capability. Uses WizTree's raw-MFT technique (`FSCTL_ENUM_USN_DATA` + `FSCTL_GET_NTFS_FILE_RECORD`) on NTFS volumes; parallel `FindFirstFileExW(FIND_FIRST_EX_LARGE_FETCH)` fallback on ReFS/exFAT/FAT32. Typical full-drive scan in seconds.
-- **MSI/MSP orphan cleanup** - Scans `%WINDIR%\Installer` for old MSI/MSP files not referenced by active Windows Installer products
-- **Dry-run / Preview mode** - Every destructive pipeline can be previewed: enumerate and size items without touching them *(inspired by BleachBit)*
-- **Secure Delete** - Privacy-grade selected-file wipe (single-pass cryptographic random + opaque rename + delete; no volume free-space fill) *(inspired by BleachBit/PrivaZer)*
-- **Live progress bars** - Every long-running delete reports item / total / bytes-freed / current path in the status bar
-- **Skipped-item details** - Junk and Evidence cleanup summaries expose redacted reasons for missing, denied, unsafe, locked, command-failed, and too-recent items in GUI status, CLI text, CLI JSON, and activity history
+[Download the portable GUI](https://github.com/SysAdminDoc/DeepPurge/releases/latest/download/DeepPurge.exe) · [Download the CLI](https://github.com/SysAdminDoc/DeepPurge/releases/latest/download/DeepPurgeCli.exe) · [View the latest release](https://github.com/SysAdminDoc/DeepPurge/releases/latest)
 
-### System Management
-- **Autorun Manager** - Registry Run/RunOnce, startup folders, and service autoruns with **reversible** disable (StartupApproved pattern), guarded deletion where a rollback provider exists, and explicit unsupported states for protected sources
-- **Startup Impact ratings** - High / Medium / Low per autorun process, parsed from the Windows Diagnostic Infrastructure boot traces in `System32\wdi\LogFiles\StartupInfo\*.xml`. Same metric Task Manager uses — no undocumented APIs.
-- **Digital signature badges** - Every autorun entry and service shows its WinVerifyTrust result (signer CN / Unsigned / Untrusted / Revoked) *(inspired by Sysinternals Autoruns)*
-- **Browser Extensions** - Scan extensions across Chrome, Edge, Brave, Firefox, Vivaldi, and Opera; remove only exact profile packages while protecting system and stale entries
-- **Driver Store cleanup** - Enumerate third-party driver packages via `pnputil /enum-drivers`, group by `.inf` family, flag old versions for removal, and keep firmware/system packages pinned. A removal exports and hashes the full package to administrator-owned rollback storage before invoking `pnputil /delete-driver`; the CLI and WPF surface expose the operation identity and verified reinstall path. *(inspired by RAPR / DriverStoreExplorer)*
-- **Context Menu Cleaner** - Find and remove orphaned shell context menu entries with broken executables or CLSIDs
-- **Shortcut repair** - Enumerate `.lnk` files on Desktop / Start Menu via IShellLinkW COM; flag and delete broken-target shortcuts
-- **Services Manager** - View all Windows services, identify orphaned services pointing to deleted executables, disable or delete
-- **Scheduled Tasks** - Full task inventory with orphan detection, disable and delete capabilities
-- **Registry Hunter** - Parallel substring or regex search across HKLM, HKLM\\WOW6432Node, HKCU, and HKCR with scope filters (keys / names / data), live hit counter, and depth / hit / time caps *(inspired by NirSoft RegScanner and Eric Zimmerman's Registry Explorer)*
+![DeepPurge product overview](docs/assets/deeppurge-hero.png)
 
-### Windows Repair
-- **SFC / DISM / chkdsk** - One-click `sfc /scannow`, `DISM /RestoreHealth`, `DISM /StartComponentCleanup` (WinSxS), `chkdsk` with live stdout streaming
-- **Font + Icon cache rebuild** - Fixes broken cache corruption without a reboot
-- **Per-app repair** - `winget repair <id>` and `msiexec /fa {ProductCode} /qn` for reinstall-without-data-loss
+## Know what you're removing
 
-### Installation Monitor *(flagship)*
-- **Before/after snapshot** - Captures filesystem + registry manifest before and after a traced installer; the diff becomes a precise per-app removal list
-- **Replay uninstall** - "Forced Uninstall" references the exact manifest instead of heuristic name-matching and skips replay files whose created-object identity, size, timestamp, or SHA256 no longer matches the captured identity. Legacy manifests and diagnostic-only journal evidence cannot be replayed.
-- **Diagnostic journal evidence** - The optional USN/Sysmon trace records parent-resolved filesystem changes and installer-process-tree registry activity for review, while authoritative pre/post snapshots decide what can be replayed.
-- Manifests persisted in `%LocalAppData%\DeepPurge\Snapshots\<name>.manifest.json` (or `./Data/Snapshots/` in portable mode)
+DeepPurge brings installed programs, package sources, signatures, removal capability, and risk signals into one review surface. Unsupported actions stay disabled. Native uninstall commands are checked again immediately before execution.
 
-### Community Cleaner Definitions
-- **winapp2.ini integration** - Parses the community-maintained [winapp2.ini](https://github.com/MoscaDotTo/Winapp2) database (2,500+ third-party cleaners). Updates record schema/source/commit/SHA256/trust provenance, show expanded file/registry target diffs, retain a last-known-good backup, restore it if the metadata commit fails, and protect Windows package-manager state such as the WinGet pin database.
-- **Validated custom JSON cleaners** - Define versioned `*.cleaner.json` documents with schema linting, risk labels, origin/SHA256/trust facts, expanded target previews, registry scope checks, and estimates. Invalid or unsafe files are quarantined; valid definitions are copied to LastKnownGood. Use `deeppurgecli cleaners schema` and `deeppurgecli cleaners validate <file>` before `list|preview|run [--dry-run]`.
+![Installed Programs inventory showing source, capability, risk, and trust](docs/assets/screenshots/deeppurge-programs.png)
 
-### Duplicate Finder
-- **Three-stage hash** - Group by exact byte-size → XXH3 first-MB head-hash → XXH3 full-file for remaining collisions. Skips reparse points / junctions to avoid infinite loops. *(algorithm from Czkawka / fdupes)*
-- **Explicit keeper and identity revalidation** - Select the retained copy in each GUI group, or pass `--reference-folder` to protect a known-good directory from CLI duplicate removal. Every pending candidate is re-statted and fully re-hashed before deletion; changed groups abort safely and report exact skipped/failed counts.
+## Cleanup you can inspect first
 
-### Health Dashboard
-- **System health score** - Assesses 4 categories (Junk Files, Privacy, Startup Impact, Disk Space) with 0-100 scores and A-F grade
+The Junk Cleaner groups real files by category and size. Preview mode lets you see the result before deletion, while age limits and protected-path checks prevent careless cleanup.
 
-### Program Discovery
-- **Portable app detection** - Scans Desktop, Downloads, PortableApps folders, and removable drives for standalone executables not tracked by any installer. Shows with a "Portable" source badge. *(only Uninstalr previously offered this)*
-- **Game platform detection** - Discovers Steam games (via `libraryfolders.vdf` + `appmanifest_*.acf`), Epic Games (via `.item` manifests), and GOG Galaxy titles (via registry). Games appear in the unified programs list with platform badges.
-- **Game removal safety** - Discovered games expose their launcher/source identity and remain non-actionable until DeepPurge can invoke the platform's native uninstall operation.
-- **Bundleware / sideload detection** - Flags programs installed on the same day from a non-trusted publisher that appear as the sole representative of their publisher — likely bundled silently with other software.
-- **OEM bloat scoring** - Flags likely OEM support/trial utilities while suppressing driver and firmware components
-- **BAM remnant discovery** - Reads Windows Background Activity Moderator data to find previously-executed binaries that are no longer installed. Available via `deeppurgecli orphans --remnants`.
+![Junk Cleaner showing categories, item counts, and recoverable space](docs/assets/screenshots/deeppurge-junk.png)
 
-### System Slimming
-- **Windows component cleanup** - Scans ~15 removable components (wallpapers, sample media, help files, MSI patch cache, delivery optimization, WER reports, font cache, log folders, Windows.old) with per-item sizes and delete through SafetyGuard.
-  The GUI surface is available in Expert mode; `deeppurgecli slim` is scan-only by default and requires `--delete` for mutation (`--dry-run` previews the selected policy).
+## Recovery evidence stays visible
 
-### Shell Integration
-- **Context menu** - `deeppurgecli register-shell` adds "Uninstall with DeepPurge" to the right-click menu for `.exe` files. `unregister-shell` removes it. The GUI accepts `--target <path>` to pre-populate the forced-uninstall panel.
-- **Expert / Safe mode** - Toggle visibility of advanced operations (secure delete, advanced scan, registry hunter, service deletion). Persists between sessions via `settings.json`.
-- **Versioned settings import/export** - Move excluded paths, cookie whitelist, program notes, privacy retention, and safety defaults between installed/portable deployments with schema metadata, redacted previews, validation errors, and rollback backups.
+The Deletion Recovery workspace records what happened, how an item was removed, and which rollback path is still available. Dry-run restore checks show the result before DeepPurge applies anything.
 
-### Safety
-- **System Restore Points** - View, create, and manage restore points
-- Automatic restore point creation before uninstall operations (one per batch in bulk mode — Windows throttles SRSetRestorePoint)
-- **Deletion Recovery panel** - list deletion manifests, preview recorded file/registry deletions, and run dry-run or live restores; registry rollback accepts only the exact SHA-256-bound artifact named by a versioned operation record
-- **Registry Backups panel** - Open the ACL-protected `%ProgramData%\DeepPurge\RegistryBackups` store; every artifact binds its hive, subkey/value, object identity, owner/DACL, and operation ID, and legacy manifests cannot auto-discover a `.reg` file
-- Recycle Bin for ordinary file cleanup through `IFileOperation` where supported, with explicit permanent-delete and secure-delete outcomes
-- Typed cleanup results distinguish preview, recycled, permanent, secure, queued, skipped, failed, and cancelled items; only confirmed mutations enter recovery manifests
-- Administrative mutation ledger for firewall, PATH, autorun, service, scheduled-task, shell, and DeepPurge schedule changes with before/after state, rollback data, verification, and exact typed outcomes
-- Installed-program removal capability/trust facts are visible in the GUI, CLI list/uninstall output, and CSV/HTML/JSON exports before an action reaches the elevated process
-- Protected services, firewall rules, PATH entries, registry roots, and Microsoft scheduled-task paths are skipped before production mutation; unsupported rollback-sensitive actions are disabled in the WPF surface
-- Confidence-based leftover classification (Safe / Moderate / Risky)
-- Leftover ownership evidence and conflict review: another product's install root, protected Windows scope, and weak single-source matches are never auto-removable
-- Centralized `SafetyGuard` blocks every destructive call against Windows, Program Files, System32, and protected registry hives
-- Windows-owned helpers resolve only from protected absolute system paths; unknown relative executables and ambiguous registered-uninstaller command lines fail closed
+![Deletion Recovery showing an operation manifest and rollback evidence](docs/assets/screenshots/deeppurge-deletionrecovery.png)
 
-### Automation
-- **DeepPurgeCli.exe** - Full headless surface. Every workflow (uninstall, clean, repair, driver/shortcut/duplicate scans, install-trace, winapp2 run, update check) is scriptable. Exit codes follow BCU convention (0/1/2/13/1223).
-- **Scheduled cleaning** - Registers Task Scheduler 2.0 exec actions in `\DeepPurge\` with separate executable/argument fields. Highest-privilege jobs run a content-addressed single-file CLI copy from an administrator-owned `%ProgramData%` store; GUI/CLI diagnostics expose the registered principal, action, and ACL trust. Legacy wrappers migrate to disabled dry-run definitions without being read or executed.
-- **Tray icon** - DeepPurge can minimize to the Windows tray, show scheduled-cleaning status, refresh schedule notifications, and launch a background dry-run clean preview.
-- **Portable mode** - Drop a file named `DeepPurge.portable` next to the exe; every setting / backup / log redirects to `./Data/` beside the binary. USB-stick / field deployment ready. *(BCU pattern)*
-- **Update checker** - Hits GitHub Releases API to flag available upgrades; never blocks startup.
+## Why DeepPurge
 
-### Themes
-Ten built-in themes with runtime switching and persistence between sessions:
-- **DeepPurge Slate** (graphite/cyan, default)
-- **Catppuccin Mocha** (dark)
-- **OLED Black** (pure black, blue accent)
-- **Dracula** (classic purple)
-- **Nord Polar** (frost tones)
-- **GitHub Dark** (official palette)
-- **Obsidian** (deep black, lavender accent)
-- **Matrix** (neon green on black)
-- **Arctic** (light mode)
-- **High Contrast** (WCAG AAA, bright saturated accents on pure black)
+| | What it changes |
+|---|---|
+| **Removal you can audit** | See the exact source, command, publisher, signature, and risk before an uninstall starts. |
+| **Recovery is designed in** | Ordinary files use the Recycle Bin where supported. Registry and administrative changes carry bounded rollback evidence when recovery is available. |
+| **Local by design** | No account, telemetry service, or cloud upload is required. Portable mode can keep settings, logs, and backups beside the executable. |
+| **GUI and CLI parity** | Use the WPF app for review or the `asInvoker` CLI for scripts, Task Scheduler, Intune, and SCCM. |
 
-## Build
+## Safety is the product
 
-Requires the exact .NET SDK `10.0.302`; `global.json` disables SDK roll-forward.
-Install that SDK before running `BUILD.bat` from the project root. Restore uses
-the committed package lockfiles and fails if dependency versions drift.
+- Preview and dry-run routes report intended changes without deleting anything.
+- Protected Windows paths, registry roots, services, and Microsoft task namespaces fail closed.
+- File identity, hashes, signatures, ownership evidence, and operation records are checked where the workflow supports them.
+- Recovery is described honestly. Secure deletion and some system operations can't be undone.
 
-```
-BUILD.bat
+The GUI uses a `requireAdministrator` manifest because it presents system-wide inspection and maintenance in one process. `DeepPurgeCli.exe` uses an `asInvoker` manifest so read-only commands work in a normal shell. Elevate the CLI only for an operation that needs it.
+
+## Download and verify
+
+DeepPurge is portable. Download the two release files you need:
+
+| File | Purpose |
+|---|---|
+| [`DeepPurge.exe`](https://github.com/SysAdminDoc/DeepPurge/releases/latest/download/DeepPurge.exe) | WPF desktop app. Run as administrator. |
+| [`DeepPurgeCli.exe`](https://github.com/SysAdminDoc/DeepPurge/releases/latest/download/DeepPurgeCli.exe) | Scriptable command line. Runs as the current user by default. |
+| [`SHA256SUMS.txt`](https://github.com/SysAdminDoc/DeepPurge/releases/latest/download/SHA256SUMS.txt) | Published SHA256 values for both executables. |
+
+Verify a download in PowerShell:
+
+```powershell
+Get-FileHash .\DeepPurge.exe -Algorithm SHA256
+Get-Content .\SHA256SUMS.txt
 ```
 
-Output:
-- `build\DeepPurge.exe` - GUI, ~66 MB, `requireAdministrator` manifest
-- `build\DeepPurgeCli.exe` - CLI, ~66 MB, `asInvoker` manifest (scriptable, elevate externally if needed)
-- `build\SHA256SUMS.txt` - SHA256 hashes for the published release assets
+To keep all state beside the binaries, create an empty `DeepPurge.portable` file in the same folder before launch.
 
-Both executables are self-contained single-file x64 portable builds. Add ARM64 package entries only after matching ARM64 assets are attached to the release and covered by `SHA256SUMS.txt`.
+## Start with the CLI
 
-## CLI quickstart
+Read-only commands work from a normal terminal:
 
-```bash
-DeepPurgeCli list                           # TSV-formatted installed programs
-DeepPurgeCli uninstall "Some App" --silent  # Silent uninstall with auto-flag detection
-DeepPurgeCli uninstall "Git.Git" --dry-run  # Preview source-native uninstall command
-DeepPurgeCli clean junk evidence --dry-run  # Preview what would be freed
-DeepPurgeCli health --json                   # Score junk, privacy, startup, and disk hygiene
-DeepPurgeCli slim --dry-run                  # Preview selected Windows component cleanup
-DeepPurgeCli repair sfc                     # sfc /scannow
-DeepPurgeCli drivers --old                  # Old driver packages ready to remove
-DeepPurgeCli drivers --remove oem42.inf --dry-run  # Preview export-first removal
-DeepPurgeCli drivers --remove oem42.inf            # Export, hash, and remove; prints rollback operation id
-DeepPurgeCli drivers --rollback <operation-id>     # Validate hashes and reinstall the recorded INF
-DeepPurgeCli startup-impact                 # High/Medium/Low per autorun process
-DeepPurgeCli duplicates C:\Users\you        # Duplicate file groups
-DeepPurgeCli duplicates C:\Users\you --delete --reference-folder C:\Users\you\Documents\Keep --dry-run  # Preview guarded removal
-DeepPurgeCli snapshot trace "MyApp" setup.exe  # Record install delta
-DeepPurgeCli update-winapp2 --check-only       # Show local/remote database provenance
-DeepPurgeCli update-winapp2                    # Update with an expanded-target diff and rollback backup
-DeepPurgeCli winapp2 .\winapp2.ini --dry-run   # Run community cleaner database
-DeepPurgeCli schedule add --name Nightly --freq weekly --time 03:00 --day Mon --args "clean junk evidence"
-DeepPurgeCli schedule list
-DeepPurgeCli schedule migrate              # Replace legacy wrappers with disabled protected dry-runs
-DeepPurgeCli schedule remove --name Nightly
-DeepPurgeCli settings prune --dry-run       # Preview expired logs/activity/manifests to remove
-DeepPurgeCli settings import settings.json --preview  # Validate an import without changing local settings
-DeepPurgeCli check-update
-DeepPurgeCli doctor                         # Environment self-test (16 checks, including package sources)
+```powershell
+DeepPurgeCli.exe list
+DeepPurgeCli.exe health --json
+DeepPurgeCli.exe clean junk evidence --dry-run
+DeepPurgeCli.exe drivers --old
+DeepPurgeCli.exe startup-impact
+DeepPurgeCli.exe orphans --remnants
+DeepPurgeCli.exe doctor
+DeepPurgeCli.exe check-update
 ```
 
-## Testing
+Guarded mutation examples:
 
-```bash
-dotnet test tests/DeepPurge.Tests/DeepPurge.Tests.csproj
+```powershell
+DeepPurgeCli.exe uninstall "Some App" --dry-run
+DeepPurgeCli.exe duplicates C:\Users\you --delete --reference-folder C:\Users\you\Documents\Keep --dry-run
+DeepPurgeCli.exe drivers --remove oem42.inf --dry-run
+DeepPurgeCli.exe slim --dry-run
 ```
 
-The current suite has 454 tests covering parser routing, protected helper resolution, original-user process brokering, package-manager command builders and source diagnostics, cleaner schema validation, cleanup failure reporting, release validation, privacy retention, SafetyGuard block/allow lists, handle-bound deletion/rollback, protected Task Scheduler registration and migration, versioned settings import/export contracts, capability-to-surface routing, observable enrichment updates, static WPF accessibility/resource-drift checks, and support-bundle redaction. Release builds run the suite, project-level dependency audit, and locked restore by default; use `Build.ps1 -SkipTests` only for an explicitly test-free inner-loop publish.
+Run `DeepPurgeCli.exe help` for the full command surface and exit-code contract.
 
-## Packaging
+## What it covers
 
-- **winget** — `packaging/winget/SysAdminDoc.DeepPurge.yaml` (submit via `wingetcreate`)
-- **Scoop**  — `packaging/scoop/deeppurge.json` (drop into a personal bucket)
-- **GitHub Releases** — build locally with `BUILD.bat` / `Build.ps1`, attach both executables plus `SHA256SUMS.txt`, then run `Build.ps1 -ValidateReleaseOnly -ReleaseChecksumsPath <path-to-SHA256SUMS.txt>` before publishing package manifests; the default Release path runs locked restore, tests, and the project-level NuGet dependency audit
-- **Dependency audit** — run `Build.ps1 -AuditDependenciesOnly` to report outdated packages and block vulnerable or unreadable dependency graphs across Core, App, CLI, and Tests without using the solution-level `dotnet list` path
-- **Authenticode signing** — `./Build.ps1 -Sign -CertPath signing.pfx -CertPassword (Read-Host -AsSecureString)`
+The interface is organized around the work you are trying to do:
 
+| Workspace | Highlights |
+|---|---|
+| Software | Installed programs, Bulk Uninstall, Forced Uninstall, Windows Apps, Leftover Scanner, package sources, trust facts, and Export. |
+| Cleanup | Junk Cleaner, Evidence Remover, Empty Folders, Disk Analyzer, MSI/MSP orphan cleanup, and Skipped-item details. |
+| System | Autorun Manager, Browser Extensions, Services Manager, Scheduled Tasks, Context Menu Cleaner, and Registry Hunter. |
+| Diagnostics | Health Dashboard, Startup Impact ratings, Digital signature badges, BAM remnant discovery, and OEM bloat scoring. |
+| Repair | SFC / DISM / chkdsk, Font + Icon cache rebuild, Per-app repair, and Driver Store cleanup. |
+| Advanced | Installation Monitor, System Slimming, Duplicate Finder, winapp2.ini integration, and Validated custom JSON cleaners. |
 
-## Requirements
-- Windows 10/11
-- Run as Administrator (enforced by the manifest)
-- .NET SDK `10.0.302` (build only; exact version required)
-- Optional: winget (auto-detected; `doctor` reports version/list parser health when unavailable or degraded)
-- Optional: Scoop in `%USERPROFILE%\scoop\apps` (filesystem-scanned; `doctor` reports root availability and app count)
-- Optional: Chocolatey (`choco.exe` on PATH; `doctor` reports version/list parser health when unavailable or degraded)
+<details>
+<summary><strong>Complete capability map</strong></summary>
 
-## License
-MIT License
+### Removal and discovery
+
+- **Installed Programs** scans machine and user uninstall records, including 32-bit and 64-bit entries.
+- **Bulk Uninstall** applies reviewed native or package-manager routes in sequence.
+- **winget integration** enriches installed rows and uses exact package identifiers. Scoop and Chocolatey sources are supported too.
+- **Explicit removal capability and trust** distinguishes native uninstallers, package managers, portable folders, game launchers, and unsupported actions.
+- **Recoverable portable removal** moves eligible portable folders through the guarded Recycle Bin path.
+- **Forced Uninstall** finds remnants after a broken or incomplete removal.
+- **Windows Apps** covers AppX and MSIX packages.
+- **Leftover Scanner** offers Safe, Moderate, and Advanced evidence modes.
+- **Portable app detection**, **Game platform detection**, **Game removal safety**, **Bundleware / sideload detection**, and **OEM bloat scoring** add context that the uninstall registry misses.
+
+### Cleanup and system care
+
+- **Junk Cleaner**, **Evidence Remover**, **Empty Folders**, and **Disk Analyzer** cover common storage and privacy work.
+- **MSI/MSP orphan cleanup** checks installer payloads against registered products.
+- **Dry-run / Preview mode** is available across destructive pipelines.
+- **Secure Delete** is an expert-only selected-file path. It doesn't claim to wipe volume free space.
+- **Skipped-item details** explain missing, denied, protected, locked, failed, and too-recent results.
+- **Autorun Manager**, **Startup Impact ratings**, **Digital signature badges**, and **Browser Extensions** surface startup and browser risk.
+- **Driver Store cleanup** exports and hashes a rollback package before supported removal.
+- **Context Menu Cleaner**, **Shortcut repair**, **Services Manager**, and **Scheduled Tasks** find broken or orphaned system entries.
+- **Registry Hunter** uses explicit key, name, value, depth, hit, and time limits.
+- **BAM remnant discovery** finds evidence of executables that are no longer installed.
+
+### Repair, monitoring, and definitions
+
+- **SFC / DISM / chkdsk**, **Font + Icon cache rebuild**, and **Per-app repair** expose Windows repair routes with live output.
+- **Before/after snapshot** records filesystem and registry state around an installer.
+- **Replay uninstall** accepts only authoritative manifests and revalidates file identity before removal.
+- **Diagnostic journal evidence** adds USN and optional Sysmon context for review. It is not treated as deletion authority.
+- **winapp2.ini integration** records source, commit, hash, expanded targets, and a last-known-good copy.
+- **Validated custom JSON cleaners** are schema checked and unsafe definitions are quarantined.
+- **Three-stage hash** groups duplicate candidates by size, head hash, and full hash.
+- **Explicit keeper and identity revalidation** protects the chosen copy and aborts changed duplicate groups.
+
+### Operations and recovery
+
+- **Health Dashboard** reports category scores, source diagnostics, and trends.
+- **System Slimming** remains scan-only until an expert explicitly selects guarded removal.
+- **Context menu** registration adds an optional `Uninstall with DeepPurge` shell action.
+- **Expert / Safe mode** gates advanced operations and secure deletion.
+- **Versioned settings import/export** moves exclusions, retention, cookie preservation, notes, and safety defaults with validation and backups.
+- **System Restore Points**, **Deletion Recovery panel**, and **Registry Backups panel** show the recovery evidence available for each operation.
+- **Scheduled cleaning** uses constrained Task Scheduler actions and a protected CLI copy.
+- **Portable mode** redirects settings, logs, backups, and snapshots into `./Data/`.
+- **Update checker** reads GitHub Releases without installing anything.
+- **Tray icon** keeps schedule status and a background dry-run preview close at hand.
+
+</details>
+
+## Build and test
+
+The repo pins the exact .NET SDK `10.0.302` in `global.json`. Roll-forward is disabled and package lockfiles are committed.
+
+```powershell
+./Build.ps1
+```
+
+Release builds run all 459 tests, locked restore, and the project-level NuGet dependency audit before publishing self-contained x64 executables to `build\`. They also create `build\SHA256SUMS.txt`.
+
+Useful release checks:
+
+```powershell
+./Build.ps1 -AuditDependenciesOnly
+./Build.ps1 -Sign
+./Build.ps1 -ValidateReleaseOnly -ReleaseChecksumsPath build\SHA256SUMS.txt
+```
+
+`Build.ps1 -Sign` uses an Authenticode certificate supplied by path, environment variable, or Current User certificate-store thumbprint. Unsigned local builds are allowed, but Windows SmartScreen may warn when they are shared.
+
+The screenshot tool builds the real production WPF window and runs it on a private Windows desktop:
+
+```powershell
+dotnet build tools\DeepPurge.Capture\DeepPurge.Capture.csproj -c Release -r win-x64
+.\tools\DeepPurge.Capture\bin\Release\net10.0-windows10.0.17763.0\win-x64\DeepPurge.Capture.exe
+```
+
+## Project notes
+
+- [Architecture](ARCHITECTURE.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
+- [Changelog](CHANGELOG.md)
+
+DeepPurge is released under the [MIT License](LICENSE).

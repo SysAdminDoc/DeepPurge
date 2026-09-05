@@ -1,43 +1,26 @@
-# Packaging
+# Packaging DeepPurge
 
-Package-manager manifests and publish checklists for DeepPurge releases.
+DeepPurge publishes portable Windows executables through GitHub Releases. The Scoop manifest in this folder is the supported package-manager definition.
 
-## Release workflow
+## Release checklist
 
-1. Run `Build.ps1 -Sign` locally (Release runs tests and locked restore by default) and verify `build\DeepPurge.exe`, `build\DeepPurgeCli.exe`, and `build\SHA256SUMS.txt`.
-2. Copy the generated SHA256 values into the winget and Scoop manifests for the exact assets being released.
-3. Run `Build.ps1 -ValidateReleaseOnly -ReleaseChecksumsPath build\SHA256SUMS.txt`; fix every reported file/key before publishing. This also runs the project-level NuGet dependency audit for Core, App, CLI, and Tests.
-   To run only that audit during release prep, use `Build.ps1 -AuditDependenciesOnly`.
-4. Tag the release: `git tag v0.9.1 && git push --tags`.
-5. Create or update the GitHub Release with `gh release create` / `gh release upload` and attach both executables plus `SHA256SUMS.txt`.
+1. Run `Build.ps1 -Sign` locally. A Release build performs locked restore, all tests, and the project-level NuGet dependency audit before it publishes anything.
+2. Confirm `build\DeepPurge.exe`, `build\DeepPurgeCli.exe`, and `build\SHA256SUMS.txt` are present.
+3. Copy the two generated SHA256 values into `packaging\scoop\deeppurge.json` for the matching release URLs.
+4. Run `Build.ps1 -ValidateReleaseOnly -ReleaseChecksumsPath build\SHA256SUMS.txt` and fix every reported key.
+5. Tag the release with `git tag v0.9.2` and push the tag.
+6. Create the GitHub Release and attach both executables plus `SHA256SUMS.txt`.
 
-## winget
-
-`packaging/winget/SysAdminDoc.DeepPurge.yaml` is a singleton manifest. To submit:
-
-```powershell
-wingetcreate update SysAdminDoc.DeepPurge --version 0.9.1 --urls https://github.com/SysAdminDoc/DeepPurge/releases/download/v0.9.1/DeepPurge.exe
-```
-
-The tool will split the singleton into the required three-file form (Version / Installer / DefaultLocale) and open a PR against `microsoft/winget-pkgs`.
+Run `Build.ps1 -AuditDependenciesOnly` when you only need the dependency gate.
 
 ## Scoop
 
-`packaging/scoop/deeppurge.json` is ready for a personal bucket:
+The manifest at `packaging\scoop\deeppurge.json` installs both executables. It exposes `DeepPurgeCli.exe` on `PATH`, adds a DeepPurge shortcut, and creates the `DeepPurge.portable` marker so app data stays inside Scoop's managed directory.
 
-```powershell
-scoop bucket add sysadmindoc https://github.com/SysAdminDoc/scoop-bucket
-scoop install sysadmindoc/deeppurge
-```
-
-Before committing to the bucket, run `Build.ps1 -ValidateReleaseOnly -ReleaseChecksumsPath <release SHA256SUMS.txt>` and confirm every Scoop URL/hash pair matches the checksum file (GUI first, CLI second).
-
-The `pre_install` hook drops a `DeepPurge.portable` marker so the app redirects all state to `$dir/Data/` — matches Scoop's user-scope philosophy.
-
-## Chocolatey
-
-Runtime Chocolatey discovery is built into DeepPurge through `choco list --local-only --limit-output`. A Chocolatey package manifest is still optional distribution work; template it with `choco new deeppurge` if a release needs Chocolatey installation support.
+Before copying the manifest into a bucket, verify that its version, URLs, and hashes match the published release. The release validator checks the GUI hash first and the CLI hash second.
 
 ## Code signing
 
-See `Build.ps1 -Sign` for the Authenticode signing pass. Requires `DEEPPURGE_CERT_PATH` and `DEEPPURGE_CERT_PASSWORD` environment variables (or a pre-loaded personal-store cert). Without signing, Windows SmartScreen will warn users on first run.
+`Build.ps1 -Sign` accepts a PFX path and secure password, environment variables, or a Current User certificate-store thumbprint. It applies SHA256 Authenticode signatures with RFC 3161 timestamps and verifies both executables after signing.
+
+If no suitable certificate is available, don't present the artifacts as signed. Windows SmartScreen may warn users on first launch.

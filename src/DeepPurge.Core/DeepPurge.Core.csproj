@@ -7,9 +7,9 @@
     <Nullable>enable</Nullable>
     <RootNamespace>DeepPurge.Core</RootNamespace>
     <AssemblyName>DeepPurge.Core</AssemblyName>
-    <Version>0.9.1</Version>
+    <Version>0.9.2</Version>
     <Authors>SysAdminDoc</Authors>
-    <Description>Core library for DeepPurge - open source program uninstaller</Description>
+    <Description>Core scanners, safety guards, and recovery records for DeepPurge</Description>
   </PropertyGroup>
 
   <ItemGroup>

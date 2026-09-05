@@ -1,5 +1,5 @@
 @echo off
-title DeepPurge Builder v0.9.1
+title DeepPurge Builder v0.9.2
 echo.
 echo   ============================================
 echo     DeepPurge Builder

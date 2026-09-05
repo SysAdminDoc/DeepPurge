@@ -1,14 +1,10 @@
 # Contributing to DeepPurge
 
-Thanks for your interest. This guide covers local setup, PR conventions, and the bar for merge.
+Thanks for helping improve DeepPurge. Changes are reviewed against one rule first: a maintenance tool must fail safely when Windows state is incomplete, unexpected, or changing underneath it.
 
 ## Local setup
 
-Requirements:
-
-- Windows 10/11 x64
-- Exact .NET SDK `10.0.302` (`global.json` disables SDK roll-forward)
-- Git Bash or PowerShell 5.1+
+You need Windows 10 or 11 x64 and the exact .NET SDK `10.0.302`. The repo's `global.json` disables SDK roll-forward.
 
 ```powershell
 git clone https://github.com/SysAdminDoc/DeepPurge.git
@@ -16,89 +12,76 @@ cd DeepPurge
 ./BUILD.bat
 ```
 
-This produces `build/DeepPurge.exe` (GUI) and `build/DeepPurgeCli.exe` (CLI).
+The build produces `build\DeepPurge.exe`, `build\DeepPurgeCli.exe`, and `build\SHA256SUMS.txt`.
 
-## Running tests
+## Run the tests
 
 ```powershell
-dotnet test tests/DeepPurge.Tests/DeepPurge.Tests.csproj
+dotnet test tests\DeepPurge.Tests\DeepPurge.Tests.csproj -c Release -r win-x64
 ```
 
-All PRs must keep the full 454-test suite green. If you touch a parser, detector, or sanitiser,
-add a test that locks in the expected behaviour. We use xUnit v3.
+All pull requests must keep the full 459-test suite green. Add a focused test when you change a parser, scanner, safety decision, command builder, or recovery path. The suite uses xUnit v3.
 
 ## Project layout
 
-```
+```text
 src/
-  DeepPurge.Core/       # Scanners, safety, diagnostics — no WPF refs (except IconExtractor)
-  DeepPurge.App/        # WPF views, ViewModel, themes
-  DeepPurge.Cli/        # Headless entry point (asInvoker manifest)
+  DeepPurge.Core/       Scanners, safety policy, recovery, and diagnostics
+  DeepPurge.App/        WPF views, view model, themes, and tray integration
+  DeepPurge.Cli/        Scriptable asInvoker command line
 tests/
-  DeepPurge.Tests/      # xUnit v3 — no WPF runtime required to run
-packaging/              # winget + scoop manifests
-.github/                # issue and pull-request templates only; builds run locally
+  DeepPurge.Tests/      xUnit v3 tests
+tools/
+  DeepPurge.Capture/    Private-desktop production screenshot tool
+packaging/
+  scoop/                Scoop manifest
+.github/                Issue and pull request templates only
 ```
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the cross-cutting flow and the v0.9 feature map.
+Read [ARCHITECTURE.md](ARCHITECTURE.md) before changing a cross-cutting safety or execution path.
 
 ## Coding standards
 
-- **.NET 10 LTS + nullable reference types enabled.** No `#nullable disable`.
-- **Global usings are set in each csproj** — don't re-import `System`, `System.IO`, etc. in
-  every file. Do import specific types per file (e.g. `using DeepPurge.Core.Safety;`).
-- **SafetyGuard is the single choke-point for destructive ops.** Don't bypass it. If a new
-  pipeline needs to delete, call `SafetyGuard.IsXxxSafeToDelete` before acting.
-- **`DeleteOptions` is the only permitted way to thread DryRun/SecureDelete/Recycle through.**
-  Don't add new bool arguments — extend the record.
-- **No inner-loop allocations on large scans.** Use `ArrayPool<byte>` for buffers in any
-  code that processes a significant number of files.
-- **Log via `Core.Diagnostics.Log`.** Swallowed exceptions should still write a line to the
-  rotating log so field issues can be debugged.
+- Keep nullable reference types enabled.
+- Route destructive work through the existing safety and recovery policies. Don't call raw delete APIs from a new production path.
+- Pass `DeleteOptions` through cleanup workflows instead of adding separate boolean switches.
+- Resolve external executables from trusted absolute paths and pass arguments without a command shell.
+- Keep long scans asynchronous and report progress, cancellation, partial results, and errors.
+- Write swallowed operational exceptions through `Core.Diagnostics.Log`.
+- Avoid allocations inside large filesystem loops. Reuse buffers where the current implementation does.
 
-## Commit / PR conventions
+## Pull requests
 
-- Prefer one concern per PR. A PR that fixes a bug AND adds a feature should be two PRs.
-- First line ≤ 72 chars, imperative mood: `Fix DetectOS routing in Winapp2Parser`.
-- Body explains the **why** — `git log -p` shows the what.
-- If you fix a user-visible behaviour, add a CHANGELOG entry under the `Unreleased` or
-  next-version heading.
-- If your change is security-sensitive, prefer a silent fix + a GitHub Security Advisory
-  once released. See [SECURITY.md](SECURITY.md).
+Keep each pull request focused. Use an imperative subject of 72 characters or fewer, and explain why the change is needed in the body. Update the changelog when users can observe the difference.
 
-## Merge bar
+Security-sensitive reports belong in a private GitHub Security Advisory. See [SECURITY.md](SECURITY.md).
 
-Before a PR lands:
+## Merge checklist
 
-- [ ] `dotnet build DeepPurge.sln -c Release` — 0 errors and no new warnings
-- [ ] `dotnet test tests/DeepPurge.Tests/DeepPurge.Tests.csproj` — all 454 tests pass
-- [ ] `Build.ps1 -AuditDependenciesOnly` — outdated packages are reported as advisories; vulnerable or unreadable graphs fail in Core, App, CLI, or Tests
-- [ ] `Build.ps1 -Sign` — Release builds run tests and locked restore before publishing
-- [ ] If a feature: `deeppurgecli doctor` still reports 0 FAIL on a clean install
-- [ ] README / CHANGELOG updated if the PR changes observable behaviour
-- [ ] Version bumped everywhere listed below
+- [ ] `dotnet build DeepPurge.sln -c Release -r win-x64` completes with no errors and no new warnings.
+- [ ] All 459 tests pass locally.
+- [ ] `Build.ps1 -AuditDependenciesOnly` reports no vulnerable or unreadable dependency graph.
+- [ ] `Build.ps1 -Sign` produces and verifies both release executables when a signing certificate is available.
+- [ ] `DeepPurgeCli.exe doctor` has no unexpected failures on the test machine.
+- [ ] User-facing behavior is exercised through the GUI or CLI.
+- [ ] README, changelog, architecture notes, and version strings are current.
+- [ ] UI changes include refreshed screenshots from `tools\DeepPurge.Capture`.
 
-## Version bump
+## Version locations
 
-All version strings must match. The canonical version number lives in:
+Keep the release version aligned in:
 
-1. `src/DeepPurge.App/DeepPurge.App.csproj` `<Version>`
-2. `src/DeepPurge.Core/DeepPurge.Core.csproj` `<Version>`
-3. `src/DeepPurge.Cli/DeepPurge.Cli.csproj` `<Version>`
-4. `README.md` shields.io badge + heading
-5. `Build.ps1` title banner
-6. `BUILD.bat` title
-7. `packaging/winget/SysAdminDoc.DeepPurge.yaml` `PackageVersion`
-8. `packaging/scoop/deeppurge.json` `version`
-9. `CHANGELOG.md` new section heading
+1. `src\DeepPurge.App\DeepPurge.App.csproj`
+2. `src\DeepPurge.Core\DeepPurge.Core.csproj`
+3. `src\DeepPurge.Cli\DeepPurge.Cli.csproj`
+4. `tools\DeepPurge.Capture\DeepPurge.Capture.csproj`
+5. `README.md`
+6. `Build.ps1` and `BUILD.bat`
+7. `packaging\scoop\deeppurge.json`
+8. `CHANGELOG.md`
 
-## Releasing
+The release-day sequence lives in [packaging/README.md](packaging/README.md). Builds, tests, signing, and release validation run locally. GitHub hosts the repository and release files.
 
-See [packaging/README.md](packaging/README.md) for the release-day checklist (`Build.ps1`
-publish/test/sign, SHA256SUMS generation, manifest validation, tag, GitHub Release upload,
-winget PR, and Scoop bucket commit). No GitHub Actions workflows are used.
+## Conduct
 
-## Code of conduct
-
-Be decent. Technical criticism of PRs is welcome; personal attacks are not. Maintainers
-reserve the right to lock threads that turn unproductive.
+Be direct and respectful. Technical disagreement is welcome. Personal attacks aren't.

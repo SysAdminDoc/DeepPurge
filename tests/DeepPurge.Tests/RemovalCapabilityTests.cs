@@ -5,6 +5,19 @@ namespace DeepPurge.Tests;
 
 public sealed class RemovalCapabilityTests
 {
+    [Theory]
+    [InlineData(RemovalCapability.NativeUninstaller, "Native uninstaller")]
+    [InlineData(RemovalCapability.PackageManager, "Package manager")]
+    [InlineData(RemovalCapability.PortableFolder, "Portable folder")]
+    [InlineData(RemovalCapability.GameLauncher, "Game launcher")]
+    [InlineData(RemovalCapability.Unsupported, "Unsupported")]
+    public void Capability_names_are_readable(RemovalCapability capability, string expected)
+    {
+        var program = new InstalledProgram { RemovalCapability = capability };
+
+        Assert.Equal(expected, program.CapabilityDisplay);
+    }
+
     [Fact]
     public void Native_uninstaller_exposes_command_and_trust_facts()
     {

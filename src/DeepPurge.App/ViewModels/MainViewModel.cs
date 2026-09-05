@@ -986,6 +986,14 @@ public partial class MainViewModel : ObservableObject
 
     private void StartPackageEnrichment(IReadOnlyList<InstalledProgram> programs)
     {
+        if (string.Equals(
+                Environment.GetEnvironmentVariable("DEEPPURGE_CAPTURE_MODE"),
+                "1",
+                StringComparison.Ordinal))
+        {
+            return;
+        }
+
         _enrichCts?.Cancel();
         _enrichCts?.Dispose();
         _enrichCts = new CancellationTokenSource();

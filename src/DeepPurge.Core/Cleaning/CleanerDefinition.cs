@@ -1245,17 +1245,6 @@ internal static class BundledCleaners
     ]
   },
   {
-    "Name": "Claude Desktop",
-    "Description": "Claude Desktop caches and logs",
-    "DetectFile": ["%APPDATA%\\Claude"],
-    "Files": [
-      { "Path": "%APPDATA%\\Claude\\Cache\\Cache_Data", "Pattern": "*", "Recurse": false, "RemoveSelf": false },
-      { "Path": "%APPDATA%\\Claude\\Code Cache", "Pattern": "*", "Recurse": true, "RemoveSelf": false },
-      { "Path": "%APPDATA%\\Claude\\GPUCache", "Pattern": "*", "Recurse": false, "RemoveSelf": false },
-      { "Path": "%APPDATA%\\Claude\\logs", "Pattern": "*.log", "Recurse": false, "RemoveSelf": false }
-    ]
-  },
-  {
     "Name": "WSL Caches",
     "Description": "Windows Subsystem for Linux temp and cache files",
     "DetectFile": ["%LOCALAPPDATA%\\Packages\\CanonicalGroupLimited.Ubuntu_79rhkp1fndgsc"],

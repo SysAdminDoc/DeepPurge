@@ -5,8 +5,8 @@ namespace DeepPurge.Tests;
 
 public class ReleaseReadinessTests
 {
-    private const string GuiHash = "091B8624CE739B076A6196223C88E8E72F8094F66CA4367FDF1E4539CE0122C6";
-    private const string CliHash = "AEE102F22423E093D539DC7338B078A14114D25238E7D0B4FC5175B410773AE9";
+    private const string GuiHash = "7C89D435C42314BC4098E4B92C6D50D385641BAFE359627A8C1BBA994BAE0A5B";
+    private const string CliHash = "EDA05DC47249DCE9A60852B1B87D1C66CD2D682058C96E527CF75BC634006A0D";
 
     [Fact]
     public void Build_script_exposes_release_readiness_validation()
@@ -27,7 +27,6 @@ public class ReleaseReadinessTests
         Assert.Contains("panelHealth", script);
         Assert.Contains("panelSlimming", script);
         Assert.Contains("SHA256SUMS.txt", script);
-        Assert.Contains("packaging/winget/SysAdminDoc.DeepPurge.yaml:Installers[$i].InstallerSha256", script);
         Assert.Contains("packaging/scoop/deeppurge.json:architecture.$($arch.Name).hash[$i]", script);
     }
 
@@ -50,22 +49,18 @@ public class ReleaseReadinessTests
     }
 
     [Fact]
-    public void Package_manifests_reference_only_published_release_assets()
+    public void Scoop_manifest_references_only_published_release_assets()
     {
         var root = FindRepoRoot();
-        var winget = File.ReadAllText(Path.Combine(root, "packaging", "winget", "SysAdminDoc.DeepPurge.yaml"));
         var scoop = File.ReadAllText(Path.Combine(root, "packaging", "scoop", "deeppurge.json"));
 
-        Assert.DoesNotContain("PLACEHOLDER", winget);
         Assert.DoesNotContain("PLACEHOLDER", scoop);
-        Assert.DoesNotContain("DeepPurge-arm64", winget);
         Assert.DoesNotContain("DeepPurge-arm64", scoop);
         Assert.DoesNotContain("DeepPurgeCli-arm64", scoop);
-        Assert.Contains($"InstallerSha256: {GuiHash}", winget);
 
         using var doc = JsonDocument.Parse(scoop);
         var rootElement = doc.RootElement;
-        Assert.Equal("0.9.1", rootElement.GetProperty("version").GetString());
+        Assert.Equal("0.9.2", rootElement.GetProperty("version").GetString());
         var x64 = rootElement.GetProperty("architecture").GetProperty("64bit");
         Assert.Equal(GuiHash, x64.GetProperty("hash")[0].GetString());
         Assert.Equal(CliHash, x64.GetProperty("hash")[1].GetString());
@@ -120,7 +115,7 @@ public class ReleaseReadinessTests
         Assert.True(distinct.Count == 1,
             $"Test count drift across docs: {string.Join(", ", counts.Select(kv => $"{kv.Key}={kv.Value}"))}. " +
             $"All must agree on the same number.");
-        Assert.Equal(454, distinct[0]);
+        Assert.Equal(459, distinct[0]);
     }
 
     private static string FindRepoRoot()
