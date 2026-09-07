@@ -2,9 +2,9 @@
   <img src="docs/assets/brand/deeppurge-mark-256.png" width="124" alt="DeepPurge shield and recovery mark">
 </p>
 
-# DeepPurge v0.9.2
+# DeepPurge v0.9.3
 
-![Version](https://img.shields.io/badge/version-v0.9.2-19cbea) ![License](https://img.shields.io/badge/license-MIT-45dfa2) ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0b1739) ![Architecture](https://img.shields.io/badge/architecture-x64-6ea8fe) ![Interface](https://img.shields.io/badge/interfaces-GUI%20%7C%20CLI-8b5cf6)
+![Version](https://img.shields.io/badge/version-v0.9.3-19cbea) ![License](https://img.shields.io/badge/license-MIT-45dfa2) ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0b1739) ![Architecture](https://img.shields.io/badge/architecture-x64-6ea8fe) ![Interface](https://img.shields.io/badge/interfaces-GUI%20%7C%20CLI-8b5cf6)
 
 **See what stays. Control what goes.**
 

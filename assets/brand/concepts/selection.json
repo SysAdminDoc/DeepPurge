@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "project": "DeepPurge",
+  "selectedConcepts": [
+    "direction-01-selected-layered-recovery-shield.png"
+  ],
+  "selectedMasters": [
+    "../deeppurge-selected-master.png"
+  ],
+  "guidance": "These files preserve the original visual exploration. Use selectedConcepts to identify the approved direction. Production assets elsewhere in the repository remain the files used by the product."
+}
