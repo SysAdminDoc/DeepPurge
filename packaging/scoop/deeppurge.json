@@ -1,18 +1,18 @@
 {
   "$schema": "https://raw.githubusercontent.com/ScoopInstaller/Scoop/master/schema.json",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "description": "Safety-first Windows uninstaller and cleanup toolkit with a portable GUI and CLI.",
   "homepage": "https://github.com/SysAdminDoc/DeepPurge",
   "license": "MIT",
   "architecture": {
     "64bit": {
       "url": [
-        "https://github.com/SysAdminDoc/DeepPurge/releases/download/v0.9.2/DeepPurge.exe#/DeepPurge.exe",
-        "https://github.com/SysAdminDoc/DeepPurge/releases/download/v0.9.2/DeepPurgeCli.exe#/DeepPurgeCli.exe"
+        "https://github.com/SysAdminDoc/DeepPurge/releases/download/v0.9.3/DeepPurge.exe#/DeepPurge.exe",
+        "https://github.com/SysAdminDoc/DeepPurge/releases/download/v0.9.3/DeepPurgeCli.exe#/DeepPurgeCli.exe"
       ],
       "hash": [
-        "7C89D435C42314BC4098E4B92C6D50D385641BAFE359627A8C1BBA994BAE0A5B",
-        "EDA05DC47249DCE9A60852B1B87D1C66CD2D682058C96E527CF75BC634006A0D"
+        "E04570C7500674CFDA912C46EC177B319C7B08640F524D7B90614C6AA7B4FB09",
+        "EBFFFDD990D0575D4FD4B1FE7E9D0C48ADE19E42C624B41248CE756F671335E2"
       ]
     }
   },

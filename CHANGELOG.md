@@ -4,6 +4,17 @@ All notable changes to DeepPurge will be documented in this file.
 
 ## [Unreleased]
 
+## [v0.9.3]: Approved brand source archive
+
+### Added
+
+- Eight original DeepPurge identity explorations now live under `assets/brand/concepts/`. The selection record identifies the layered recovery shield, and an untouched copy of that approved master is stored separately from production assets.
+
+### Changed
+
+- The repository hero and private-desktop product captures were refreshed for the v0.9.3 release.
+- Portable GUI and CLI packages now carry matching v0.9.3 metadata and checksums.
+
 ## [v0.9.2]: Presentation and release refresh
 
 ### Added

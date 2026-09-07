@@ -8,7 +8,7 @@ DeepPurge publishes portable Windows executables through GitHub Releases. The Sc
 2. Confirm `build\DeepPurge.exe`, `build\DeepPurgeCli.exe`, and `build\SHA256SUMS.txt` are present.
 3. Copy the two generated SHA256 values into `packaging\scoop\deeppurge.json` for the matching release URLs.
 4. Run `Build.ps1 -ValidateReleaseOnly -ReleaseChecksumsPath build\SHA256SUMS.txt` and fix every reported key.
-5. Tag the release with `git tag v0.9.2` and push the tag.
+5. Tag the release with `git tag v0.9.3` and push the tag.
 6. Create the GitHub Release and attach both executables plus `SHA256SUMS.txt`.
 
 Run `Build.ps1 -AuditDependenciesOnly` when you only need the dependency gate.

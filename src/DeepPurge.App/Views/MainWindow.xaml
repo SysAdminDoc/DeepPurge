@@ -4,7 +4,7 @@
         xmlns:vm="clr-namespace:DeepPurge.App.ViewModels"
         xmlns:conv="clr-namespace:DeepPurge.App.Converters"
         xmlns:props="clr-namespace:DeepPurge.App.Properties"
-        Title="DeepPurge v0.9.2" Width="1440" Height="900"
+        Title="DeepPurge v0.9.3" Width="1440" Height="900"
         MinWidth="1060" MinHeight="700" WindowStartupLocation="CenterScreen"
         Style="{DynamicResource MainWindowStyle}">
 
