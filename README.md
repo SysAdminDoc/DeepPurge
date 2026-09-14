@@ -6,6 +6,16 @@
 
 ![Version](https://img.shields.io/badge/version-v0.9.3-19cbea) ![License](https://img.shields.io/badge/license-MIT-45dfa2) ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0b1739) ![Architecture](https://img.shields.io/badge/architecture-x64-6ea8fe) ![Interface](https://img.shields.io/badge/interfaces-GUI%20%7C%20CLI-8b5cf6)
 
+<p align="center">
+  <a href="https://ko-fi.com/X8K126YVER">
+    <img height="42" src="https://storage.ko-fi.com/cdn/kofi2.png?v=3" alt="Buy me a coffee on Ko-fi" />
+  </a>
+</p>
+
+<p align="center">
+  <sub><em>If DeepPurge helps you clean up Windows with confidence, a coffee helps me keep its safety checks current.</em></sub>
+</p>
+
 **See what stays. Control what goes.**
 
 DeepPurge is a safety-first Windows uninstaller and cleanup toolkit. It inventories software, traces leftovers, scores system hygiene, and records recovery evidence before guarded changes. Everything runs locally.
